@@ -32,7 +32,7 @@ const COLOR_ESTADO = {
 };
 
 const TRAMITES_INICIALES = [
-  { id: 1, local: 'Supermercado Norte', usuario: 'candelaria', fecha: new Date(2026, 7, 3), estado: 'Primera Notificación' },
+  { id: 1, local: 'Supermercado Norteeee', usuario: 'candelaria', fecha: new Date(2026, 7, 3), estado: 'Primera Notificación' },
   { id: 2, local: 'Industria Sur', usuario: 'mariano', fecha: new Date(2026, 7, 11), estado: 'Segunda Notificación' },
   { id: 3, local: 'Farmacia Centro', usuario: 'candelaria', fecha: new Date(2026, 7, 18), estado: 'Revisión de Documentación' },
   { id: 4, local: 'Hotel Plaza', usuario: 'jorge', fecha: new Date(2026, 7, 22), estado: 'Finalizado' },
@@ -54,6 +54,7 @@ function Tramite() {
     () => [
       { field: 'id', headerName: 'ID', width: 80 },
       { field: 'local', headerName: 'Local', flex: 1, minWidth: 200 },
+      { field: 'tipo', headerName: 'Tipo', flex: 1, minWidth: 200 },
       { field: 'usuario', headerName: 'Usuario', flex: 1, minWidth: 150 },
       {
         field: 'fecha',

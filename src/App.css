@@ -1,21 +1,46 @@
-/* ========== RESET ========== */
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* ============================================================================
+   App.css  —  ESTILOS DE COMPONENTES Y PÁGINAS
+   ----------------------------------------------------------------------------
+   QUÉ VA ACÁ:  todo lo que tenga que ver con un componente o una página.
+   GLOBALES:    reset / body / fuente -> src/index.css
+   SE CARGA EN: src/App.jsx
 
-body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f0f4f8;
-  color: #333;
+   ÍNDICE (buscá el número para saltar de sección)
+     1. LAYOUT ................. components/Layout.jsx
+     2. NAVBAR ................. components/Navbar.jsx
+    2.b SELECTOR DE ROL ....... components/SelectorRol.jsx  (PROVISORIO)
+     3. SIDEBAR ................ components/Sidebar.jsx
+     4. MAIN CONTENT + TÍTULOS . components/Layout.jsx + ui/PageHeader.jsx
+     5. INFO BAR + BTN VOLVER .. ui/PageHeader.jsx + pages/Home.jsx
+     6. SEPARADOR DE SECCIÓN ... todas las páginas (.accesos-header)
+     7. TARJETAS (GRID) ........ ui/Card.jsx (Home, Relevamiento, Tramite, Documentacion)
+     8. STAT CARDS ............. pages/Seguimiento.jsx
+     9. TABLAS + BADGES ........ pages/Local.jsx, pages/Expediente.jsx
+    10. FORMULARIOS ............ components/FormLocal.jsx
+    11. RESPONSIVE ............. móvil / pantalla chica
+    12. MODAL ................. components/ui/Modal.jsx
+   ============================================================================ */
+
+
+/* ========== 1. LAYOUT ==========
+   Estructura: navbar arriba, y abajo sidebar + contenido en fila.
+   Usado en: components/Layout.jsx
+   Si se descuadra TODA la pantalla, el problema está acá. */
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
-
-/* ========== LAYOUT ========== */
-.app-container { min-height: 100vh; display: flex; flex-direction: column; }
 
 .layout-body {
   display: flex;
   flex: 1;
 }
 
-/* ========== NAVBAR ========== */
+
+/* ========== 2. NAVBAR (barra azul de arriba) ==========
+   Usado en: components/Navbar.jsx
+   Si el logo o el texto "CIUDAD / SMT" se ve mal, es acá. */
 .navbar {
   background-color: #1976d2;
   height: 64px;
@@ -38,7 +63,49 @@ body {
 .ciudad { color: white; font-size: 11px; font-weight: 600; letter-spacing: 1px; }
 .smt { color: white; font-size: 24px; font-weight: 800; letter-spacing: 1px; }
 
-/* ========== SIDEBAR ========== */
+
+/* ========== 2.b SELECTOR DE ROL — PROVISORIO ==========
+   Usado en: components/SelectorRol.jsx (dentro de la navbar)
+   SE BORRA ENTERO cuando haya login: este bloque y el archivo del componente.
+
+   El `margin-left: auto` es lo que lo empuja al extremo derecho de la navbar
+   (aprovecha que .navbar ya es flex). Si aparece pegado al logo, es eso.
+
+   Se ve distinto al resto A PROPÓSITO: tiene que quedar claro que es una
+   herramienta de prueba y no una función del sistema. */
+.selector-rol {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+
+.selector-rol-select {
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.selector-rol-select:hover { background: rgba(255,255,255,0.25); }
+.selector-rol-select:focus { outline: 2px solid white; outline-offset: 1px; }
+
+/* Las <option> se dibujan fuera de la navbar (las pinta el sistema
+   operativo), así que con el texto blanco quedarían invisibles sobre el
+   fondo blanco del desplegable. Por eso se les pone color oscuro. */
+.selector-rol-select option { color: #333; background: white; }
+
+
+/* ========== 3. SIDEBAR (menú lateral izquierdo) ==========
+   Usado en: components/Sidebar.jsx
+   OJO: la clase .nav-link.active la pone react-router solo (NavLink).
+   Si el ítem activo no se resalta, revisá el to= del NavLink, no el CSS. */
 .sidebar {
   width: 240px;
   background: white;
@@ -90,7 +157,11 @@ body {
   margin: 16px;
 }
 
-/* ========== MAIN CONTENT ========== */
+
+/* ========== 4. MAIN CONTENT + TÍTULOS DE PÁGINA ==========
+   .main-content -> components/Layout.jsx (el <main> donde entra cada página)
+   .inicio-tag / .sistema-titulo -> components/ui/PageHeader.jsx
+   Si el contenido queda muy angosto o pegado al borde, es .main-content. */
 .main-content {
   flex: 1;
   padding: 32px;
@@ -100,7 +171,10 @@ body {
 .inicio-tag { color: #1976d2; font-size: 14px; font-weight: 600; margin-bottom: 24px; letter-spacing: 0.5px; }
 .sistema-titulo { color: #1a1a1a; font-size: 22px; font-weight: 700; margin-bottom: 24px; }
 
-/* ========== INFO BAR ========== */
+
+/* ========== 5. INFO BAR + BADGE + BOTÓN VOLVER ==========
+   .info-bar / .admin-badge / .fecha -> pages/Home.jsx (usuario + fecha)
+   .btn-volver -> components/ui/PageHeader.jsx (prop botonVolver) */
 .info-bar { display: flex; align-items: center; gap: 24px; margin-bottom: 40px; flex-wrap: wrap; }
 
 .admin-badge {
@@ -117,11 +191,19 @@ body {
 
 .fecha { color: #9e9e9e; font-size: 14px; font-weight: 500; }
 
-/* ========== SECCIONES ========== */
+
+/* ========== 6. SEPARADOR DE SECCIÓN ==========
+   Es la línea gris con el texto chico ("LISTADO", "OPCIONES", etc.).
+   Usado en TODAS las páginas: si lo tocás, cambia en todas. */
 .accesos-header { border-bottom: 1px solid #e0e0e0; padding-bottom: 12px; margin-bottom: 24px; }
 .accesos-header span { color: #9e9e9e; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
 
-/* ========== GRID TARJETAS ========== */
+
+/* ========== 7. TARJETAS (GRID DE ACCESOS) ==========
+   Componente: components/ui/Card.jsx
+   Usado en:   Home, Relevamiento, Tramite, Documentacion
+   Si en pantalla grande queda una sola columna, mirá el minmax() de acá
+   y también la sección 11 (RESPONSIVE). */
 .grid-accesos {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -145,7 +227,23 @@ body {
 .card-titulo { color: #333; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
 .card-descripcion { color: #888; font-size: 13px; font-weight: 400; line-height: 1.4; }
 
-/* ========== STAT CARDS (SEGUIMIENTO) ========== */
+/* Aviso cuando un rol se quedó sin ningún módulo asignado (pages/Home.jsx).
+   Hoy no debería verse nunca: los 4 roles tienen módulos. */
+.aviso-sin-modulos {
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 8px;
+  padding: 16px 20px;
+  color: #ef6c00;
+  font-size: 14px;
+}
+
+
+/* ========== 8. STAT CARDS (números grandes) ==========
+   Usado SOLO en: pages/Seguimiento.jsx
+   El color lo elige el campo "color" del array pendientes de esa página:
+   arma la clase .stat-card-azul / -verde / -naranja / -amarillo / -rojo.
+   Si un número sale negro, ese "color" no coincide con ninguna clase de acá. */
 .grid-stats {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -167,7 +265,15 @@ body {
 .stat-card-amarillo .stat-numero { color: #f9a825; }
 .stat-card-rojo .stat-numero { color: #c62828; }
 
-/* ========== TABLAS ========== */
+
+/* ========== 9. TABLAS + BADGES DE ESTADO ==========
+   Usado en: pages/Local.jsx y pages/Expediente.jsx
+
+   BADGES: existen verde, naranja y gris. El color de cada estado sale de
+   src/config/catalogos.js, no de un if adentro de la página. Un estado que no
+   esté en esa lista cae en .badge-gris (antes quedaba sin color y parecía un
+   error de la pantalla). Para sumar un color nuevo: agregarlo acá Y en
+   catalogos.js, los dos nombres tienen que coincidir. */
 .tabla-contenedor {
   background: white; border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e8ecf1;
@@ -190,12 +296,32 @@ body {
 }
 .btn-tabla:hover { background: #1976d2; color: white; }
 
+/* Botón "Editar": contorno en vez de fondo lleno, para que se distinga de
+   "Ver" de un vistazo sin gritar más que él. */
+.btn-tabla-editar { background: transparent; border: 1px solid #90caf9; }
+.btn-tabla-editar:hover { background: #1976d2; border-color: #1976d2; color: white; }
+
+/* Contenedor de los botones de la columna Acciones. Con flex quedan alineados
+   y separados aunque un rol vea solo uno de los dos. */
+.celda-acciones { display: flex; gap: 8px; align-items: center; }
+
 .badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
 .badge-verde { background: #e8f5e9; color: #2e7d32; }
 .badge-naranja { background: #fff3e0; color: #ef6c00; }
+/* Estado no reconocido (ver catalogos.js). Que se vea "apagado" es útil:
+   avisa que falta darlo de alta en vez de disimularlo. */
+.badge-gris { background: #eceff1; color: #607d8b; }
 
-/* ========== FORMULARIOS ========== */
+
+/* ========== 10. FORMULARIOS ==========
+   Usado en: components/FormLocal.jsx (adentro del modal de Locales).
+   Sirve igual para las pantallas de Rubros y Sedes cuando se hagan. */
 .formulario { background: white; padding: 32px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e8ecf1; max-width: 600px; }
+
+/* Cuando el formulario ya está adentro de un modal, el modal aporta el fondo
+   y el recuadro. Sin esto quedaría una caja blanca dentro de otra. */
+.formulario-modal { box-shadow: none; border: none; padding: 0; max-width: none; }
+
 .form-grupo { margin-bottom: 20px; }
 .form-grupo label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #555; }
 .form-grupo input, .form-grupo select {
@@ -204,6 +330,27 @@ body {
 }
 .form-grupo input:focus, .form-grupo select:focus { outline: none; border-color: #1976d2; }
 
+/* Campo bloqueado: modo "Ver", y también el N° de local, que nunca se edita.
+   Se usa un gris bien marcado para que se note que no es un campo roto. */
+.form-grupo input:disabled, .form-grupo select:disabled {
+  background: #f5f7fa; color: #78909c; cursor: not-allowed;
+}
+
+/* Campo con error de validación */
+.form-grupo input.con-error { border-color: #c62828; }
+.form-grupo input.con-error:focus { border-color: #c62828; }
+.form-error { display: block; margin-top: 6px; font-size: 13px; color: #c62828; font-weight: 500; }
+
+/* Aclaración gris debajo de un campo (no es un error) */
+.form-ayuda { display: block; margin-top: 6px; font-size: 12px; color: #90a4ae; }
+
+/* Fila de botones del final. Alineados a la derecha, que es donde se los
+   busca en un formulario. */
+.form-acciones {
+  display: flex; justify-content: flex-end; gap: 12px;
+  margin-top: 28px; padding-top: 20px; border-top: 1px solid #eceff1;
+}
+
 .btn-primario {
   background: #1976d2; color: white; border: none;
   padding: 14px 32px; border-radius: 8px; font-size: 15px;
@@ -211,9 +358,78 @@ body {
 }
 .btn-primario:hover { background: #1565c0; }
 
-/* ========== RESPONSIVE ========== */
+/* Botón de descarte (Cancelar / Cerrar). Deliberadamente más apagado que el
+   primario, para que no compitan por la atención. */
+.btn-secundario {
+  background: white; color: #555; border: 1px solid #ddd;
+  padding: 14px 24px; border-radius: 8px; font-size: 15px;
+  font-weight: 600; cursor: pointer; transition: 0.2s; font-family: inherit;
+}
+.btn-secundario:hover { background: #f5f7fa; border-color: #bbb; }
+
+
+/* ========== 11. RESPONSIVE (pantallas <= 768px) ==========
+   Acá el sidebar SE OCULTA a propósito. Si en el celular no aparece el menú,
+   es esto: todavía no hay botón de hamburguesa que lo reemplace. */
 @media (max-width: 768px) {
   .sidebar { display: none; }
   .main-content { padding: 20px; }
   .grid-accesos { grid-template-columns: 1fr; }
+
+  /* El modal pasa a ocupar casi toda la pantalla */
+  .modal-caja { max-height: 100%; border-radius: 0; }
+  .modal-fondo { padding: 0; }
+  /* Botones del formulario apilados y a lo ancho: más fáciles de tocar */
+  .form-acciones { flex-direction: column-reverse; }
+  .form-acciones button { width: 100%; }
 }
+
+
+/* ========== 12. MODAL ==========
+   Usado en: components/ui/Modal.jsx
+   Hoy lo abre pages/Local.jsx para ver y editar un local.
+
+   .modal-fondo es la capa oscura que cubre TODA la pantalla y centra la caja.
+   El z-index tiene que ser mayor que el de .navbar (100, sección 2), si no la
+   barra azul quedaría por encima del modal. */
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+/* La caja blanca. El max-height + overflow del cuerpo evitan que un
+   formulario largo se salga de la pantalla en monitores chicos. */
+.modal-caja {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-encabezado {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 20px 24px; border-bottom: 1px solid #eceff1;
+  flex-shrink: 0;
+}
+
+.modal-titulo { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+
+.modal-cerrar {
+  background: none; border: none; cursor: pointer;
+  font-size: 26px; line-height: 1; color: #90a4ae;
+  padding: 0 4px; border-radius: 6px; transition: 0.2s;
+}
+.modal-cerrar:hover { color: #c62828; }
+
+/* Solo el cuerpo scrollea: el encabezado queda siempre visible. */
+.modal-cuerpo { padding: 24px; overflow-y: auto; }

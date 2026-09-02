@@ -6,12 +6,24 @@
        soloLectura = true   ->  botón "Ver":    campos bloqueados, sin Guardar
        soloLectura = false  ->  botón "Editar": campos editables, con Guardar
 
-   ESTILOS: App.css -> sección 10 (FORMULARIOS)
+   ESTILOS: App.css -> sección 10 (FORMULARIOS) y 12 (MODAL)
+
+   >>> POR QUÉ LOS INPUTS TIENEN placeholder=" " (UN ESPACIO) <<<
+   No es un descuido. Adentro del modal, la etiqueta de cada campo NO va
+   arriba: arranca DENTRO del recuadro y sube achicándose cuando el campo
+   toma foco o ya tiene algo escrito. Ese "ya tiene algo escrito" el CSS lo
+   detecta con :placeholder-shown, que solo funciona si el input TIENE un
+   placeholder. Con un placeholder de verdad (un ejemplo, digamos) la
+   etiqueta se quedaría abajo y las dos se pisarían; por eso va un espacio.
+   Si sacás el placeholder, las etiquetas dejan de subir. Ver App.css #12.
 
    PROPS:
      local       (objeto)   el local a mostrar. No se modifica: se trabaja
                             sobre una copia interna hasta que se guarda.
      soloLectura (bool)     ver arriba
+     esNuevo     (bool)     true = se está dando de alta uno nuevo. Solo cambia
+                            textos (el botón y la ayuda del número); el
+                            formulario es exactamente el mismo.
      onGuardar   (función)  recibe el local ya modificado. Solo se llama si
                             pasó la validación.
      onCancelar  (función)  cerrar sin guardar
@@ -30,6 +42,11 @@
    SI HAY PROBLEMA ACÁ:
      - "Falta un rubro / un estado en el desplegable": no es este archivo,
        son las listas de src/config/catalogos.js.
+     - "Doy de alta un local nuevo y los campos vienen con datos de otro":
+       eso NO es el código, es el AUTOCOMPLETADO DEL NAVEGADOR. Después de
+       guardar una vez, Chrome ofrece esos mismos valores en cualquier
+       formulario parecido. Por eso el <form> y los <input> de texto llevan
+       autoComplete="off". Si se saca, vuelve a pasar.
      - "Abro un local, escribo, cancelo, abro otro y aparece lo que escribí":
        no debería pasar. El estado arranca de la prop `local` una sola vez, al
        montarse. Funciona porque el modal se desmonta al cerrarse. Si alguna
@@ -46,7 +63,7 @@ import { RUBROS, ESTADOS_LOCAL } from '../config/catalogos';
 // verificar que el CUIT sea real, el cálculo va acá.
 const FORMATO_CUIT = /^\d{2}-\d{8}-\d$/;
 
-function FormLocal({ local, soloLectura, onGuardar, onCancelar }) {
+function FormLocal({ local, soloLectura, esNuevo, onGuardar, onCancelar }) {
 
   // ===== A. COPIA DE TRABAJO =====
   // No se toca la prop `local`: hasta que no se aprieta Guardar, la tabla de
@@ -106,14 +123,24 @@ function FormLocal({ local, soloLectura, onGuardar, onCancelar }) {
 
   // ===== E. LO QUE SE DIBUJA =====
   return (
-    <form className="formulario formulario-modal" onSubmit={enviar} noValidate>
+    <form
+      className="formulario formulario-modal"
+      onSubmit={enviar}
+      noValidate
+      autoComplete="off"
+    >
 
-      {/* ---------- ID: se muestra pero nunca se edita ---------- */}
-      <div className="form-grupo">
-        <label htmlFor="campo-id">N° de local</label>
-        <input id="campo-id" type="text" value={datos.id} disabled />
-        <span className="form-ayuda">El número no se puede cambiar.</span>
-      </div>
+      {/* ---------- ID ----------
+          En un ALTA no se muestra: el número se asigna solo y todavía no
+          significa nada para quien está cargando. Al ver o editar sí, porque
+          es con lo que se identifica el registro. */}
+      {!esNuevo && (
+        <div className="form-grupo">
+          <label htmlFor="campo-id">N° de local</label>
+          <input id="campo-id" type="text" value={datos.id} disabled />
+          <span className="form-ayuda">El número no se puede cambiar.</span>
+        </div>
+      )}
 
       {/* ---------- Nombre ---------- */}
       <div className="form-grupo">
@@ -121,6 +148,8 @@ function FormLocal({ local, soloLectura, onGuardar, onCancelar }) {
         <input
           id="campo-nombre"
           type="text"
+          autoComplete="off"
+          placeholder=" "
           value={datos.nombre}
           disabled={soloLectura}
           className={errores.nombre ? 'con-error' : ''}
@@ -135,13 +164,19 @@ function FormLocal({ local, soloLectura, onGuardar, onCancelar }) {
         <input
           id="campo-cuit"
           type="text"
+          autoComplete="off"
           value={datos.cuit}
           disabled={soloLectura}
-          placeholder="30-12345678-9"
+          placeholder=" "
           className={errores.cuit ? 'con-error' : ''}
           onChange={(e) => cambiar('cuit', e.target.value)}
         />
-        {errores.cuit && <span className="form-error">{errores.cuit}</span>}
+        {/* El ejemplo de formato ya no puede ir de placeholder (ver la nota de
+            arriba), así que va como aclaración debajo. Se reemplaza por el
+            error cuando lo hay, para no amontonar dos textos chiquitos. */}
+        {errores.cuit
+          ? <span className="form-error">{errores.cuit}</span>
+          : <span className="form-ayuda">Formato: 30-12345678-9</span>}
       </div>
 
       {/* ---------- Dirección ---------- */}
@@ -150,6 +185,8 @@ function FormLocal({ local, soloLectura, onGuardar, onCancelar }) {
         <input
           id="campo-direccion"
           type="text"
+          autoComplete="off"
+          placeholder=" "
           value={datos.direccion}
           disabled={soloLectura}
           className={errores.direccion ? 'con-error' : ''}
@@ -192,12 +229,20 @@ function FormLocal({ local, soloLectura, onGuardar, onCancelar }) {
           En modo lectura solo hay "Cerrar": no tiene sentido ofrecer Guardar
           si no se puede cambiar nada. */}
       <div className="form-acciones">
-        <button type="button" className="btn-secundario" onClick={onCancelar}>
+        {!soloLectura && (
+          <button type="submit" className="btn-primario">
+            {esNuevo ? 'Crear local' : 'Guardar cambios'}
+          </button>
+        )}
+        {/* En modo lectura este botón es un simple "Cerrar", así que va gris.
+            En alta o edición es "Cancelar" y va rojo, como pide el diseño. */}
+        <button
+          type="button"
+          className={soloLectura ? 'btn-secundario' : 'btn-peligro'}
+          onClick={onCancelar}
+        >
           {soloLectura ? 'Cerrar' : 'Cancelar'}
         </button>
-        {!soloLectura && (
-          <button type="submit" className="btn-primario">Guardar cambios</button>
-        )}
       </div>
 
     </form>

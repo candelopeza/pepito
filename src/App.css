@@ -398,8 +398,10 @@
   /* Barra de acciones de la tabla (sección 13): en el celular no caben los
      buscadores y los botones en la misma fila, así que se apilan y los
      buscadores pasan a ocupar todo el ancho. */
-  .tabla-acciones { flex-direction: column; align-items: stretch; }
-  .buscador { min-width: 0; width: 100%; }
+  .tabla-acciones {  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%; }
 }
 
 
@@ -465,21 +467,9 @@
 
    El apilado en celular está en la sección 11 (RESPONSIVE). */
 .tabla-acciones {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: flex-end;
   gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
 }
-
-.tabla-buscadores { display: flex; gap: 12px; flex-wrap: wrap; }
-
-/* Mismo aspecto que los campos de formulario (sección 10), pero suelto en la
-   página en vez de adentro de un .form-grupo. */
-.buscador {
-  background: white; border: 1px solid #ddd; border-radius: 8px;
-  padding: 12px 16px; font-size: 14px; font-family: inherit;
-  min-width: 220px; color: #333;
-}
-.buscador::placeholder { color: #999; }
-.buscador:focus { outline: none; border-color: #1976d2; }
 
 .tabla-botones { display: flex; gap: 12px; }
 
@@ -516,4 +506,285 @@
   background: white; border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e8ecf1;
   overflow: hidden;
+}
+/* ==========================================================
+   DOCUMENTACIÓN - ALTA GUIADA
+   Usado en: pages/Documentacion.jsx
+   ========================================================== */
+
+.modal-documentacion {
+  max-width: 760px;
+}
+
+
+/* Stepper de Material UI */
+.documentacion-stepper {
+  margin-bottom: 36px;
+}
+
+
+/* Cambia el color del círculo activo/completado de MUI */
+.documentacion-stepper .MuiStepIcon-root.Mui-active {
+  color: #1976d2;
+}
+
+.documentacion-stepper .MuiStepIcon-root.Mui-completed {
+  color: #2e7d32;
+}
+
+
+/* Texto de los pasos */
+.documentacion-stepper .MuiStepLabel-label {
+  font-family: inherit;
+  font-size: 13px;
+  color: #78909c;
+}
+
+.documentacion-stepper .MuiStepLabel-label.Mui-active {
+  color: #1976d2;
+  font-weight: 700;
+}
+
+.documentacion-stepper .MuiStepLabel-label.Mui-completed {
+  color: #455a64;
+  font-weight: 600;
+}
+
+
+/* Contenido de cada paso */
+.paso-documentacion {
+  margin-top: 12px;
+}
+
+
+/* Título + explicación de cada paso */
+.paso-encabezado {
+  margin-bottom: 28px;
+}
+
+.paso-encabezado h3 {
+  color: #1a1a1a;
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.paso-encabezado p {
+  color: #78909c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+
+/* Local seleccionado */
+.local-seleccionado {
+  background: #f5f9fd;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.local-seleccionado-label {
+  color: #90a4ae;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.local-seleccionado strong {
+  color: #263238;
+  font-size: 15px;
+}
+
+
+/* Historial del proceso */
+.historial-proceso {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 24px;
+}
+
+
+/* Una etapa */
+.historial-item {
+  position: relative;
+
+  display: flex;
+  gap: 14px;
+
+  padding: 8px 0 20px 0;
+}
+
+
+/* Línea vertical entre etapas */
+.historial-item:not(:last-child)::after {
+  content: '';
+
+  position: absolute;
+
+  left: 12px;
+  top: 32px;
+
+  width: 2px;
+  height: calc(100% - 18px);
+
+  background: #e0e0e0;
+}
+
+
+/* Círculo de cada etapa */
+.historial-icono {
+  width: 26px;
+  height: 26px;
+
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  z-index: 1;
+}
+
+
+/* Etapa ya realizada */
+.historial-completado .historial-icono {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+
+
+/* Etapa actual */
+.historial-actual .historial-icono {
+  background: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #90caf9;
+}
+
+
+/* Texto de la etapa */
+.historial-etapa {
+  display: block;
+
+  color: #37474f;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  margin-bottom: 3px;
+}
+
+
+/* Estado de la etapa */
+.historial-estado {
+  display: block;
+
+  color: #78909c;
+
+  font-size: 13px;
+}
+
+
+/* Mensaje cuando se permite avanzar */
+.mensaje-habilitado {
+  background: #f1f8e9;
+
+  border: 1px solid #c5e1a5;
+
+  border-radius: 8px;
+
+  padding: 14px 18px;
+
+  margin: 22px 0;
+}
+
+.mensaje-habilitado strong {
+  display: block;
+
+  color: #2e7d32;
+
+  font-size: 14px;
+
+  margin-bottom: 4px;
+}
+
+.mensaje-habilitado span {
+  color: #558b2f;
+
+  font-size: 13px;
+}
+
+
+/* Mensaje cuando NO se puede avanzar */
+.mensaje-bloqueado {
+  background: #fff8e1;
+
+  border: 1px solid #ffe082;
+
+  border-radius: 8px;
+
+  padding: 14px 18px;
+
+  margin: 22px 0;
+}
+
+.mensaje-bloqueado strong {
+  display: block;
+
+  color: #ef6c00;
+
+  font-size: 14px;
+
+  margin-bottom: 4px;
+}
+
+.mensaje-bloqueado span {
+  color: #8d6e63;
+
+  font-size: 13px;
+}
+
+
+/* Dos fechas en una misma fila */
+.documentacion-fechas {
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 16px;
+}
+
+
+/* Textarea igual que inputs */
+.textarea-formulario {
+  width: 100%;
+
+  padding: 12px 16px;
+
+  border: 1px solid #ddd;
+
+  border-radius: 8px;
+
+  font-size: 15px;
+
+  font-family: inherit;
+
+  resize: vertical;
+}
+
+.textarea-formulario:focus {
+  outline: none;
+
+  border-color: #1976d2;
 }

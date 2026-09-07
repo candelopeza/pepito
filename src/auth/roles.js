@@ -1,64 +1,80 @@
 /* ============================================================================
-   auth/roles.js  —  LOS 4 TIPOS DE USUARIO DEL SISTEMA
+   auth/roles.js  —  LOS ROLES DEL SISTEMA
    ----------------------------------------------------------------------------
-   Acá SOLO se definen los roles que existen y cómo se llaman en pantalla.
-   QUÉ VE CADA ROL no se define acá -> eso está en src/config/modulos.js
+   Capítulo 7 del pliego. QUÉ VE CADA ROL no se define acá: está en
+   src/config/modulos.js. Acá solo existen los roles y cómo se llaman.
 
-   >>>>>>>>>>>>>>>>>>>>>>>>  LEER ESTO  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-   ESTO NO ES SEGURIDAD. Es solo la interfaz.
-   Ocultar una tarjeta en el navegador NO impide que alguien entre: basta con
-   escribir la URL a mano o mirar el código, que viaja entero al navegador.
-   La restricción DE VERDAD tiene que estar en el backend: cada endpoint debe
-   validar el rol del usuario antes de responder. Mientras no haya backend,
-   esto sirve para ordenar la pantalla y mostrar la idea al área, nada más.
+   >>> CAMBIO RESPECTO DE LA PRIMERA VERSIÓN DE LA MAQUETA <<<
+   Antes había cuatro roles inventados (administrador, inspector, relevador,
+   notificador). Ahora son los del pliego, que no son los mismos:
+
+     antes                  ahora
+     administrador   ->     coordinacion (operativo) + direccion (gobierno)
+     inspector       ->     administrativo
+     relevador       ->     relevador   (igual, pero SIN facultades de inspector)
+     notificador     ->     notificador (igual)
+     —               ->     titular     (nuevo: el portal del contribuyente)
+     —               ->     sistema     (nuevo: los procesos automáticos)
+
+   La distinción entre coordinación y dirección importa: coordinación resuelve
+   el día a día (confirma exenciones, otorga prórrogas), dirección tiene lectura
+   total y administra usuarios y plazos, pero no interviene en el circuito.
+
+   Y "relevador" no es "inspector": el relevador NO puede pedirle datos
+   registrales al comerciante, no tiene esa facultad. Por eso el formulario de
+   campo no pide CUIT (sección 6.2).
+
+   >>>>>>>>>>>>>>>>>>>>>>>>  ESTO NO ES SEGURIDAD  <<<<<<<<<<<<<<<<<<<<<<<<<<<
+   Es solo la interfaz. Ocultar una tarjeta no impide que alguien entre: el
+   código viaja entero al navegador. La restricción DE VERDAD va en el backend:
+   cada endpoint tiene que validar el rol antes de responder.
    >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-
-   SI HAY PROBLEMA ACÁ:
-     - "Agregué un rol y no aparece en el selector": tiene que estar en este
-       objeto ROLES. El selector se arma solo a partir de acá.
-     - "Agregué un rol y no ve NADA": falta sumarlo a los `roles` de cada
-       módulo en src/config/modulos.js. Un rol nuevo arranca sin permisos.
    ============================================================================ */
 
-// ===== A. LOS ROLES =====
-// La clave (administrador, inspector, ...) es el ID que se usa en el código.
-// `etiqueta` es lo único que ve el usuario en pantalla.
 export const ROLES = {
-  administrador: {
-    id: 'administrador',
-    etiqueta: 'Administrador',
-    descripcion: 'Acceso total, incluida la configuración del sistema.',
-  },
-  inspector: {
-    id: 'inspector',
-    etiqueta: 'Inspector',
-    descripcion: 'Inspecciona locales y revisa la documentación presentada.',
-  },
   relevador: {
     id: 'relevador',
-    etiqueta: 'Relevador',
-    descripcion: 'Carga relevamientos en calle. Es el rol más acotado.',
+    etiqueta: 'Relevador de campo',
+    descripcion: 'Releva locales en territorio y los clasifica. No pide datos registrales: no tiene facultades de inspector.',
   },
   notificador: {
     id: 'notificador',
     etiqueta: 'Notificador',
-    descripcion: 'Entrega notificaciones y sigue los plazos de los trámites.',
+    descripcion: 'Entrega las cédulas asignadas y registra el resultado con evidencia fotográfica.',
+  },
+  administrativo: {
+    id: 'administrativo',
+    etiqueta: 'Administrativo',
+    descripcion: 'Completa datos registrales, emite notificaciones, carga documentación y expedientes.',
+  },
+  coordinacion: {
+    id: 'coordinacion',
+    etiqueta: 'Coordinación',
+    descripcion: 'Controla relevamientos, confirma exenciones, asigna notificadores, otorga prórrogas y bloquea locales.',
+  },
+  direccion: {
+    id: 'direccion',
+    etiqueta: 'Dirección de Ambiente',
+    descripcion: 'Lectura total, indicadores y administración de usuarios, plazos y catálogos.',
+  },
+  titular: {
+    id: 'titular',
+    etiqueta: 'Titular del local',
+    descripcion: 'Accede por CiDiTuc solo a sus locales. Consulta su situación y presenta documentación.',
   },
 };
 
-// ===== B. LISTA PARA RECORRER =====
-// El selector de la navbar hace un .map() sobre esto.
 export const LISTA_ROLES = Object.values(ROLES);
 
-// ===== C. ROL POR DEFECTO =====
-// Con qué rol arranca la app hasta que exista login.
-// Está en 'administrador' para que nadie se quede sin ver nada por accidente.
-export const ROL_POR_DEFECTO = ROLES.administrador.id;
+/* Arranca en coordinación: es el rol que ve la mayor parte del circuito y el
+   más útil para mostrarle el sistema al área. */
+export const ROL_POR_DEFECTO = ROLES.coordinacion.id;
 
-// ===== D. AYUDA =====
-// Devuelve true si el texto que le pasan es un rol que realmente existe.
-// Sirve para no romper la app si llega un rol inventado (de una URL, de un
-// localStorage viejo, o del backend el día de mañana).
 export function esRolValido(rol) {
   return Object.prototype.hasOwnProperty.call(ROLES, rol);
 }
+
+/* El actor no humano de los procesos automáticos (sección 7.2). No es un rol
+   de login: se usa para firmar las escrituras del sistema en la auditoría, y
+   por eso queda fuera de LISTA_ROLES y del selector. */
+export const ROL_SISTEMA = 'sistema';

@@ -1,87 +1,186 @@
 /* ============================================================================
-   pages/Expediente.jsx  —  CONSULTA DE EXPEDIENTES  (URL: /#/expedientes)
+   pages/Expediente.jsx  —  EXPEDIENTES DE MULTA  (URL: /#/expedientes)
    ----------------------------------------------------------------------------
-   RUTA EN: App.jsx -> <Route path="expedientes" ... />
-   ESTILOS: App.css -> sección 9 (TABLAS + BADGES)
+   Etapa 6 del circuito. Dos bloques: los que hay que generar y los ya
+   iniciados.
 
-   Es la misma estructura que pages/Local.jsx (encabezado + separador + tabla),
-   pero con otras columnas. Si arreglás un problema de tabla en uno,
-   revisá si el otro tiene el mismo.
+   >>> ACÁ SE HABLA SIEMPRE DEL EXPEDIENTE DE MULTA <<<
+   Existen DOS clases de expediente en este sistema y confundirlos es un error
+   grave:
+     - EXPEDIENTE DE MULTA: el que cierra el circuito sancionatorio. Es este.
+     - EXPEDIENTE DE TRÁMITE: el que se abre cuando un titular PRESENTA una
+       DDJJ o un contrato. Ese vive en Documentación, no acá.
+   Uno acredita cumplimiento, el otro inicia una sanción. No comparten campo ni
+   tipo de actuación, a propósito.
 
-   >>> DATOS DE PRUEBA <<<
-   Los 2 expedientes están escritos a mano abajo. No hay backend.
+   >>> EL EXPEDIENTE NO ES UN ESTADO TERMINAL <<<
+   Desde un local en Expediente, coordinación puede reingresarlo al circuito:
+   eso genera una nueva primera notificación y reinicia la intimación desde
+   cero. El botón está en las acciones de cada fila.
 
-   SI HAY PROBLEMA ACÁ:
-     - "El botón Ver no hace nada": todavía no tiene onClick, falta la
-        pantalla de detalle del expediente.
-     - "Un estado sale sin color": la regla es por TEXTO EXACTO ->
-        'Resuelto' = verde, cualquier otra cosa = naranja. Solo hay 2 colores.
-     - OJO CON LAS FECHAS: están guardadas como TEXTO ('15/08/2026'), no como
-        Date. Por eso hoy no se pueden ordenar ni comparar. Si más adelante
-        hay que ordenar por fecha, esto se cambia primero.
-     - `id` acá es el número de expediente (texto '2026-00001'), no un número.
+   DEBIDO PROCESO: ningún local debería llegar a expediente sin dos
+   notificaciones con entrega efectiva. La columna "notificaciones" muestra
+   cuántas entregas fehacientes tiene cada uno, justamente para poder detectar
+   los casos que el error B-1 del sistema viejo dejó pasar (una cédula que
+   constaba como no entregada avanzaba igual a expediente al vencer el plazo).
    ============================================================================ */
 
-import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import PageHeader from '../components/ui/PageHeader';
+import Badge, { BadgeEstado } from '../components/ui/Badge';
+import Aviso, { Vacio } from '../components/ui/Aviso';
+import AccionesLocal from '../components/AccionesLocal';
+import { useDatos } from '../datos/datosContexto';
+import { correPlazo } from '../dominio/actuaciones';
+import { fmtFecha } from '../dominio/fechas';
+import { faltantesRegistrales } from '../dominio/reglas';
 
 function Expediente() {
+  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, parametros } = useDatos();
 
-  // ===== A. DATOS (fijos, de prueba) =====
-  const [expedientes] = useState([
-    { id: '2026-00001', local: 'Supermercado Norte', estado: 'En trámite', fecha: '15/08/2026' },
-    { id: '2026-00002', local: 'Industria Sur', estado: 'Resuelto', fecha: '20/08/2026' },
-  ]);
+  const paraGenerar = localesConEstado.filter((l) => l.estado === 'GENERAR_EXPEDIENTE');
+  const iniciados = actuaciones
+    .filter((a) => a.tipo === 'EXPEDIENTE')
+    .map((a) => ({ ...a, local: localPorId(a.localId) }))
+    .reverse();
 
-  // ===== B. LO QUE SE DIBUJA =====
+  /* Cuántas entregas FEHACIENTES tiene el local. Es el control de debido
+     proceso: dos entregas efectivas son la condición para el expediente. */
+  const entregasFehacientes = (localId) =>
+    actuacionesDeLocal(localId).filter((a) => a.tipo === 'NOTIFICACION' && correPlazo(a.resultado)).length;
+
+  const sinDebidoProceso = paraGenerar.filter((l) => entregasFehacientes(l.id) < 2);
+  const sinDatos = paraGenerar.filter((l) => faltantesRegistrales(l).length > 0);
+
   return (
     <>
-      {/* ---------- BLOQUE 1: encabezado ---------- */}
-      <PageHeader etiqueta="EXPEDIENTES" titulo="CONSULTA Y SEGUIMIENTO" botonVolver />
+      <PageHeader
+        etiqueta="EXPEDIENTES"
+        titulo="EXPEDIENTES DE MULTA"
+        subtitulo={`${paraGenerar.length} para generar · ${iniciados.length} iniciados`}
+        botonVolver
+      />
 
-      {/* ---------- BLOQUE 2: separador ---------- */}
+      {/* ================= PARA GENERAR ================= */}
       <div className="accesos-header">
-        <span>EXPEDIENTES GENERADOS</span>
+        <span>Expedientes para generar ({paraGenerar.length})</span>
       </div>
 
-      {/* ---------- BLOQUE 3: tabla ----------
-          PENDIENTE: sin filtro por estado, sin búsqueda por número,
-          sin paginado y sin orden por fecha. */}
-      <div className="tabla-contenedor">
-        <table className="tabla-datos">
+      {sinDebidoProceso.length > 0 && (
+        <Aviso tipo="bloqueo" titulo={`${sinDebidoProceso.length} local(es) llegaron acá sin dos entregas fehacientes`}>
+          {sinDebidoProceso.map((l) => l.nombreLocal).join(' · ')}. Revisalos antes de elevar: ningún local debería llegar a
+          expediente sin que consten dos notificaciones con entrega efectiva. En el sistema viejo esto pasaba por el error B-1, que
+          leía el resultado de entrega de la columna equivocada.
+        </Aviso>
+      )}
 
-          {/* --- Columnas (mismo orden que los <td> de abajo) --- */}
+      {sinDatos.length > 0 && parametros.exigirDatosSiempre && (
+        <Aviso tipo="alerta" titulo={`${sinDatos.length} local(es) sin datos registrales completos`}>
+          Un expediente de multa contra un local sin CUIT ni razón social es tan impugnable como una notificación. Con el parámetro
+          actual, el sistema no deja generarlo hasta completarlos.
+        </Aviso>
+      )}
+
+      {paraGenerar.length === 0 ? (
+        <Vacio titulo="No hay expedientes para generar">
+          Un local llega acá cuando vence la segunda notificación sin presentación, o cuando vence una prórroga.
+        </Vacio>
+      ) : (
+        <table className="tabla-datos tabla-bandeja">
           <thead>
             <tr>
-              <th>N° Expediente</th>
               <th>Local</th>
+              <th>CUIT</th>
+              <th>Notificaciones fehacientes</th>
               <th>Estado</th>
-              <th>Fecha</th>
               <th>Acciones</th>
             </tr>
           </thead>
-
-          {/* --- Una fila por expediente --- */}
           <tbody>
-            {expedientes.map((e) => (
+            {paraGenerar.map((l) => {
+              const fehacientes = entregasFehacientes(l.id);
+              return (
+                <tr key={l.id}>
+                  <td>
+                    <Link to={`/locales/${l.id}`} className="link-local">
+                      {l.nombreLocal}
+                    </Link>
+                    <small className="celda-sub">{l.razonSocial || 'SIN RAZÓN SOCIAL'}</small>
+                  </td>
+                  <td>{l.cuit || <Badge color="rojo">Falta</Badge>}</td>
+                  <td>
+                    {fehacientes >= 2 ? (
+                      <Badge color="verde">{fehacientes} entregas</Badge>
+                    ) : (
+                      <Badge color="rojo">{fehacientes} entrega(s)</Badge>
+                    )}
+                  </td>
+                  <td>
+                    <BadgeEstado codigo={l.estado} />
+                  </td>
+                  <td>
+                    <AccionesLocal local={l} compacto />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {/* ================= INICIADOS ================= */}
+      <div className="accesos-header">
+        <span>Expedientes iniciados ({iniciados.length})</span>
+      </div>
+
+      {iniciados.length === 0 ? (
+        <Vacio titulo="Todavía no se inició ningún expediente" />
+      ) : (
+        <table className="tabla-datos">
+          <thead>
+            <tr>
+              <th>N° de expediente</th>
+              <th>Local</th>
+              <th>CUIT</th>
+              <th>Fecha</th>
+              <th>Registró</th>
+              <th>Estado actual del local</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {iniciados.map((e) => (
               <tr key={e.id}>
-                <td>{e.id}</td>
-                <td>{e.local}</td>
-
-                {/* 'Resuelto' -> verde ; cualquier otro estado -> naranja */}
-                <td><span className={`badge badge-${e.estado === 'Resuelto' ? 'verde' : 'naranja'}`}>{e.estado}</span></td>
-
-                {/* Fecha como texto tal cual vino, sin formatear */}
-                <td>{e.fecha}</td>
-
-                {/* Botón sin acción todavía */}
-                <td><button className="btn-tabla">Ver</button></td>
+                <td>
+                  <strong>{e.numeroExpediente}</strong>
+                </td>
+                <td>
+                  <Link to={`/locales/${e.localId}`} className="link-local">
+                    {e.local?.nombreLocal ?? `Local ${e.localId}`}
+                  </Link>
+                </td>
+                <td>{e.local?.cuit || '—'}</td>
+                <td>{fmtFecha(e.fecha)}</td>
+                <td>{e.usuario}</td>
+                <td>
+                  {/* Puede NO decir "Expediente": si el titular presentó
+                      documentación después, el local ya salió del circuito y
+                      el expediente quedó en el historial. */}
+                  <BadgeEstado codigo={e.local?.estado} />
+                </td>
+                <td>{e.local && <AccionesLocal local={e.local} compacto />}</td>
               </tr>
             ))}
           </tbody>
-
         </table>
-      </div>
+      )}
+
+      <Aviso tipo="info" titulo="Integración con expedientes municipales (pendiente, sección 8.3)">
+        Hoy el número se genera fuera del sistema y se transcribe a mano. La integración debería permitir iniciar el expediente
+        desde acá y recibir el número asignado. Conviene diseñarla de modo que la indisponibilidad de ese sistema no bloquee la
+        operación: si la comunicación falla, se registra el número a mano y se reconcilia después. El formulario ya acepta las dos
+        cosas.
+      </Aviso>
     </>
   );
 }

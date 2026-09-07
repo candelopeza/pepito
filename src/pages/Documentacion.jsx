@@ -1,53 +1,328 @@
 /* ============================================================================
-   pages/Documentacion.jsx  —  DDJJ Y CONTRATOS  (URL: /#/documentacion)
+   pages/Documentacion.jsx  —  DOCUMENTACIÓN  (URL: /#/documentacion)
    ----------------------------------------------------------------------------
-   RUTA EN: App.jsx -> <Route path="documentacion" ... />
-   ESTILOS: App.css -> sección 7 (TARJETAS)
+   Listado de todo lo presentado (DDJJ, DDJJ de reciclaje y contratos) y el
+   alta guiada en tres pasos.
 
-   ESTA PANTALLA ES UN MENÚ, NO UNA PANTALLA DE DATOS.
-   Son 6 tarjetas, y OJO que son de dos naturalezas distintas:
-       - por TIPO de documento:   Declaraciones Juradas, Contratos, DDJJ Reciclaje
-       - por ESTADO del documento: Vigentes, Vencidas, Pendientes de Revisión
-   Están mezcladas en la misma grilla. Si más adelante confunde al usuario,
-   convendría separarlas en dos bloques con su propio .accesos-header.
+   >>> POR QUÉ EL ALTA ES GUIADA Y NO UN FORMULARIO SUELTO <<<
+   Porque registrar documentación no es cargar un dato: es un acto que SACA a
+   un local del circuito sancionatorio. Antes de dejar registrar hay que
+   mostrar en qué situación está el local, y para eso hace falta consultarla.
+   El paso 2 existe para eso: muestra el estado calculado, el plazo en curso y
+   qué documentación ya tiene, para que nadie registre una DDJJ sobre un local
+   que ya tiene una vigente sin darse cuenta.
 
-   >>> IMPORTANTE: NINGUNA TARJETA FUNCIONA TODAVÍA <<<
-   Las 6 <Card> están sin prop `to`: el clic no hace nada. Es lo esperado.
+   Ese paso 2 antes tenía datos de prueba escritos a mano (tres locales
+   inventados con situaciones fijas). Ahora sale del padrón real y del motor de
+   estados: lo que muestra es lo que efectivamente va a pasar.
 
-   CÓMO SE ACTIVA UNA TARJETA (3 pasos):
-     1. crear la página nueva en pages/
-     2. agregarle un <Route> en App.jsx
-     3. pasarle to="/esa-ruta" a la <Card> de acá
-
-   Misma forma que Relevamiento.jsx y Tramite.jsx.
+   LA COLUMNA "EXPEDIENTE DE TRÁMITE" es el dato que el sistema viejo no
+   guardaba (sección 4.5): sin él no se puede reconstruir el trámite que
+   respalda una acreditación. NO es el expediente de multa.
    ============================================================================ */
 
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Step, StepLabel, Stepper } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 import PageHeader from '../components/ui/PageHeader';
-import Card from '../components/ui/Card';
+import Grilla from '../components/ui/Grilla';
+import Modal from '../components/ui/Modal';
+import Badge, { BadgeEstado } from '../components/ui/Badge';
+import Aviso from '../components/ui/Aviso';
+import { CampoSelect } from '../components/ui/Campo';
+import FormDocumento from '../components/FormDocumento';
+import HistorialActuaciones from '../components/HistorialActuaciones';
+import { useRol } from '../auth/rolContexto';
+import { useDatos } from '../datos/datosContexto';
+import { puedeEditar } from '../config/modulos';
+import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
+import { estaVigente } from '../dominio/vigencias';
+import { fmtFecha } from '../dominio/fechas';
+
+const PASOS = ['Seleccionar local', 'Situación del proceso', 'Documento'];
 
 function Documentacion() {
+  const { rol } = useRol();
+  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, usuarios, registrarDocumento } = useDatos();
+  const puedeCargar = puedeEditar(rol, 'documentacion');
+
+  const [buscar, setBuscar] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState('');
+  const [modal, setModal] = useState(false);
+  const [paso, setPaso] = useState(0);
+  const [localId, setLocalId] = useState('');
+
+  const localElegido = localId ? localPorId(localId) : null;
+
+  function cerrar() {
+    setModal(false);
+    setPaso(0);
+    setLocalId('');
+  }
+
+  /* Las filas: las actuaciones documentales de todos los locales, con el
+     nombre del local resuelto para poder buscar y ordenar por él. */
+  const documentos = useMemo(
+    () =>
+      actuaciones
+        .filter((a) => TIPOS_DOCUMENTO.includes(a.tipo))
+        .map((a) => {
+          const local = localesConEstado.find((l) => l.id === a.localId);
+          return {
+            ...a,
+            nombreLocal: local?.nombreLocal ?? `Local ${a.localId}`,
+            estadoLocal: local?.estado ?? null,
+            vigente: a.validado !== false && estaVigente(a.fechaVencimiento),
+          };
+        }),
+    [actuaciones, localesConEstado],
+  );
+
+  const columnas = useMemo(
+    () => [
+      {
+        field: 'nombreLocal',
+        headerName: 'Local',
+        flex: 1,
+        minWidth: 180,
+        renderCell: ({ row }) => (
+          <Link to={`/locales/${row.localId}`} className="link-local">
+            {row.nombreLocal}
+          </Link>
+        ),
+      },
+      {
+        field: 'tipo',
+        headerName: 'Tipo',
+        width: 175,
+        valueFormatter: (value) => ETIQUETA_DOCUMENTO[value] ?? value,
+      },
+      { field: 'numero', headerName: 'Número', width: 135 },
+      {
+        field: 'expedienteTramite',
+        headerName: 'Expediente de trámite',
+        width: 180,
+        renderCell: ({ row }) =>
+          row.expedienteTramite ? (
+            row.expedienteTramite
+          ) : row.origen === 'INFORME_9DJ' ? (
+            <span className="texto-gris" title="Los contratos informados por la prestataria no tienen expediente de presentación">
+              no aplica
+            </span>
+          ) : (
+            <Badge color="rojo">No registrado</Badge>
+          ),
+      },
+      { field: 'fechaEmision', headerName: 'Emisión', width: 115, valueFormatter: (value) => fmtFecha(value) },
+      { field: 'fechaVencimiento', headerName: 'Vencimiento', width: 125, valueFormatter: (value) => fmtFecha(value) },
+      {
+        field: 'vigencia',
+        headerName: 'Vigencia',
+        width: 190,
+        valueGetter: (_v, row) => (row.validado === false ? 'pendiente' : row.vigente ? 'vigente' : 'vencida'),
+        renderCell: ({ row }) =>
+          row.validado === false ? (
+            <Badge color="amarillo">Pendiente de validación</Badge>
+          ) : row.vigente ? (
+            <Badge color="verde">Vigente</Badge>
+          ) : (
+            <Badge color="gris">Vencida</Badge>
+          ),
+      },
+      {
+        field: 'origen',
+        headerName: 'Origen',
+        width: 175,
+        renderCell: ({ value }) =>
+          value === 'INFORME_9DJ' ? <Badge color="azul">Informe 9 de Julio</Badge> : <span>Presentado por el titular</span>,
+      },
+      { field: 'usuario', headerName: 'Cargado por', width: 150 },
+      {
+        field: 'estadoLocal',
+        headerName: 'Estado del local',
+        width: 215,
+        renderCell: ({ value }) => <BadgeEstado codigo={value} />,
+      },
+    ],
+    [],
+  );
+
+  const filas = useMemo(() => {
+    const q = buscar.trim().toLowerCase();
+    return documentos.filter((d) => {
+      const enTexto =
+        !q || [d.nombreLocal, d.numero, d.expedienteTramite].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
+      const enTipo = !filtroTipo || d.tipo === filtroTipo;
+      return enTexto && enTipo;
+    });
+  }, [documentos, buscar, filtroTipo]);
+
+  const sinExpediente = documentos.filter((d) => !d.expedienteTramite && d.origen !== 'INFORME_9DJ').length;
+
   return (
     <>
-      {/* ---------- BLOQUE 1: encabezado ---------- */}
-      <PageHeader etiqueta="DOCUMENTACIÓN" titulo="DDJJ, CONTRATOS Y DOCUMENTOS" botonVolver />
+      <PageHeader
+        etiqueta="DOCUMENTACIÓN"
+        titulo="DDJJ, RECICLAJE Y CONTRATOS"
+        subtitulo={`${documentos.length} documento(s) registrados · ${documentos.filter((d) => d.vigente).length} vigentes`}
+        botonVolver
+      />
 
-      {/* ---------- BLOQUE 2: separador ---------- */}
-      <div className="accesos-header">
-        <span>CATEGORÍAS</span>
+      {sinExpediente > 0 && (
+        <Aviso tipo="alerta" titulo={`${sinExpediente} documento(s) sin número de expediente de trámite`}>
+          Vienen de la importación del sistema anterior, que no guardaba ese dato. Hasta completarlos no se puede reconstruir desde
+          el sistema el trámite que respalda esa acreditación.
+        </Aviso>
+      )}
+
+      <div className="filtros-fila">
+        <CampoSelect
+          id="filtro-tipo-doc"
+          etiqueta="Filtrar por tipo"
+          valor={filtroTipo}
+          onChange={setFiltroTipo}
+          opciones={TIPOS_DOCUMENTO.map((t) => ({ id: t, etiqueta: ETIQUETA_DOCUMENTO[t] }))}
+          vacio="Todos los tipos"
+        />
       </div>
 
-      {/* ---------- BLOQUE 3: opciones ---------- */}
-      <div className="grid-accesos">
-        {/* --- por tipo de documento --- */}
-        <Card titulo="Declaraciones Juradas" />
-        <Card titulo="Contratos" />
-        <Card titulo="DDJJ de Reciclaje" />
+      <Grilla
+        filas={filas}
+        columnas={columnas}
+        nombreArchivo="documentacion"
+        vacio="Todavía no hay documentación registrada."
+        ordenInicial={[{ field: 'fechaEmision', sort: 'desc' }]}
+        buscadores={[{ placeholder: 'Buscar por local, número o expediente...', valor: buscar, onChange: setBuscar }]}
+        botones={
+          puedeCargar && (
+            <button
+              type="button"
+              className="btn-icono btn-icono-azul"
+              title="Registrar documentación"
+              onClick={() => setModal(true)}
+            >
+              <AddIcon fontSize="small" />
+            </button>
+          )
+        }
+      />
 
-        {/* --- por estado del documento --- */}
-        <Card titulo="Vigentes" />
-        <Card titulo="Vencidas" />
-        <Card titulo="Pendientes de Revisión" />
-      </div>
+      {/* ================= ALTA GUIADA ================= */}
+      {modal && (
+        <Modal abierto etiqueta="DOCUMENTACIÓN" titulo="Registrar documentación" ancho="ancho" onCerrar={cerrar}>
+          <Stepper activeStep={paso} alternativeLabel className="documentacion-stepper">
+            {PASOS.map((p) => (
+              <Step key={p}>
+                <StepLabel>{p}</StepLabel>
+              </Step>
+            ))}
+          </Stepper>
+
+          {/* ---------- PASO 1: elegir el local ---------- */}
+          {paso === 0 && (
+            <div className="paso-documentacion">
+              <div className="paso-encabezado">
+                <h3>Seleccionar establecimiento</h3>
+                <p>Elegí el local para ver su situación actual antes de registrar nada.</p>
+              </div>
+
+              <CampoSelect
+                id="doc-local"
+                etiqueta="Local"
+                valor={localId}
+                onChange={setLocalId}
+                opciones={localesConEstado
+                  .filter((l) => l.estado !== 'EXENTO_CONFIRMADO')
+                  .map((l) => ({ id: l.id, etiqueta: `${l.nombreLocal} — ${l.direccion}` }))}
+                vacio="Seleccionar establecimiento"
+                ayuda="Los locales con exención confirmada no aparecen: no tienen que presentar documentación."
+              />
+
+              <div className="form-acciones">
+                <button type="button" className="btn-primario" disabled={!localId} onClick={() => setPaso(1)}>
+                  Continuar
+                </button>
+                <button type="button" className="btn-secundario" onClick={cerrar}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ---------- PASO 2: la situación real del local ---------- */}
+          {paso === 1 && localElegido && (
+            <div className="paso-documentacion">
+              <div className="paso-encabezado">
+                <h3>Situación del proceso</h3>
+                <p>El sistema resolvió la etapa actual a partir del historial de actuaciones del local.</p>
+              </div>
+
+              <div className="local-seleccionado">
+                <span className="local-seleccionado-label">LOCAL</span>
+                <strong>{localElegido.nombreLocal}</strong>
+                <span>
+                  {localElegido.razonSocial || 'Sin razón social'} · {localElegido.direccion}
+                </span>
+              </div>
+
+              <div className="ficha-situacion">
+                <div className="ficha-estado">
+                  <BadgeEstado codigo={localElegido.estado} />
+                </div>
+                {localElegido.plazo && (
+                  <div className={`ficha-plazo ${localElegido.plazo.vencido ? 'ficha-plazo-vencido' : ''}`}>
+                    <strong>Plazo en curso</strong>
+                    <span>
+                      Vence el {fmtFecha(localElegido.plazo.vencimiento)} ·{' '}
+                      {localElegido.plazo.vencido ? 'VENCIDO' : `faltan ${localElegido.diasRestantes} día(s)`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Si ya tiene algo vigente, avisarlo: registrar otra cosa no
+                  está prohibido, pero casi siempre es un error de carga. */}
+              {localElegido.estadoGrupo === 'documental' ? (
+                <Aviso tipo="alerta" titulo="Este local ya tiene documentación vigente">
+                  Está fuera del circuito sancionatorio. Registrar otro documento es válido (por ejemplo un contrato que reemplaza
+                  una DDJJ), pero revisá que no sea una carga repetida.
+                </Aviso>
+              ) : (
+                <Aviso tipo="ok" titulo="Corresponde registrar documentación">
+                  Al registrarla, el local sale del circuito sancionatorio por el plazo de vigencia del documento.
+                </Aviso>
+              )}
+
+              <div className="accesos-header">
+                <span>Últimas actuaciones</span>
+              </div>
+              <HistorialActuaciones actuaciones={actuacionesDeLocal(localElegido.id).slice(-4)} usuarios={usuarios} />
+
+              <div className="form-acciones">
+                <button type="button" className="btn-primario" onClick={() => setPaso(2)}>
+                  Registrar documento
+                </button>
+                <button type="button" className="btn-secundario" onClick={() => setPaso(0)}>
+                  Volver
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ---------- PASO 3: el documento ---------- */}
+          {paso === 2 && localElegido && (
+            <FormDocumento
+              local={localElegido}
+              onGuardar={(d) => {
+                registrarDocumento(localElegido.id, d);
+                cerrar();
+              }}
+              onCancelar={() => setPaso(1)}
+            />
+          )}
+        </Modal>
+      )}
     </>
   );
 }

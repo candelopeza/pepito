@@ -19,6 +19,7 @@
     10. FORMULARIOS ............ components/FormLocal.jsx
     11. RESPONSIVE ............. móvil / pantalla chica
     12. MODAL ................. components/ui/Modal.jsx
+    13. DOCUMENTACIÓN ......... pages/Documentacion.jsx
    ============================================================================ */
 
 
@@ -322,6 +323,24 @@
 .accesos-header { border-bottom: 1px solid #e0e0e0; padding-bottom: 12px; margin-bottom: 24px; }
 .accesos-header span { color: #9e9e9e; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
 
+/* Variante con un control a la derecha del título (el orden de las bandejas
+   del Tablero). El separador sigue siendo el mismo: solo se vuelve flex. */
+.accesos-header-accion { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.selector-orden { display: flex; align-items: center; gap: 8px; }
+.selector-orden label { color: #9e9e9e; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.selector-orden select {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #424242;
+  background-color: #fff;
+  cursor: pointer;
+}
+.selector-orden select:focus { outline: none; border-color: #1976d2; }
+.selector-orden-ayuda { color: #9e9e9e; font-size: 12px; }
+
 
 /* ========== 7. TARJETAS (GRID DE ACCESOS) ==========
    Componente: components/ui/Card.jsx
@@ -433,7 +452,11 @@
 .badge-verde { background: #e8f5e9; color: #2e7d32; }
 .badge-naranja { background: #fff3e0; color: #ef6c00; }
 .badge-azul { background: #e3f2fd; color: #1565c0; }
-.badge-amarillo { background: #fffde7; color: #f9a825; }
+.badge-amarillo { background: #fffde7; color: #f57f17; }
+
+/* Agregado en la rama de cande. Todavia no lo usa ningun estado: ver la nota
+   de COLOR_ESTADO en pages/Tramite.jsx. */
+.badge-rojo { background: #ffebee; color: #c62828; }
 .badge-gris { background: #eceff1; color: #607d8b; }
 
 /* ========== 10. FORMULARIOS ==========
@@ -546,6 +569,18 @@
   .main-content { padding: 20px; }
   .grid-accesos { grid-template-columns: 1fr; }
   .navbar-usuario-nombre { display: none; }
+
+  /* Lo de abajo viene de la rama de cande.
+     En celular el modal ocupa toda la pantalla: una ventanita centrada con
+     margenes desperdicia ancho justo donde menos hay. */
+  .modal-fondo { padding: 0; }
+  .modal-caja { max-height: 100%; border-radius: 0; }
+
+  /* Botones del formulario apilados y a lo ancho: mas faciles de tocar.
+     Es column-reverse y no column para que el principal (Guardar) quede
+     ARRIBA, que es donde llega el pulgar primero. */
+  .form-acciones { flex-direction: column-reverse; }
+  .form-acciones button { width: 100%; }
 }
 
 
@@ -730,3 +765,739 @@
   transition: 0.2s;
 }
 .btn-peligro:hover { background: #d32f2f; }
+
+
+/* ========== 13. DOCUMENTACIÓN — ALTA GUIADA ==========
+   Usado en: pages/Documentacion.jsx
+   Viene de la rama de cande, junto con esa pantalla. Se trajo tal cual: sin
+   estas reglas la pantalla se ve sin ningún estilo.
+
+   OJO: varias reglas pisan clases internas de MUI (.MuiStepIcon-root y
+   compañía). Si una actualización de MUI les cambia el nombre, el stepper
+   pierde los colores y NO va a haber ningún error en consola. */
+
+.modal-documentacion {
+  max-width: 760px;
+}
+
+
+/* Stepper de Material UI */
+.documentacion-stepper {
+  margin-bottom: 36px;
+}
+
+
+/* Cambia el color del círculo activo/completado de MUI */
+.documentacion-stepper .MuiStepIcon-root.Mui-active {
+  color: #1976d2;
+}
+
+.documentacion-stepper .MuiStepIcon-root.Mui-completed {
+  color: #2e7d32;
+}
+
+
+/* Texto de los pasos */
+.documentacion-stepper .MuiStepLabel-label {
+  font-family: inherit;
+  font-size: 13px;
+  color: #78909c;
+}
+
+.documentacion-stepper .MuiStepLabel-label.Mui-active {
+  color: #1976d2;
+  font-weight: 700;
+}
+
+.documentacion-stepper .MuiStepLabel-label.Mui-completed {
+  color: #455a64;
+  font-weight: 600;
+}
+
+
+/* Contenido de cada paso */
+.paso-documentacion {
+  margin-top: 12px;
+}
+
+
+/* Título + explicación de cada paso */
+.paso-encabezado {
+  margin-bottom: 28px;
+}
+
+.paso-encabezado h3 {
+  color: #1a1a1a;
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.paso-encabezado p {
+  color: #78909c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+
+/* Local seleccionado */
+.local-seleccionado {
+  background: #f5f9fd;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.local-seleccionado-label {
+  color: #90a4ae;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.local-seleccionado strong {
+  color: #263238;
+  font-size: 15px;
+}
+
+
+/* Historial del proceso */
+.historial-proceso {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 24px;
+}
+
+
+/* Una etapa */
+.historial-item {
+  position: relative;
+
+  display: flex;
+  gap: 14px;
+
+  padding: 8px 0 20px 0;
+}
+
+
+/* Línea vertical entre etapas */
+.historial-item:not(:last-child)::after {
+  content: '';
+
+  position: absolute;
+
+  left: 12px;
+  top: 32px;
+
+  width: 2px;
+  height: calc(100% - 18px);
+
+  background: #e0e0e0;
+}
+
+
+/* Círculo de cada etapa */
+.historial-icono {
+  width: 26px;
+  height: 26px;
+
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  z-index: 1;
+}
+
+
+/* Etapa ya realizada */
+.historial-completado .historial-icono {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+
+
+/* Etapa actual */
+.historial-actual .historial-icono {
+  background: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #90caf9;
+}
+
+
+/* Texto de la etapa */
+.historial-etapa {
+  display: block;
+
+  color: #37474f;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  margin-bottom: 3px;
+}
+
+
+/* Estado de la etapa */
+.historial-estado {
+  display: block;
+
+  color: #78909c;
+
+  font-size: 13px;
+}
+
+
+/* Mensaje cuando se permite avanzar */
+.mensaje-habilitado {
+  background: #f1f8e9;
+
+  border: 1px solid #c5e1a5;
+
+  border-radius: 8px;
+
+  padding: 14px 18px;
+
+  margin: 22px 0;
+}
+
+.mensaje-habilitado strong {
+  display: block;
+
+  color: #2e7d32;
+
+  font-size: 14px;
+
+  margin-bottom: 4px;
+}
+
+.mensaje-habilitado span {
+  color: #558b2f;
+
+  font-size: 13px;
+}
+
+
+/* Mensaje cuando NO se puede avanzar */
+.mensaje-bloqueado {
+  background: #fff8e1;
+
+  border: 1px solid #ffe082;
+
+  border-radius: 8px;
+
+  padding: 14px 18px;
+
+  margin: 22px 0;
+}
+
+.mensaje-bloqueado strong {
+  display: block;
+
+  color: #ef6c00;
+
+  font-size: 14px;
+
+  margin-bottom: 4px;
+}
+
+.mensaje-bloqueado span {
+  color: #8d6e63;
+
+  font-size: 13px;
+}
+
+
+/* Dos fechas en una misma fila */
+.documentacion-fechas {
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 16px;
+}
+
+
+/* Textarea igual que inputs */
+.textarea-formulario {
+  width: 100%;
+
+  padding: 12px 16px;
+
+  border: 1px solid #ddd;
+
+  border-radius: 8px;
+
+  font-size: 15px;
+
+  font-family: inherit;
+
+  resize: vertical;
+}
+
+.textarea-formulario:focus {
+  outline: none;
+
+  border-color: #1976d2;
+}
+
+
+/* ============================================================================
+   ==========================================================================
+   14. LO QUE SE AGREGÓ AL CRECER EL SISTEMA
+   --------------------------------------------------------------------------
+   Todo lo de abajo entró junto con los módulos nuevos (tablero, ficha del
+   local, campo, mapa, herramientas y configuración). Está agrupado por pieza
+   y cada grupo dice qué componente lo usa, para poder borrarlo si esa pieza
+   desaparece.
+
+   La paleta es la misma de arriba, sin colores nuevos:
+     azul #1976d2 · verde #2e7d32 · naranja #ef6c00 · amarillo #f9a825
+     rojo #c62828 · gris #607d8b · textos #333 / #666 / #9e9e9e
+   ==========================================================================
+   ============================================================================ */
+
+
+/* ========== 14.1 TEXTO Y AUXILIARES ==========
+   Clases chicas que usan casi todas las pantallas. */
+.pagina-subtitulo { color: #78909c; font-size: 14px; margin: -12px 0 24px; }
+.texto-chico { font-size: 12px; color: #90a4ae; line-height: 1.5; }
+.texto-gris { color: #9e9e9e; }
+.texto-ok { color: #2e7d32; font-size: 14px; font-weight: 600; }
+/* Un plazo vencido tiene que gritar: de eso depende que alguien lo mire. */
+.texto-vencido { color: #c62828; font-weight: 700; }
+.header-acciones { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+
+/* Link a la ficha de un local. Aparece en todas las tablas. */
+.link-local { color: #1565c0; font-weight: 600; text-decoration: none; }
+.link-local:hover { text-decoration: underline; }
+
+/* Segundo renglón chico dentro de una celda (razón social, ayuda, etc.) */
+.celda-sub { display: block; font-size: 11px; color: #9e9e9e; margin-top: 2px; }
+.celda-estado { display: inline-flex; align-items: center; gap: 4px; }
+.celda-motivo { max-width: 320px; font-size: 13px; color: #555; }
+/* Celda que se completa a mano en el papel de la hoja de ruta. */
+.celda-papel { min-width: 120px; border-bottom: 1px solid #cfd8dc; }
+
+
+/* ========== 14.2 AVISOS Y ESTADOS VACÍOS ==========
+   components/ui/Aviso.jsx
+   Se usan mucho porque este sistema tiene reglas que el usuario TIENE que ver
+   antes de apretar un botón. Cuatro colores, cuatro significados fijos. */
+.aviso {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 18px; border-radius: 8px; margin-bottom: 20px;
+  border-left: 4px solid;
+}
+.aviso-cuerpo { display: flex; flex-direction: column; gap: 4px; }
+.aviso-titulo { font-size: 14px; font-weight: 700; }
+.aviso-texto { font-size: 13px; line-height: 1.55; }
+.aviso a { color: inherit; font-weight: 700; }
+
+.aviso-info    { background: #e3f2fd; border-color: #1976d2; color: #0d47a1; }
+.aviso-ok      { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; }
+.aviso-alerta  { background: #fff8e1; border-color: #f9a825; color: #825b00; }
+.aviso-bloqueo { background: #ffebee; border-color: #c62828; color: #8e1010; }
+
+.vacio {
+  background: white; border: 1px dashed #cfd8dc; border-radius: 12px;
+  padding: 32px; text-align: center; margin-bottom: 24px;
+}
+.vacio strong { display: block; color: #546e7a; font-size: 15px; margin-bottom: 6px; }
+.vacio p { color: #90a4ae; font-size: 13px; line-height: 1.6; max-width: 620px; margin: 0 auto; }
+
+/* Bloque informativo neutro: datos de contexto dentro de un formulario. */
+.bloque-info {
+  background: #f5f7fa; border: 1px solid #e0e6ed; border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 20px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.bloque-info strong { font-size: 13px; color: #37474f; }
+.bloque-info span { font-size: 13px; color: #607d8b; line-height: 1.5; }
+
+
+/* ========== 14.3 BOTONES DE ACCIÓN ==========
+   components/AccionesLocal.jsx
+   Los botones que hacen avanzar el circuito. En la ficha van grandes
+   (.btn-accion) y dentro de una fila de tabla van chicos (.btn-tabla, que ya
+   estaba definido en la sección 9). */
+.acciones-local { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px; }
+.btn-accion {
+  background: white; color: #1565c0; border: 1px solid #90caf9;
+  padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: 0.2s; font-family: inherit;
+}
+.btn-accion:hover { background: #1976d2; border-color: #1976d2; color: white; }
+.sin-acciones { color: #90a4ae; font-size: 13px; font-style: italic; }
+.celda-acciones { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.confirmar-cuerpo { font-size: 14px; color: #444; line-height: 1.6; }
+.confirmar-cuerpo p { margin-bottom: 12px; }
+
+/* Barra con una acción de lote y su explicación al costado. */
+.barra-lote {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+
+/* ========== 14.4 FILTROS Y FORMULARIOS ==========
+   components/ui/Campo.jsx  ·  todas las pantallas de listado */
+.filtros-fila { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 4px; }
+.filtros-fila .form-grupo { margin-bottom: 12px; min-width: 240px; }
+
+/* Formularios de dos columnas. Los campos con ancho={2} ocupan las dos. */
+.form-grilla { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+.form-grupo-check label {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  font-size: 14px; font-weight: 600; color: #555;
+}
+.form-grupo-check input { width: auto; }
+
+/* El formulario de campo va a una columna y con controles grandes: se usa con
+   el celular, en la calle, muchas veces con una mano. */
+.formulario-campo { max-width: 640px; }
+.formulario-campo .form-grupo input,
+.formulario-campo .form-grupo select { padding: 14px; font-size: 16px; }
+
+/* Dato de solo lectura (ui/Campo.jsx → Dato). Se usa en las fichas. */
+.dato { display: flex; flex-direction: column; gap: 3px; padding: 10px 0; }
+.dato-etiqueta {
+  font-size: 11px; font-weight: 700; color: #90a4ae;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.dato-valor { font-size: 14px; color: #37474f; }
+
+
+/* ========== 14.5 TABLERO Y BANDEJAS ==========
+   pages/Tablero.jsx */
+.bandeja {
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  margin-bottom: 16px; overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.bandeja-cabecera {
+  display: flex; align-items: center; gap: 16px; width: 100%;
+  padding: 16px 20px; background: white; border: none; cursor: pointer;
+  text-align: left; font-family: inherit;
+}
+.bandeja-cabecera:hover { background: #f8fafc; }
+/* El contador va primero y grande: lo primero que se quiere saber de una
+   bandeja es cuántos hay, no cómo se llama. */
+.bandeja-contador {
+  flex: 0 0 48px; height: 48px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 800; color: white;
+}
+.bandeja-contador-azul { background: #1976d2; }
+.bandeja-contador-verde { background: #2e7d32; }
+.bandeja-contador-naranja { background: #ef6c00; }
+.bandeja-contador-amarillo { background: #f9a825; }
+.bandeja-contador-rojo { background: #c62828; }
+.bandeja-titulo { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.bandeja-titulo strong { font-size: 15px; color: #263238; }
+.bandeja-titulo small { font-size: 12px; color: #90a4ae; }
+.bandeja-flecha { color: #b0bec5; font-size: 12px; }
+.bandeja-cuerpo { border-top: 1px solid #eceff1; }
+.bandeja-vacia { padding: 20px; color: #b0bec5; font-size: 13px; }
+/* Dentro de una bandeja la tabla no lleva su propio marco: ya está enmarcada. */
+.tabla-bandeja { background: white; }
+.tabla-bandeja th { background: #f5f7fa; color: #607d8b; }
+.tabla-bandeja td { padding: 12px 16px; vertical-align: top; }
+
+/* Leyenda de colores. Tablero y mapa. */
+.leyenda {
+  display: flex; flex-wrap: wrap; gap: 18px; align-items: center;
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 16px 20px; margin-bottom: 24px; font-size: 13px; color: #607d8b;
+}
+.leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Título dentro del propio recuadro: la leyenda del tablero va arriba de la
+   página y no lleva separador aparte, para no empujar las bandejas. */
+.leyenda-titulo {
+  color: #9e9e9e; font-size: 12px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; padding-right: 4px; border-right: 1px solid #e8ecf1;
+  margin-right: 4px; align-self: stretch;
+}
+
+
+/* ========== 14.6 TARJETAS CON NÚMERO ==========
+   components/ui/Card.jsx (Home y Portal) */
+.card-valor { display: block; font-size: 32px; font-weight: 800; margin-bottom: 6px; }
+.card-valor-azul { color: #1976d2; }
+.card-valor-verde { color: #2e7d32; }
+.card-valor-naranja { color: #ef6c00; }
+.card-valor-amarillo { color: #f9a825; }
+.card-valor-rojo { color: #c62828; }
+.card-pie { margin-top: 12px; font-size: 12px; color: #90a4ae; }
+/* Cuando la tarjeta es un <button> hay que apagarle el estilo del navegador. */
+.card-acceso-boton {
+  background: white; border: 1px solid #e8ecf1; text-align: left;
+  font-family: inherit; cursor: pointer; width: 100%;
+}
+
+
+/* ========== 14.7 FICHA DEL LOCAL ==========
+   pages/LocalFicha.jsx */
+.ficha-situacion {
+  display: flex; gap: 24px; flex-wrap: wrap; align-items: stretch;
+  margin-bottom: 20px;
+}
+.ficha-estado {
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 18px 22px; display: flex; flex-direction: column; gap: 8px;
+  align-items: flex-start; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+/* El código interno del estado se muestra en chico: sirve para reportar un
+   problema sin depender de la etiqueta, que el área puede cambiar. */
+.ficha-estado-codigo { font-size: 11px; color: #b0bec5; font-family: monospace; }
+.ficha-plazo {
+  background: white; border: 1px solid #e8ecf1; border-left: 4px solid #f9a825;
+  border-radius: 12px; padding: 18px 22px;
+  display: flex; flex-direction: column; gap: 6px; justify-content: center;
+}
+.ficha-plazo strong { font-size: 13px; color: #37474f; }
+.ficha-plazo span { font-size: 13px; color: #607d8b; }
+.ficha-plazo-vencido { border-left-color: #c62828; background: #fff5f5; }
+.ficha-plazo-vencido span { color: #c62828; font-weight: 600; }
+
+.ficha-datos {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 4px 28px; background: white; border: 1px solid #e8ecf1;
+  border-radius: 12px; padding: 20px 24px; margin-bottom: 24px;
+}
+
+
+/* ========== 14.8 HISTORIAL DE ACTUACIONES ==========
+   components/HistorialActuaciones.jsx
+   La vista unificada del historial: es lo que en el sistema viejo justificaba
+   la tabla de 44 columnas, resuelto donde corresponde (en la presentación). */
+.historial { list-style: none; margin-bottom: 24px; }
+.historial-fila {
+  background: white; border: 1px solid #e8ecf1; border-left: 4px solid #cfd8dc;
+  border-radius: 8px; padding: 14px 18px; margin-bottom: 10px;
+}
+/* El color del borde izquierdo es el del tipo de actuación: se puede recorrer
+   el historial de un vistazo sin leer las etiquetas. */
+.historial-azul { border-left-color: #1976d2; }
+.historial-verde { border-left-color: #2e7d32; }
+.historial-amarillo { border-left-color: #f9a825; }
+.historial-rojo { border-left-color: #c62828; }
+.historial-gris { border-left-color: #90a4ae; }
+
+.hist-cabecera { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.hist-fecha { font-size: 13px; font-weight: 700; color: #37474f; }
+.hist-usuario { font-size: 12px; color: #90a4ae; margin-left: auto; }
+.hist-cuerpo { display: flex; flex-direction: column; gap: 5px; }
+.hist-linea {
+  display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+  font-size: 13px; color: #546e7a;
+}
+.hist-pendiente { color: #ef6c00; font-weight: 600; }
+.hist-vencido { color: #c62828; font-weight: 600; }
+.hist-obs { font-style: italic; color: #78909c; }
+
+
+/* ========== 14.9 APP DE CAMPO ==========
+   pages/campo/Relevar.jsx y pages/campo/Entregas.jsx */
+.campo-estado {
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 14px 18px; margin-bottom: 20px; font-size: 13px;
+}
+.lista-cola { list-style: none; margin-bottom: 12px; }
+.lista-cola li {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  background: white; border: 1px solid #e8ecf1; border-radius: 8px;
+  padding: 12px 16px; margin-bottom: 8px; font-size: 13px;
+}
+.lista-cola strong { color: #37474f; }
+.lista-cola span { color: #90a4ae; }
+
+/* La hoja de ruta en pantalla. Números grandes y botones grandes: se usa
+   caminando. */
+.lista-entregas { list-style: none; margin-bottom: 24px; }
+.entrega-item {
+  display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 16px 20px; margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.entrega-orden {
+  flex: 0 0 40px; height: 40px; border-radius: 50%; background: #1976d2;
+  color: white; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 16px;
+}
+.entrega-datos { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 4px; }
+.entrega-datos strong { font-size: 15px; color: #263238; }
+.entrega-direccion { font-size: 14px; color: #546e7a; }
+.entrega-meta { font-size: 12px; color: #90a4ae; }
+.entrega-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.entrega-acciones { display: flex; gap: 10px; flex-wrap: wrap; }
+
+
+/* ========== 14.10 MAPA ==========
+   pages/Mapa.jsx */
+.mapa-contenedor {
+  position: relative; background: white; border: 1px solid #e8ecf1;
+  border-radius: 12px; padding: 12px; margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.mapa-svg { width: 100%; height: auto; display: block; }
+.mapa-punto { cursor: pointer; transition: 0.15s; }
+.mapa-punto:hover { fill-opacity: 1; }
+.mapa-etiqueta-ejido { font-size: 11px; fill: #90a4ae; font-family: inherit; }
+/* La ficha del punto va fija arriba a la derecha y no sigue al mouse: con el
+   tooltip pegado al cursor, mover el mouse para leerlo lo hacía desaparecer. */
+.mapa-tooltip {
+  position: absolute; top: 24px; right: 24px; width: 240px;
+  background: white; border: 1px solid #cfd8dc; border-radius: 10px;
+  padding: 14px 16px; box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  display: flex; flex-direction: column; gap: 6px; font-size: 13px;
+}
+.mapa-tooltip strong { color: #263238; }
+.mapa-tooltip a { color: #1565c0; font-weight: 600; }
+
+.lista-simple { list-style: none; margin-bottom: 24px; }
+.lista-simple li {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 10px 0; border-bottom: 1px solid #eceff1; font-size: 14px;
+}
+
+
+/* ========== 14.11 HERRAMIENTAS ==========
+   pages/herramientas/* */
+.par-duplicado {
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 18px 22px; margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.par-cabecera {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 16px; font-size: 13px; color: #546e7a;
+}
+.par-cuerpo { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.par-lado {
+  flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 5px;
+  border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #546e7a;
+}
+.par-lado-conserva { background: #e8f5e9; border: 1px solid #a5d6a7; }
+.par-lado-absorbe { background: #ffebee; border: 1px solid #ef9a9a; }
+.par-rol {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.6px;
+  text-transform: uppercase; color: #607d8b;
+}
+.par-flecha { font-size: 24px; color: #90a4ae; }
+.par-acciones { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+
+.zona-carga {
+  background: white; border: 2px dashed #b0bec5; border-radius: 12px;
+  padding: 36px; text-align: center; margin-bottom: 24px;
+}
+.zona-carga strong { display: block; font-size: 16px; color: #37474f; margin-bottom: 8px; }
+.zona-carga p { font-size: 13px; color: #90a4ae; max-width: 560px; margin: 0 auto 20px; line-height: 1.6; }
+/* La fila dudosa se marca en la tabla: es la que hay que mirar antes de
+   aplicar el informe. */
+.fila-dudosa { background: #fff8e1; }
+
+
+/* ========== 14.12 PORTAL DEL TITULAR ==========
+   pages/Portal.jsx */
+.portal-local { margin-bottom: 40px; }
+.portal-expedientes {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px; background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 20px 24px; margin: 20px 0;
+}
+.portal-expedientes strong { display: block; font-size: 13px; color: #37474f; margin-bottom: 10px; }
+.portal-expedientes .lista-simple li { font-size: 13px; }
+.portal-historial { margin-bottom: 20px; }
+.portal-historial summary {
+  cursor: pointer; font-size: 14px; font-weight: 600; color: #1565c0;
+  padding: 12px 0;
+}
+
+
+/* ========== 14.13 CÉDULA Y PLANTILLA ==========
+   components/VistaCedula.jsx y pages/config/Plantilla.jsx
+   La cédula se muestra en monoespaciada y sobre fondo blanco a propósito: es
+   un documento que se imprime, no una pantalla. */
+.cedula-papel {
+  background: white; border: 1px solid #cfd8dc; border-radius: 4px;
+  padding: 28px 32px; font-family: 'Courier New', Courier, monospace;
+  font-size: 13px; line-height: 1.7; color: #212121;
+  white-space: pre-wrap; overflow-x: auto; margin-bottom: 20px;
+}
+.plantilla-columnas {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 24px;
+}
+.textarea-plantilla { font-family: 'Courier New', Courier, monospace; font-size: 13px; }
+
+
+/* ========== 14.14 MODAL: AGREGADOS ==========
+   components/ui/Modal.jsx */
+.modal-etiqueta {
+  display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+  color: #90a4ae; text-transform: uppercase; margin-bottom: 4px;
+}
+/* Modal ancho: para los formularios de dos columnas y los pasos guiados. */
+.modal-caja-ancha { max-width: 900px; }
+/* Dentro de un modal ancho el formulario usa las dos columnas; en el angosto
+   se apila, porque dos columnas de 200px no se pueden completar. */
+.modal-caja:not(.modal-caja-ancha) .form-grilla { grid-template-columns: 1fr; }
+
+
+/* ========== 14.15 IMPRESIÓN ==========
+   Al imprimir (cédula, hoja de ruta, reportes) hay que sacar de la hoja la
+   navbar, el menú y los botones: si no, salen en el papel.
+   .solo-impresion marca el bloque que SÍ tiene que salir. */
+@media print {
+  .navbar,
+  .sidebar,
+  .sidebar-fondo,
+  .info-bar,
+  .tabla-acciones,
+  .form-acciones,
+  .acciones-local,
+  .barra-lote,
+  .modal-encabezado,
+  .bandeja-cabecera,
+  .filtros-fila { display: none !important; }
+
+  .modal-fondo { position: static; background: none; padding: 0; }
+  .modal-caja, .modal-caja-ancha {
+    max-width: none; max-height: none; box-shadow: none; border-radius: 0;
+  }
+  .main-content { padding: 0; }
+  body { background: white; }
+  .cedula-papel { border: none; padding: 0; }
+  /* Que las tablas largas no se corten a la mitad de una fila. */
+  .tabla-datos tr { page-break-inside: avoid; }
+}
+
+
+/* ========== 14.16 RESPONSIVE DE LO NUEVO ==========
+   Todo a una columna. La app de campo se usa siempre así. */
+@media (max-width: 900px) {
+  .form-grilla,
+  .plantilla-columnas { grid-template-columns: 1fr; }
+  .ficha-situacion { flex-direction: column; }
+  .par-cuerpo { flex-direction: column; }
+  .par-flecha { transform: rotate(-90deg); }
+  .mapa-tooltip { position: static; width: auto; margin-top: 12px; }
+  .entrega-item { flex-direction: column; align-items: flex-start; }
+  .entrega-acciones { width: 100%; }
+  .entrega-acciones button, .entrega-acciones a { flex: 1; text-align: center; }
+}

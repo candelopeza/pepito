@@ -1,0 +1,139 @@
+/* ============================================================================
+   dominio/actuaciones.js  —  TIPOS DE ACTO ADMINISTRATIVO
+   ----------------------------------------------------------------------------
+   Una ACTUACIÓN es todo acto registrado sobre un local. Es la tabla de eventos
+   del sistema (sección 5.1) y la fuente de verdad del estado: el estado NO se
+   escribe a mano, se deduce del historial de actuaciones (ver reglas.js).
+
+   [NO PORTAR] El sistema viejo guardaba todo en una única tabla de 44 columnas
+   con seis bloques mutuamente excluyentes. Acá cada actuación lleva solo los
+   campos de su tipo. La vista unificada del historial se arma en pantalla
+   (pages/LocalFicha.jsx), que es donde corresponde.
+
+   FORMA DE UNA ACTUACIÓN
+     comunes:      id, localId, tipo, fecha (ISO), usuario, observaciones
+     NOTIFICACION: instancia (1|2), numeroCedula, notificadorId, fechaEntrega,
+                   plazoDias, fechaVencimiento, resultado, evidencia,
+                   impresaPor, impresaEn
+     DDJJ / DDJJ_RECICLAJE / CONTRATO:
+                   numero, fechaEmision, fechaVencimiento, origen,
+                   expedienteTramite, archivo, validado
+     EXPEDIENTE:   numeroExpediente
+     PRORROGA:     diasOtorgados, fechaVencimiento, motivo
+   ============================================================================ */
+
+export const TIPOS_ACTUACION = {
+  NOTIFICACION:   { etiqueta: 'Notificación',    color: 'azul' },
+  DDJJ:           { etiqueta: 'Declaración Jurada', color: 'verde' },
+  DDJJ_RECICLAJE: { etiqueta: 'DDJJ Reciclaje',  color: 'verde' },
+  CONTRATO:       { etiqueta: 'Contrato',        color: 'verde' },
+  PRORROGA:       { etiqueta: 'Prórroga',        color: 'amarillo' },
+  EXPEDIENTE:     { etiqueta: 'Expediente de multa', color: 'rojo' },
+};
+
+export const TIPOS_DOCUMENTO = ['DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO'];
+
+export const ETIQUETA_DOCUMENTO = {
+  DDJJ: 'Declaración Jurada',
+  DDJJ_RECICLAJE: 'DDJJ de Reciclaje',
+  CONTRATO: 'Contrato de recolección',
+};
+
+/* Resultado de la entrega de una cédula. `corre` indica si hace correr el
+   plazo: sin notificación fehaciente no hay avance (garantía de debido
+   proceso, condición 6 de la sección 4.3). */
+export const RESULTADOS_ENTREGA = [
+  { id: 'ENTREGADA',     etiqueta: 'Entregada en mano con firma', corre: true,  color: 'verde' },
+  { id: 'SIN_FIRMA',     etiqueta: 'Entregada sin firma',         corre: true,  color: 'verde' },
+  { id: 'FIJADA',        etiqueta: 'Fijada en el domicilio',      corre: true,  color: 'verde' },
+  { id: 'NO_ENTREGADA',  etiqueta: 'No entregada',                corre: false, color: 'rojo' },
+];
+
+export function resultadoEntrega(id) {
+  return RESULTADOS_ENTREGA.find((r) => r.id === id) ?? null;
+}
+
+/* ¿Este resultado hace correr el plazo? */
+export function correPlazo(resultado) {
+  return Boolean(resultadoEntrega(resultado)?.corre);
+}
+
+/* ============================================================================
+   NÚMERO DE CÉDULA
+   ----------------------------------------------------------------------------
+   Formato único y único lugar donde se arma: prefijo + 6 dígitos con ceros a
+   la izquierda -> CED-001275. Lo necesitan tres partes del sistema (la emisión,
+   la regeneración y el formulario de entrega), y si cada una lo armara por su
+   cuenta bastaría un padStart distinto para que dejaran de coincidir.
+
+   >>> EL NOTIFICADOR ESCRIBE SOLO EL NÚMERO <<<
+   En el papel dice CED-001275; en el campo alcanza con escribir 1275. El
+   prefijo y los ceros los completa el sistema (completarNumeroCedula). Pedirle
+   tipear "CED-" y contar ceros en la calle, con el celular en una mano, es
+   pedir errores de carga en el dato que después se usa para impugnar.
+   ============================================================================ */
+
+export const PREFIJO_CEDULA = 'CED-';
+export const DIGITOS_CEDULA = 6;
+
+/* 1275 -> 'CED-001275'. Es la forma oficial del número. */
+export function numeroCedula(numero) {
+  return `${PREFIJO_CEDULA}${String(numero).padStart(DIGITOS_CEDULA, '0')}`;
+}
+
+/* Se queda con los dígitos y descarta todo lo demás, así da igual si pegaron
+   'CED-001275', escribieron 'ced 1275' o tipearon 1275. Recorta a los últimos
+   DIGITOS_CEDULA para que un pegado con basura adelante no arme un número de
+   ocho cifras que nunca va a coincidir con nada. */
+export function digitosCedula(entrada) {
+  return String(entrada ?? '').replace(/\D/g, '').slice(-DIGITOS_CEDULA);
+}
+
+/* '1275' -> 'CED-001275'. Cadena vacía si no vino ningún dígito. */
+export function completarNumeroCedula(entrada) {
+  const digitos = digitosCedula(entrada);
+  return digitos ? numeroCedula(digitos) : '';
+}
+
+/* ¿Son el mismo número? Compara la parte numérica: '1275', '001275' y
+   'CED-001275' son la misma cédula. Lo vacío no coincide con nada. */
+export function mismoNumeroCedula(a, b) {
+  const da = digitosCedula(a);
+  const db = digitosCedula(b);
+  return Boolean(da) && Boolean(db) && Number(da) === Number(db);
+}
+
+export const ORIGENES_DOCUMENTO = [
+  { id: 'PRESENTADO_TITULAR', etiqueta: 'Presentado por el titular' },
+  { id: 'INFORME_9DJ',        etiqueta: 'Informado por 9 de Julio' },
+];
+
+/* ---------------------------------------------------------------- consultas
+   [NO PORTAR] El sistema viejo determinaba "la más reciente" por el orden
+   físico de las filas de la planilla: cualquier inserción rompía el cálculo en
+   silencio. Acá se ordena por fecha y, si empatan, por id (que es secuencial).
+   -------------------------------------------------------------------------- */
+
+export function ordenarCronologico(actuaciones) {
+  return [...actuaciones].sort((a, b) => {
+    if (a.fecha !== b.fecha) return a.fecha < b.fecha ? -1 : 1;
+    return a.id - b.id;
+  });
+}
+
+export function deLocal(actuaciones, localId) {
+  return ordenarCronologico(actuaciones.filter((a) => a.localId === localId));
+}
+
+export function ultima(actuaciones, tipos) {
+  const lista = ordenarCronologico(actuaciones.filter((a) => tipos.includes(a.tipo)));
+  return lista.length ? lista[lista.length - 1] : null;
+}
+
+export function documentosDe(actuaciones, localId) {
+  return deLocal(actuaciones, localId).filter((a) => TIPOS_DOCUMENTO.includes(a.tipo));
+}
+
+export function notificacionesDe(actuaciones, localId) {
+  return deLocal(actuaciones, localId).filter((a) => a.tipo === 'NOTIFICACION');
+}

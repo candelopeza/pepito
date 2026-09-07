@@ -1,354 +1,285 @@
 /* ============================================================================
    pages/Local.jsx  —  PADRÓN DE ESTABLECIMIENTOS  (URL: /#/locales)
    ----------------------------------------------------------------------------
-   RUTA EN: App.jsx -> <Route path="locales" ... />
-   ESTILOS: App.css -> "BARRA DE ACCIONES DE TABLA", "GRILLA (MUI DATA GRID)",
-            sección 9 (badges de estado) y sección 12 (MODAL)
+   El listado completo: búsqueda por cualquier campo, filtros combinables,
+   orden por columna y exportación del resultado (sección 6.1).
 
-   ANTES esta pantalla era una tabla HTML fija: sin buscador, sin filtros, sin
-   paginado y sin alta. AHORA usa la MISMA grilla que Trámites (MUI Data Grid),
-   así las dos pantallas de datos se ven y se manejan igual.
+   >>> LA COLUMNA "ESTADO" NO SALE DE LA BASE <<<
+   Se calcula con las reglas del dominio a partir del historial de actuaciones
+   de cada local (ver datos/vistas.js → conEstado). No hay un campo `estado`
+   que alguien pueda dejar desactualizado.
 
-   BLOQUES DE ESTA PANTALLA:
-     1. Encabezado (PageHeader, con botón Volver)
-     2. Barra de acciones: 2 buscadores + nuevo / imprimir / descargar
-     3. Grilla (MUI Data Grid)
-     4. Modal de ver / editar / nuevo (solo cuando hay un local seleccionado)
+   FILTROS: los dos buscadores y los dos desplegables filtran ANTES de la
+   grilla; los filtros propios de cada columna del Data Grid funcionan ENCIMA
+   de eso. Si buscás algo y "no aparece", revisá los dos niveles.
 
-   CÓMO FUNCIONAN LOS BOTONES DE LA COLUMNA ACCIONES:
-       "Ver"     -> abre el modal con los campos BLOQUEADOS. Lo ven todos.
-       "Editar"  -> abre el MISMO modal con los campos habilitados.
-                    SOLO aparece si el rol tiene permiso de edición.
-   Los dos usan el mismo componente (components/FormLocal.jsx); lo único que
-   cambia es la prop `soloLectura`. El botón "+" de arriba usa ESE MISMO
-   formulario con un local vacío.
+   QUIÉN PUEDE EDITAR: sale de `rolesEdicion` del módulo 'locales' en
+   config/modulos.js. Hoy: administrativo y coordinación. El mismo permiso
+   gobierna el botón "+" y el lápiz de cada fila.
 
-   >>> QUIÉN PUEDE EDITAR NO SE DEFINE ACÁ <<<
-   Sale de `rolesEdicion` del módulo 'locales' en src/config/modulos.js.
-   Hoy: solo administrador. Para sumar otro rol se agrega ahí, no acá.
-   El mismo permiso gobierna "Editar" y el alta: si no podés editar, tampoco
-   te aparece el "+".
-
-   >>> DATOS DE PRUEBA <<<
-   Los 3 locales están escritos a mano abajo. NO hay backend, así que
-   LOS CAMBIOS SE PIERDEN AL RECARGAR (F5). Es lo esperado por ahora.
-   Cuando se conecte la API hay que tocar dos puntos, los dos marcados abajo:
-   la carga inicial (useState) y guardarLocal().
-
-   SI HAY PROBLEMA ACÁ:
-     - "No veo el botón Editar ni el +": el rol activo no está en
-       `rolesEdicion` del módulo 'locales' (config/modulos.js). Probá con
-       Administrador.
-     - "Guardo y la tabla no se actualiza": mirá guardarLocal(). Tiene que
-       crear un array NUEVO; si se modifica el existente, React no se entera.
-     - "Guardo, recargo y volvió atrás": correcto, no hay backend todavía.
-     - "Un estado sale con badge gris": ese texto no está en ESTADOS_LOCAL
-       (config/catalogos.js). La comparación es exacta, con tilde y todo.
-     - "Imprimir / Descargar no hacen nada": los dos van por `apiRef`, que se
-       conecta con la prop `apiRef` del <DataGrid>. Si se saca esa prop, mueren.
-     - "Busco y no filtra": los buscadores filtran en `filas` (useMemo), no en
-       la grilla. Los filtros propios de cada columna funcionan ENCIMA de eso.
+   PARA VER TODO DE UN LOCAL está la ficha: /#/locales/:id. El nombre de cada
+   fila es un link. El modal de acá es para editar los datos del padrón, no
+   para ver el historial.
    ============================================================================ */
 
 import { useMemo, useState } from 'react';
-import {
-  DataGrid,
-  GridToolbar,
-  GridActionsCellItem,
-  useGridApiRef,
-} from '@mui/x-data-grid';
-import { esES } from '@mui/x-data-grid/locales';
+import { Link, useNavigate } from 'react-router-dom';
+import { GridActionsCellItem } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
-import PrintIcon from '@mui/icons-material/Print';
-import DownloadIcon from '@mui/icons-material/Download';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import DeleteIcon from '@mui/icons-material/Delete';
 import PageHeader from '../components/ui/PageHeader';
 import Modal from '../components/ui/Modal';
+import Confirmar from '../components/ui/Confirmar';
+import Grilla from '../components/ui/Grilla';
+import { BadgeEstado } from '../components/ui/Badge';
+import { CampoSelect } from '../components/ui/Campo';
 import FormLocal from '../components/FormLocal';
 import { useRol } from '../auth/rolContexto';
+import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
-import { RUBROS, ESTADOS_LOCAL, colorEstado } from '../config/catalogos';
+import { LISTA_ESTADOS } from '../dominio/estados';
+import { fmtFecha } from '../dominio/fechas';
 
-// Los valores que puede tomar la columna Estado. Salen del catálogo para que
-// el desplegable del filtro y el del formulario no se desalineen.
-const ESTADOS = ESTADOS_LOCAL.map((e) => e.id);
+const LOCAL_VACIO = {
+  nombreLocal: '',
+  razonSocial: '',
+  cuit: '',
+  rubro: '',
+  direccion: '',
+  domicilioFiscal: '',
+  email: '',
+  telefono: '',
+  titularCuil: '',
+  observaciones: '',
+};
 
 function Local() {
-
-  // ===== A. PERMISOS =====
-  // Si es false, ni el botón "Editar" ni el "+" se dibujan.
   const { rol } = useRol();
+  const navegar = useNavigate();
+  const { localesConEstado, rubros, guardarLocal, eliminarLocal } = useDatos();
   const puedeEditarLocales = puedeEditar(rol, 'locales');
 
-  // Manija de la grilla: sirve para pedirle cosas desde afuera (exportar a CSV,
-  // imprimir). Se llena con la prop `apiRef` del <DataGrid> de más abajo.
-  const apiRef = useGridApiRef();
-
-  // ===== B. DATOS (fijos, de prueba) =====
-  // >>> PUNTO 1 DE 2 PARA CONECTAR EL BACKEND <<<
-  // Acá va el fetch dentro de un useEffect, más los estados de "cargando" y
-  // "error". Hoy el array arranca fijo.
-  const [locales, setLocales] = useState([
-    { id: 1, nombre: 'Supermercado Norte', cuit: '30-12345678-9', direccion: 'Av. Alem 123', rubro: 'Comercial', estado: 'Activo' },
-    { id: 2, nombre: 'Industria Sur', cuit: '30-98765432-1', direccion: 'Ruta 9 Km 5', rubro: 'Industrial', estado: 'En trámite' },
-    { id: 3, nombre: 'Farmacia Centro', cuit: '30-55555555-5', direccion: 'San Martín 456', rubro: 'Servicios', estado: 'Activo' },
-  ]);
-
-  const [buscarNombre, setBuscarNombre] = useState('');
+  const [buscar, setBuscar] = useState('');
   const [buscarCuit, setBuscarCuit] = useState('');
-
-  // ===== C. QUÉ LOCAL ESTÁ ABIERTO EN EL MODAL =====
-  // null = modal cerrado.
-  // { local, soloLectura, esNuevo } = modal abierto con ese local.
-  // Van juntos en un solo estado a propósito: si fueran estados separados se
-  // pueden desincronizar (modal abierto sin local, o al revés).
+  const [filtroEstado, setFiltroEstado] = useState('');
+  const [filtroRubro, setFiltroRubro] = useState('');
   const [seleccion, setSeleccion] = useState(null);
+  const [aEliminar, setAEliminar] = useState(null);
 
-  function cerrarModal() {
-    setSeleccion(null);
-  }
+  const cerrarModal = () => setSeleccion(null);
 
-  // El alta reusa el MISMO formulario del modal, con un local en blanco y el
-  // próximo id ya calculado (FormLocal muestra el id pero no lo deja editar).
-  function abrirNuevo() {
-    const siguienteId = locales.reduce((max, l) => Math.max(max, l.id), 0) + 1;
-    setSeleccion({
-      local: {
-        id: siguienteId,
-        nombre: '',
-        cuit: '',
-        direccion: '',
-        rubro: RUBROS[0],
-        estado: ESTADOS[0],
-      },
-      soloLectura: false,
-      esNuevo: true,
-    });
-  }
-
-  // ===== D. GUARDAR LOS CAMBIOS =====
-  // >>> PUNTO 2 DE 2 PARA CONECTAR EL BACKEND <<<
-  // Acá va el POST (alta) o el PUT/PATCH (edición). Hoy solo actualiza la
-  // lista en memoria.
-  //
-  // OJO con el .map() / el spread: los dos crean un array NUEVO en vez de
-  // modificar el que ya existe. React compara por identidad; si se modificara
-  // el array original, la grilla no se volvería a dibujar y parecería que el
-  // guardado no funcionó.
-  function guardarLocal(localModificado) {
-    setLocales((previos) =>
-      previos.some((l) => l.id === localModificado.id)
-        ? previos.map((l) => (l.id === localModificado.id ? localModificado : l))
-        : [...previos, localModificado]
-    );
-    cerrarModal();
-  }
-
-  // ===== E. COLUMNAS DE LA GRILLA =====
-  // Se rearma solo cuando cambia el permiso, porque de eso depende si la
-  // columna Acciones lleva o no el botón "Editar".
   const columnas = useMemo(
     () => [
-      { field: 'id', headerName: 'ID', width: 70 },
-      { field: 'nombre', headerName: 'Nombre', flex: 1, minWidth: 180 },
-      { field: 'cuit', headerName: 'CUIT', width: 150 },
-      { field: 'direccion', headerName: 'Dirección', flex: 1, minWidth: 170 },
+      { field: 'id', headerName: 'N°', width: 70 },
       {
-        field: 'rubro',
-        headerName: 'Rubro',
-        type: 'singleSelect',
-        valueOptions: RUBROS,
-        width: 130,
+        field: 'nombreLocal',
+        headerName: 'Local',
+        flex: 1,
+        minWidth: 200,
+        renderCell: ({ row }) => (
+          <Link to={`/locales/${row.id}`} className="link-local">
+            {row.nombreLocal}
+          </Link>
+        ),
       },
+      { field: 'razonSocial', headerName: 'Razón social', flex: 1, minWidth: 180 },
+      { field: 'cuit', headerName: 'CUIT', width: 140 },
+      { field: 'rubro', headerName: 'Rubro', width: 150 },
+      { field: 'direccion', headerName: 'Dirección', flex: 1, minWidth: 180 },
       {
         field: 'estado',
         headerName: 'Estado',
-        type: 'singleSelect',
-        valueOptions: ESTADOS,
-        width: 140,
-        // El color del badge sale de config/catalogos.js. Antes estaba escrito
-        // acá con un if, y solo contemplaba dos estados posibles.
-        renderCell: ({ value }) => (
-          <span className={`badge badge-${colorEstado(value)}`}>{value}</span>
+        width: 230,
+        renderCell: ({ row }) => (
+          <span className="celda-estado">
+            <BadgeEstado codigo={row.estado} />
+            {/* El candado marca los locales excluidos del recálculo. Sin esto,
+                un local bloqueado parece uno normal que no avanza. */}
+            {row.bloqueado && <span title={row.bloqueadoMotivo}> 🔒</span>}
+          </span>
         ),
+      },
+      {
+        field: 'vencimiento',
+        headerName: 'Vence',
+        width: 130,
+        // valueGetter para que el orden sea por fecha real y no por el texto:
+        // ordenar '01/12' contra '15/03' como cadenas da cualquier cosa.
+        valueGetter: (_v, row) => row.plazo?.vencimiento ?? '',
+        renderCell: ({ row }) =>
+          row.plazo ? (
+            <span className={row.plazo.vencido ? 'texto-vencido' : ''}>{fmtFecha(row.plazo.vencimiento)}</span>
+          ) : (
+            <span className="texto-gris">—</span>
+          ),
+      },
+      {
+        field: 'cantidadActuaciones',
+        headerName: 'Actuaciones',
+        width: 110,
+        type: 'number',
       },
       {
         field: 'acciones',
         headerName: 'Acciones',
         type: 'actions',
-        width: 110,
+        width: 130,
         getActions: ({ row }) => {
           const acciones = [
             <GridActionsCellItem
-              key="ver"
-              icon={<VisibilityIcon fontSize="small" />}
-              label="Ver"
-              title="Ver"
-              onClick={() => setSeleccion({ local: row, soloLectura: true })}
+              key="ficha"
+              icon={<OpenInNewIcon fontSize="small" />}
+              label="Abrir ficha"
+              title="Abrir la ficha completa"
+              onClick={() => navegar(`/locales/${row.id}`)}
             />,
           ];
-
-          // "Editar" solo si el rol tiene permiso. No se muestra deshabilitado:
-          // se oculta, igual que las tarjetas y el menú, para mantener el mismo
-          // criterio en todo el sistema.
           if (puedeEditarLocales) {
             acciones.push(
               <GridActionsCellItem
                 key="editar"
                 icon={<EditIcon fontSize="small" />}
                 label="Editar"
-                title="Editar"
-                onClick={() => setSeleccion({ local: row, soloLectura: false })}
-              />
+                title="Editar datos del padrón"
+                onClick={() => setSeleccion({ local: row, esNuevo: false })}
+              />,
+              <GridActionsCellItem
+                key="eliminar"
+                icon={<DeleteIcon fontSize="small" />}
+                label="Eliminar"
+                title="Eliminar del padrón"
+                onClick={() => setAEliminar(row)}
+              />,
             );
           }
-
           return acciones;
         },
       },
     ],
-    [puedeEditarLocales],
+    [puedeEditarLocales, navegar],
   );
 
-  // ===== F. FILTRADO =====
-  // Los dos buscadores de arriba filtran las filas antes de entregarlas a la
-  // grilla; los filtros propios de cada columna siguen funcionando encima.
   const filas = useMemo(() => {
-    const porNombre = buscarNombre.trim().toLowerCase();
-    const porCuit = buscarCuit.trim().toLowerCase();
+    const q = buscar.trim().toLowerCase();
+    const qc = buscarCuit.replace(/\D/g, '');
 
-    return locales.filter((l) => {
-      const coincideNombre =
-        !porNombre ||
-        l.nombre.toLowerCase().includes(porNombre) ||
-        String(l.id).includes(porNombre);
-      const coincideCuit = !porCuit || l.cuit.toLowerCase().includes(porCuit);
-      return coincideNombre && coincideCuit;
+    return localesConEstado.filter((l) => {
+      // El buscador general mira nombre, razón social, dirección e id legacy:
+      // el pliego pide "búsqueda por cualquier campo" y en la práctica se
+      // busca por lo que uno recuerda, que nunca es el campo que corresponde.
+      const enTexto =
+        !q ||
+        [l.nombreLocal, l.razonSocial, l.direccion, l.idLegacy, String(l.id)]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q));
+
+      const enCuit = !qc || String(l.cuit).replace(/\D/g, '').includes(qc);
+      const enEstado = !filtroEstado || l.estado === filtroEstado;
+      const enRubro = !filtroRubro || l.rubro === filtroRubro;
+
+      return enTexto && enCuit && enEstado && enRubro;
     });
-  }, [locales, buscarNombre, buscarCuit]);
+  }, [localesConEstado, buscar, buscarCuit, filtroEstado, filtroRubro]);
 
-  const imprimir = () => apiRef.current?.exportDataAsPrint();
-  const descargar = () => apiRef.current?.exportDataAsCsv({ fileName: 'locales' });
-
-  // ===== G. LO QUE SE DIBUJA =====
   return (
     <>
-      {/* ---------- BLOQUE 1: encabezado ---------- */}
-      <PageHeader etiqueta="LOCALES" titulo="PADRÓN DE ESTABLECIMIENTOS" botonVolver />
+      <PageHeader
+        etiqueta="LOCALES"
+        titulo="PADRÓN DE ESTABLECIMIENTOS"
+        subtitulo={`${filas.length} de ${localesConEstado.length} locales`}
+        botonVolver
+      />
 
-      {/* ---------- BLOQUE 2: barra de acciones ----------
-          Izquierda los buscadores, derecha alta y exportar. */}
-      <div className="tabla-acciones">
-        <div className="tabla-buscadores">
-          <input
-            className="buscador"
-            type="search"
-            placeholder="Buscar por nombre o ID..."
-            value={buscarNombre}
-            onChange={(e) => setBuscarNombre(e.target.value)}
-          />
-          <input
-            className="buscador"
-            type="search"
-            placeholder="Buscar por CUIT..."
-            value={buscarCuit}
-            onChange={(e) => setBuscarCuit(e.target.value)}
-          />
-        </div>
+      {/* ---------- Filtros por estado y rubro ----------
+          Van fuera de la grilla porque son los dos que se usan siempre. */}
+      <div className="filtros-fila">
+        <CampoSelect
+          id="filtro-estado"
+          etiqueta="Filtrar por estado"
+          valor={filtroEstado}
+          onChange={setFiltroEstado}
+          opciones={LISTA_ESTADOS.map((e) => ({ id: e.codigo, etiqueta: e.etiqueta }))}
+          vacio="Todos los estados"
+        />
+        <CampoSelect
+          id="filtro-rubro"
+          etiqueta="Filtrar por rubro"
+          valor={filtroRubro}
+          onChange={setFiltroRubro}
+          opciones={rubros.map((r) => ({ id: r.nombre, etiqueta: r.nombre }))}
+          vacio="Todos los rubros"
+        />
+      </div>
 
-        <div className="tabla-botones">
-          {puedeEditarLocales && (
+      <Grilla
+        filas={filas}
+        columnas={columnas}
+        nombreArchivo="padron-locales"
+        vacio="Ningún local coincide con la búsqueda."
+        buscadores={[
+          { placeholder: 'Buscar por nombre, razón social o dirección...', valor: buscar, onChange: setBuscar },
+          { placeholder: 'Buscar por CUIT...', valor: buscarCuit, onChange: setBuscarCuit },
+        ]}
+        botones={
+          puedeEditarLocales && (
             <button
               type="button"
               className="btn-icono btn-icono-azul"
               title="Nuevo local"
-              onClick={abrirNuevo}
+              onClick={() => setSeleccion({ local: { ...LOCAL_VACIO }, esNuevo: true })}
             >
               <AddIcon fontSize="small" />
             </button>
-          )}
-          <button
-            type="button"
-            className="btn-icono btn-icono-verde"
-            title="Imprimir"
-            onClick={imprimir}
-          >
-            <PrintIcon fontSize="small" />
-          </button>
-          <button
-            type="button"
-            className="btn-icono btn-icono-azul"
-            title="Descargar CSV"
-            onClick={descargar}
-          >
-            <DownloadIcon fontSize="small" />
-          </button>
-        </div>
-      </div>
+          )
+        }
+      />
 
-      {/* ---------- BLOQUE 3: grilla ---------- */}
-      <div className="grilla-contenedor">
-        <DataGrid
-          apiRef={apiRef}
-          rows={filas}
-          columns={columnas}
-          showToolbar
-          slots={{ toolbar: GridToolbar }}
-          slotProps={{
-            toolbar: { showQuickFilter: false, csvOptions: { fileName: 'locales' } },
-          }}
-          localeText={esES.components.MuiDataGrid.defaultProps.localeText}
-          initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-          pageSizeOptions={[5, 10, 25, 50]}
-          disableRowSelectionOnClick
-          sx={{
-            border: 'none',
-            fontFamily: 'inherit',
-            '& .MuiDataGrid-columnHeader': {
-              backgroundColor: '#1976d2',
-              color: '#fff',
-            },
-            '& .MuiDataGrid-columnHeaderTitle': { fontWeight: 700 },
-            '& .MuiDataGrid-columnHeader .MuiSvgIcon-root': { color: '#fff' },
-            '& .MuiDataGrid-columnSeparator': { color: 'rgba(255,255,255,0.4)' },
-            '& .MuiDataGrid-row:hover': { backgroundColor: '#f8fafc' },
-            '& .MuiDataGrid-cell': { fontSize: 14, color: '#444' },
-          }}
-        />
-      </div>
-
-      {/* ---------- BLOQUE 4: modal de ver / editar / nuevo ----------
-          El `seleccion &&` de afuera es importante: hace que el formulario se
-          desmonte del todo al cerrar, así el próximo local arranca limpio en
-          vez de mostrar lo que se escribió en el anterior. */}
+      {/* ---------- Modal de alta / edición ----------
+          El `seleccion &&` de afuera hace que el formulario se desmonte del
+          todo al cerrar, así el próximo local arranca limpio. */}
       {seleccion && (
         <Modal
           abierto
-          titulo={
-            seleccion.esNuevo
-              ? 'Nuevo local'
-              : seleccion.soloLectura
-                ? 'Datos del local'
-                : 'Editar local'
-          }
+          etiqueta="PADRÓN"
+          titulo={seleccion.esNuevo ? 'Nuevo local' : `Editar ${seleccion.local.nombreLocal}`}
+          ancho="ancho"
           onCerrar={cerrarModal}
         >
-          {/* El `key` obliga a React a rearmar el formulario DESDE CERO cada
-              vez que se abre con otro local (o para uno nuevo). Hoy el modal ya
-              se desmonta al cerrarse y alcanzaría sin esto, pero si mañana
-              alguien lo deja montado y lo esconde con CSS, sin el key el
-              formulario aparecería con los datos del local anterior. */}
           <FormLocal
             key={seleccion.esNuevo ? 'nuevo' : seleccion.local.id}
             local={seleccion.local}
-            soloLectura={seleccion.soloLectura}
             esNuevo={seleccion.esNuevo}
-            onGuardar={guardarLocal}
+            onGuardar={(l) => {
+              guardarLocal(l);
+              cerrarModal();
+            }}
             onCancelar={cerrarModal}
           />
         </Modal>
       )}
+
+      <Confirmar
+        abierto={Boolean(aEliminar)}
+        titulo="Eliminar del padrón"
+        textoConfirmar="Eliminar"
+        peligro
+        onCancelar={() => setAEliminar(null)}
+        onConfirmar={() => {
+          eliminarLocal(aEliminar.id);
+          setAEliminar(null);
+        }}
+      >
+        <p>
+          Se elimina <strong>{aEliminar?.nombreLocal}</strong> junto con sus {aEliminar?.cantidadActuaciones} actuación(es) y sus
+          relevamientos.
+        </p>
+        <p className="texto-chico">
+          Si es un duplicado, NO lo elimines: usá Herramientas → Duplicados, que unifica el historial en el otro registro en vez de
+          perderlo.
+        </p>
+      </Confirmar>
     </>
   );
 }

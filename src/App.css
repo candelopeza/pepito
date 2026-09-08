@@ -20,6 +20,7 @@
     11. RESPONSIVE ............. móvil / pantalla chica
     12. MODAL ................. components/ui/Modal.jsx
     13. BARRA DE ACCIONES ..... pages/Tramite.jsx (buscadores + botones)
+   13.b FORMULARIO EN LÍNEA .. pages/Tramite.jsx (alta de un trámite)
     14. GRILLA (DATA GRID) .... pages/Tramite.jsx (@mui/x-data-grid)
    ============================================================================ */
 
@@ -42,16 +43,40 @@
 
 /* ========== 2. NAVBAR (barra azul de arriba) ==========
    Usado en: components/Navbar.jsx
-   Si el logo o el texto "CIUDAD / SMT" se ve mal, es acá. */
+   De izquierda a derecha: botón ☰, logo "CIUDAD / SMT", y pegado al borde
+   derecho el bloque del usuario.
+
+   El `margin-left: auto` de .navbar-derecha es lo que empuja ese bloque al
+   extremo (aprovecha que .navbar ya es flex). Si el nombre aparece pegado al
+   logo, es esa línea. */
 .navbar {
   background-color: #1976d2;
   height: 64px;
   display: flex;
   align-items: center;
-  padding: 0 24px;
+  gap: 14px;
+  padding: 0 20px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   z-index: 100;
 }
+
+/* Botón ☰: muestra y esconde el menú lateral.
+   La lógica no está acá ni en el Navbar: el estado vive en Layout.jsx. */
+.btn-hamburguesa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: white;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-hamburguesa:hover { background: rgba(255,255,255,0.18); }
+.btn-hamburguesa:focus-visible { outline: 2px solid white; outline-offset: 1px; }
 
 .logo-link {
   display: flex;
@@ -65,23 +90,46 @@
 .ciudad { color: white; font-size: 11px; font-weight: 600; letter-spacing: 1px; }
 .smt { color: white; font-size: 24px; font-weight: 800; letter-spacing: 1px; }
 
+/* --- Bloque de la derecha: selector de rol (provisorio) + usuario --- */
+.navbar-derecha {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+/* MAQUETA: el nombre sale de auth/usuarioActual.js, escrito a mano.
+   Todavía no despliega ningún menú; por eso no lleva cursor: pointer. */
+.navbar-usuario {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+}
+
+.navbar-usuario-nombre {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 
 /* ========== 2.b SELECTOR DE ROL — PROVISORIO ==========
    Usado en: components/SelectorRol.jsx (dentro de la navbar)
    SE BORRA ENTERO cuando haya login: este bloque y el archivo del componente.
 
-   El `margin-left: auto` es lo que lo empuja al extremo derecho de la navbar
-   (aprovecha que .navbar ya es flex). Si aparece pegado al logo, es eso.
+   Ya NO se posiciona solo: vive adentro de .navbar-derecha (sección 2), que
+   es la que lo empuja al extremo derecho junto con el nombre del usuario.
 
    Se ve distinto al resto A PROPÓSITO: tiene que quedar claro que es una
    herramienta de prueba y no una función del sistema. */
 .selector-rol {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-
 
 .selector-rol-select {
   background: rgba(255,255,255,0.15);
@@ -106,71 +154,148 @@
 
 /* ========== 3. SIDEBAR (menú lateral izquierdo) ==========
    Usado en: components/Sidebar.jsx
-   OJO: la clase .nav-link.active la pone react-router solo (NavLink).
-   Si el ítem activo no se resalta, revisá el to= del NavLink, no el CSS. */
+
+   FORMA DEL MENÚ: "Inicio" suelto arriba, y debajo las secciones plegables
+   (título en MAYÚSCULA + flechita) con sus ítems indentados.
+
+   OJO: la clase .active la pone react-router solo (NavLink). Si el ítem
+   activo no se resalta, revisá el to= del NavLink, no el CSS.
+
+   LOS PADDINGS RAROS DE .active (17px, 37px) NO SON UN ERROR: el resaltado
+   agrega un borde de 3px a la izquierda, así que se le restan esos 3px al
+   padding. Sin eso, el texto se corre 3px cuando el ítem queda seleccionado. */
+/* EL MENÚ SE SUPERPONE, NO EMPUJA: es `fixed`, o sea que queda FUERA del
+   flujo de la página. Por eso, al abrirlo y cerrarlo, el contenido de atrás no
+   se mueve ni se re-acomoda; el menú se dibuja arriba, como un cajón.
+   Si algún día se le saca el position: fixed, vuelve a empujar todo.
+
+   El top: 64px es la altura de la navbar (sección 2). Si cambia una, cambia la
+   otra: si no, el menú arranca tapado por la barra azul o queda un hueco. */
 .sidebar {
-  width: 240px;
+  position: fixed;
+  top: 64px;
+  left: 0;
+  bottom: 0;
+  z-index: 90;
+  width: 260px;
   background: white;
   border-right: 1px solid #e0e0e0;
-  padding: 20px 0;
-  flex-shrink: 0;
+  padding: 8px 0;
+  overflow-y: auto;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.18);
+}
+
+/* El gris de atrás. Hace dos cosas: deja claro que lo de atrás pasó a segundo
+   plano, y un clic ahí cierra el menú (lo maneja Layout.jsx).
+   z-index 89 = justo DEBAJO del menú (90) y encima de todo lo demás.
+   Es un <button>, así que hay que apagarle los estilos que traen los botones
+   por defecto (borde y padding). */
+.sidebar-fondo {
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 89;
+  background: rgba(0,0,0,0.35);
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 .sidebar-nav { display: flex; flex-direction: column; }
 
-.nav-group { padding: 0 16px; margin-bottom: 8px; }
-
-.nav-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: #9e9e9e;
+/* --- "Inicio": link suelto, con el mismo aspecto que un título de sección
+       (pero sin flechita, porque no despliega nada). --- */
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  color: #263238;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 8px;
-  display: block;
+  transition: background 0.15s, color 0.15s;
 }
 
-.nav-link {
-  display: block;
-  padding: 10px 14px;
-  border-radius: 8px;
-  color: #555;
+.nav-item:hover { background: #f5f7fa; color: #1976d2; }
+
+.nav-item.active {
+  background: #e3f2fd;
+  color: #1976d2;
+  border-left: 3px solid #1976d2;
+  padding-left: 17px;
+}
+
+/* --- Título de una sección plegable (es un <button>, ver Sidebar.jsx) --- */
+.nav-seccion-boton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 20px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #263238;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-seccion-boton:hover { background: #f5f7fa; color: #1976d2; }
+
+.nav-seccion-flecha { display: flex; color: #78909c; }
+
+/* --- Los ítems de adentro de una sección --- */
+.nav-sublista { display: flex; flex-direction: column; padding-bottom: 6px; }
+
+.nav-subitem {
+  padding: 10px 20px 10px 40px;
+  color: #546e7a;
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
-  margin-bottom: 2px;
-  transition: all 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
-.nav-link:hover {
-  background: #f5f7fa;
-  color: #1976d2;
-}
+.nav-subitem:hover { background: #f5f7fa; color: #1976d2; }
 
-.nav-link.active {
+.nav-subitem.active {
   background: #e3f2fd;
   color: #1976d2;
   font-weight: 600;
-}
-
-.nav-divider {
-  height: 1px;
-  background: #e0e0e0;
-  margin: 16px;
+  border-left: 3px solid #1976d2;
+  padding-left: 37px;
 }
 
 
 /* ========== 4. MAIN CONTENT + TÍTULOS DE PÁGINA ==========
    .main-content -> components/Layout.jsx (el <main> donde entra cada página)
    .inicio-tag / .sistema-titulo -> components/ui/PageHeader.jsx
-   Si el contenido queda muy angosto o pegado al borde, es .main-content. */
+   Si el contenido queda muy angosto o pegado al borde, es .main-content.
+
+   POR QUÉ EL `margin: 0 auto`: el max-width limita el ancho de la columna,
+   pero por sí solo la deja pegada a la izquierda y en una pantalla ancha todo
+   queda corrido a un costado. El margen automático reparte el espacio sobrante
+   en partes iguales a los dos lados, o sea que la centra.
+   El `width: 100%` es para que en pantallas angostas siga ocupando todo. */
 .main-content {
   flex: 1;
-  padding: 32px;
+  width: 100%;
   max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 40px;
 }
 
-.inicio-tag { color: #1976d2; font-size: 14px; font-weight: 600; margin-bottom: 24px; letter-spacing: 0.5px; }
+.inicio-tag { color: #14599e; font-size: 14px; font-weight: 600; margin-bottom: 24px; letter-spacing: 0.5px; }
 .sistema-titulo { color: #1a1a1a; font-size: 22px; font-weight: 700; margin-bottom: 24px; }
 
 
@@ -381,10 +506,13 @@
 
 
 /* ========== 11. RESPONSIVE (pantallas <= 768px) ==========
-   Acá el sidebar SE OCULTA a propósito. Si en el celular no aparece el menú,
-   es esto: todavía no hay botón de hamburguesa que lo reemplace. */
+   El menú lateral YA NO depende del tamaño de pantalla: se superpone al
+   contenido siempre y arranca cerrado (ver sección 3 y Layout.jsx). Así que
+   acá no hace falta ninguna regla para él.
+   Queda el espaciado, el modal a pantalla completa, los botones del
+   formulario apilados, la barra de acciones de la tabla (sección 13) y el
+   nombre del usuario, que no entra al lado del logo en pantalla chica. */
 @media (max-width: 768px) {
-  .sidebar { display: none; }
   .main-content { padding: 20px; }
   .grid-accesos { grid-template-columns: 1fr; }
 
@@ -398,62 +526,200 @@
   /* Barra de acciones de la tabla (sección 13): en el celular no caben los
      buscadores y los botones en la misma fila, así que se apilan y los
      buscadores pasan a ocupar todo el ancho. */
-  .tabla-acciones {  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  width: 100%; }
+  .tabla-acciones { flex-direction: column; align-items: stretch; }
+  .tabla-buscadores { flex-direction: column; }
+  .buscador { min-width: 0; width: 100%; }
+  .tabla-botones { justify-content: flex-end; }
+
+  /* El nombre del usuario no entra al lado del logo */
+  .navbar-usuario-nombre { display: none; }
 }
 
 
 /* ========== 12. MODAL ==========
-   Usado en: components/ui/Modal.jsx
-   Lo abren pages/Local.jsx (ver y editar un local) y pages/Tramite.jsx
-   (nuevo trámite).
+   Usado en: components/ui/Modal.jsx, con components/FormLocal.jsx adentro.
+   Lo abre pages/Local.jsx (ver y editar un local). El alta de Trámites NO
+   usa modal: es un formulario en línea (ver sección 13).
 
-   .modal-fondo es la capa oscura que cubre TODA la pantalla y centra la caja.
-   El z-index tiene que ser mayor que el de .navbar (100, sección 2), si no la
-   barra azul quedaría por encima del modal. */
+   >>> ESTA SECCIÓN NO EXISTÍA <<<
+   El índice de arriba la nombraba desde el principio, pero nunca se había
+   escrito: el modal se dibujaba sin ningún estilo (sin fondo oscuro, sin
+   recuadro, sin centrar) y parecía que el formulario no aparecía.
+
+   ESTRUCTURA (los nombres salen de Modal.jsx):
+       .modal-fondo        el velo oscuro que ocupa toda la pantalla
+         .modal-caja       la ventana blanca, centrada
+           .modal-encabezado   título + X
+           .modal-cuerpo       lo que le pasa la pantalla (el formulario)
+
+   SI HAY PROBLEMA ACÁ:
+     - "El modal queda debajo del menú lateral": z-index. El menú está en 90
+       (sección 3), así que el modal tiene que estar por encima.
+     - "En un formulario largo no llego a los botones": el que scrollea es
+       .modal-cuerpo, y los botones quedan pegados abajo con position:sticky.
+       Si se le saca el sticky, hay que bajar scrolleando hasta el final.
+     - "Se ve una caja blanca dentro de otra": el formulario de adentro tiene
+       que llevar la clase .formulario-modal (sección 10). */
 .modal-fondo {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 200;
+  background: rgba(0,0,0,0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  z-index: 1000;
 }
 
-/* La caja blanca. El max-height + overflow del cuerpo evitan que un
-   formulario largo se salga de la pantalla en monitores chicos. */
 .modal-caja {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
   width: 100%;
-  max-width: 560px;
-  max-height: 90vh;
+  max-width: 620px;
+  /* No más alto que la pantalla: lo que sobra scrollea adentro del cuerpo,
+     no en la página de atrás. */
+  max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
 }
 
 .modal-encabezado {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; padding: 20px 24px; border-bottom: 1px solid #eceff1;
-  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 28px 6px;
 }
 
-.modal-titulo { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+.modal-titulo { margin: 0; font-size: 20px; font-weight: 600; color: #212121; }
 
 .modal-cerrar {
-  background: none; border: none; cursor: pointer;
-  font-size: 26px; line-height: 1; color: #90a4ae;
-  padding: 0 4px; border-radius: 6px; transition: 0.2s;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 26px;
+  line-height: 1;
+  color: #90a4ae;
+  padding: 0 6px;
+  border-radius: 4px;
 }
-.modal-cerrar:hover { color: #c62828; }
+.modal-cerrar:hover { color: #37474f; background: #eceff1; }
 
-/* Solo el cuerpo scrollea: el encabezado queda siempre visible. */
-.modal-cuerpo { padding: 24px; overflow-y: auto; }
+/* Lo único que scrollea. El encabezado queda fijo arriba. */
+.modal-cuerpo { padding: 18px 28px 20px; overflow-y: auto; }
+
+
+/* ---------- Los campos del formulario cuando está adentro de un modal ----------
+   Recuadro tipo "outlined": la etiqueta arranca DENTRO de la caja y sube
+   achicándose cuando el campo toma foco o ya tiene algo escrito.
+
+   Va acá y no en la sección 10 porque es solo para el modal: el formulario
+   en línea de Trámites sigue con las etiquetas arriba, como estaba.
+
+   OJO: depende de que los inputs tengan placeholder=" " (un espacio). Está
+   explicado en el encabezado de FormLocal.jsx. */
+.formulario-modal .form-grupo { position: relative; margin-bottom: 22px; }
+
+.formulario-modal .form-grupo label {
+  position: absolute;
+  top: 17px;
+  left: 12px;
+  margin: 0;
+  padding: 0 4px;
+  /* El fondo blanco es lo que "corta" el borde del recuadro cuando la
+     etiqueta sube y queda montada encima de la línea. */
+  background: white;
+  color: #757575;
+  font-size: 16px;
+  font-weight: 400;
+  /* Sin esto, un clic sobre la etiqueta no llega al campo de abajo. */
+  pointer-events: none;
+  transition: top 0.15s, font-size 0.15s, color 0.15s;
+}
+
+/* Sube y se achica en 3 casos: el campo tiene foco, ya tiene algo escrito, o
+   es un <select> (un select SIEMPRE tiene un valor elegido, así que su
+   etiqueta no tiene por qué estar nunca abajo). */
+.formulario-modal .form-grupo:focus-within label,
+.formulario-modal .form-grupo:has(input:not(:placeholder-shown)) label,
+.formulario-modal .form-grupo:has(select) label {
+  top: -9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.formulario-modal .form-grupo:focus-within label { color: #1976d2; }
+
+.formulario-modal .form-grupo input,
+.formulario-modal .form-grupo select {
+  padding: 16px 14px;
+  border: 1px solid #c4c4c4;
+  border-radius: 4px;
+  font-size: 16px;
+  color: #212121;
+  background: white;
+}
+
+/* El borde de foco se hace con un box-shadow por dentro en vez de subir el
+   border a 2px: si cambiara el grosor del borde, el texto se movería 1px. */
+.formulario-modal .form-grupo input:focus,
+.formulario-modal .form-grupo select:focus {
+  border-color: #1976d2;
+  box-shadow: inset 0 0 0 1px #1976d2;
+}
+
+.formulario-modal .form-grupo input.con-error { border-color: #c62828; }
+.formulario-modal .form-grupo input.con-error:focus {
+  border-color: #c62828;
+  box-shadow: inset 0 0 0 1px #c62828;
+}
+.formulario-modal .form-grupo:has(input.con-error) label { color: #c62828; }
+
+/* Campo bloqueado (modo "Ver", y el N° de local). */
+.formulario-modal .form-grupo input:disabled,
+.formulario-modal .form-grupo select:disabled { background: #f5f7fa; }
+
+
+/* ---------- Botones del modal ----------
+   Quedan pegados abajo mientras el resto scrollea (position: sticky), como en
+   el diseño. El fondo blanco es necesario: sin él se ven pasar los campos por
+   detrás al scrollear. */
+.formulario-modal .form-acciones {
+  position: sticky;
+  bottom: 0;
+  background: white;
+  margin-top: 24px;
+  padding: 16px 0 4px;
+  border-top: 1px solid #eceff1;
+}
+
+.formulario-modal .form-acciones button {
+  padding: 11px 24px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+/* Rojo del botón Cancelar del modal.
+   OJO: acá el rojo NO quiere decir "esto borra algo", es solo el color que
+   pide el diseño. Si más adelante se agrega un botón de eliminar de verdad,
+   conviene que se distinga de este. */
+.btn-peligro {
+  background: #f44336;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: 0.2s;
+}
+.btn-peligro:hover { background: #d32f2f; }
+
 
 
 /* ========== 13. BARRA DE ACCIONES DE TABLA ==========
@@ -467,9 +733,23 @@
 
    El apilado en celular está en la sección 11 (RESPONSIVE). */
 .tabla-acciones {
-  display: flex; align-items: center; justify-content: flex-end;
+  display: flex; align-items: center; justify-content: space-between;
   gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
 }
+
+
+/* Los dos buscadores de la izquierda. Filtran las filas ANTES de que lleguen
+   a la grilla (ver `filas` en Tramite.jsx), así que funcionan combinados con
+   los filtros propios de cada columna. */
+.tabla-buscadores { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.buscador {
+  background: white; border: 1px solid #ddd; border-radius: 8px;
+  padding: 12px 16px; font-size: 14px; font-family: inherit;
+  min-width: 220px; color: #333;
+}
+.buscador::placeholder { color: #999; }
+.buscador:focus { outline: none; border-color: #1976d2; }
 
 .tabla-botones { display: flex; gap: 12px; }
 
@@ -488,8 +768,34 @@
 .btn-icono-verde:hover { background: #1b5e20; }
 
 
+
+
+/* ========== 13.b FORMULARIO EN LÍNEA ==========
+   Usado en: pages/Tramite.jsx (bloque 3, el alta de un trámite)
+   Va sobre .formulario de la sección 10: solo cambia el margen y agrega el
+   titulito gris. NO es un modal a propósito: el alta es corta y se usa
+   seguido, abrir y cerrar una ventana molestaría más de lo que ayuda.
+
+   Las etiquetas quedan ARRIBA de cada campo (las que suben y se achican son
+   solo las del modal, ver sección 12). */
+.formulario-nuevo { margin-bottom: 24px; }
+.formulario-titulo {
+  color: #9e9e9e; font-size: 12px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; margin-bottom: 20px;
+}
+
+/* Botones a la izquierda y sin el borde de arriba, distinto al formulario del
+   modal. OJO: tiene que quedar acotado a .formulario-nuevo; sin eso pisaría
+   el .form-acciones de la sección 10, que va alineado a la derecha. */
+.formulario-nuevo .form-acciones {
+  display: flex; gap: 12px; align-items: center;
+  justify-content: flex-start; margin-top: 24px;
+  padding-top: 0; border-top: none;
+}
+
+
 /* ========== 14. GRILLA (MUI DATA GRID) ==========
-   Usado en: pages/Tramite.jsx (bloque 3)
+   Usado en: pages/Tramite.jsx (bloque 4)
 
    >>> ACÁ HAY MUY POCO A PROPÓSITO <<<
    Este bloque solo aporta el marco blanco redondeado, igual que

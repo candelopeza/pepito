@@ -1,44 +1,43 @@
 /* ============================================================================
-   ui/PageHeader.jsx  —  ENCABEZADO DE PÁGINA (pieza reutilizable)
+   ui/PageHeader.jsx  —  ENCABEZADO DE PÁGINA
    ----------------------------------------------------------------------------
    OJO: lo usan TODAS las páginas. Si lo tocás, cambia en todas.
-   ESTILOS: App.css -> secciones 4 (TÍTULOS) y 5 (BOTÓN VOLVER)
 
-   PROPS:
-     etiqueta    (texto)  el renglón chico azul de arriba, ej: "LOCALES"
-     titulo      (texto)  el título grande, ej: "PADRÓN DE ESTABLECIMIENTOS"
-     botonVolver (bool)   si es true, agrega el botón "VOLVER AL INICIO".
-                          Va en todas las páginas MENOS en Home (que ya es
-                          el inicio, volver a sí misma no tiene sentido).
+   PROPS
+     etiqueta     el renglón chico azul de arriba, ej: "LOCALES"
+     titulo       el título grande
+     subtitulo    (opcional) una línea de contexto debajo del título
+     botonVolver  agrega "VOLVER AL INICIO". Va en todas menos en Home.
+     volverA      (opcional) volver a otra parte en vez del inicio, ej. el
+                  padrón desde la ficha de un local: volverA="/locales"
+     volverTexto  (opcional) el texto de ese botón
+     acciones     (opcional) JSX a la derecha del bloque de volver: los botones
+                  propios de la pantalla
 
-   SI HAY PROBLEMA ACÁ:
-     - "A una página le falta el botón Volver": no es este archivo, es que
-        esa página no le pasó la prop `botonVolver`.
-     - "El título aparece en blanco": la página no pasó `titulo`.
-     - "El botón Volver quedó pegado al contenido": es el margin de
-        .info-bar en App.css sección 5.
-
-   NOTA: reutiliza la clase .info-bar, que también usa Home para el bloque
-   de usuario + fecha. Si retocás .info-bar, mirá las dos pantallas.
+   ESTILOS: App.css secciones 4 y 5.
    ============================================================================ */
 
 import { Link } from 'react-router-dom';
 
-function PageHeader({ etiqueta, titulo, botonVolver = false }) {
+function PageHeader({ etiqueta, titulo, subtitulo, botonVolver = false, volverA = '/', volverTexto, acciones }) {
+  const mostrarBarra = botonVolver || acciones;
+
   return (
     <>
-      {/* ===== 1. Renglón chico azul ===== */}
       <h2 className="inicio-tag">{etiqueta}</h2>
-
-      {/* ===== 2. Título grande ===== */}
       <h1 className="sistema-titulo">{titulo}</h1>
+      {subtitulo && <p className="pagina-subtitulo">{subtitulo}</p>}
 
-      {/* ===== 3. Botón Volver (solo si la página lo pidió) ===== */}
-      {botonVolver && (
+      {mostrarBarra && (
         <div className="info-bar">
-          <Link to="/" className="admin-badge btn-volver">
-            <span>← VOLVER AL INICIO</span>
-          </Link>
+          {botonVolver && (
+            <Link to={volverA} className="admin-badge btn-volver">
+              <span>← {volverTexto ?? 'VOLVER AL INICIO'}</span>
+            </Link>
+          )}
+          {/* El margin-left: auto de .header-acciones empuja los botones de la
+              pantalla al extremo derecho. */}
+          {acciones && <div className="header-acciones">{acciones}</div>}
         </div>
       )}
     </>

@@ -65,8 +65,11 @@ import { modulosPorRolYGrupo } from '../config/modulos';
 // Las secciones del menú, en el orden en que se muestran.
 // `id` tiene que coincidir con el campo `grupo` de config/modulos.js.
 const SECCIONES = [
-  { id: 'operativo', titulo: 'Operativo' },
+  { id: 'operativo', titulo: 'Oficina' },
+  { id: 'campo', titulo: 'Campo' },
+  { id: 'herramientas', titulo: 'Herramientas' },
   { id: 'configuracion', titulo: 'Configuración' },
+  { id: 'portal', titulo: 'Portal del titular' },
 ];
 
 function Sidebar({ onNavegar }) {

@@ -1,197 +1,396 @@
 /* ============================================================================
    config/modulos.js  —  *** LA TABLA DE PERMISOS ***
    ----------------------------------------------------------------------------
-   ESTE ES EL ARCHIVO MÁS IMPORTANTE PARA "SECTORIZAR" POR TIPO DE USUARIO.
-   Es el ÚNICO lugar donde se define qué módulo ve cada rol.
-
-   Todo lo demás se arma solo a partir de esta lista:
-       - las tarjetas del Inicio      (pages/Home.jsx)
+   ES EL ÚNICO LUGAR donde se define qué módulo ve cada rol. Todo lo demás se
+   arma solo a partir de esta lista:
        - los ítems del menú lateral   (components/Sidebar.jsx)
        - el bloqueo por URL           (components/RutaProtegida.jsx)
-   O sea: si sacás un rol del array `roles` de un módulo, ese rol deja de ver
-   la tarjeta, deja de ver el ítem del menú Y no puede entrar escribiendo la
-   URL a mano. Los tres a la vez, tocando un solo renglón.
 
-   ---------------------------------------------------------------------------
-   CÓMO AGREGAR UN MÓDULO NUEVO (2 pasos, antes eran 3):
-     1. sumar un objeto a este array
-     2. sumar su <Route> en App.jsx
-   La tarjeta y el ítem del menú aparecen solos.
-   ---------------------------------------------------------------------------
+   >>> EL INICIO YA NO DIBUJA UNA TARJETA POR MÓDULO <<<
+   Antes había un campo `enInicio` y Home.jsx pintaba una tarjeta por cada
+   módulo del rol. Eso convertía al Inicio en una copia del menú lateral: las
+   mismas diez opciones, dos veces en la misma pantalla. Se quitó.
 
-   CAMPOS DE CADA MÓDULO:
-     id          identificador interno, no se muestra
-     titulo      texto de la tarjeta y del menú
-     descripcion bajada de la tarjeta del Inicio (el menú no la usa)
-     ruta        tiene que coincidir EXACTO con el path de App.jsx
-     grupo       'operativo' | 'configuracion'  -> en qué parte del menú va
-     enInicio    si true, además sale como tarjeta en el Inicio
-     roles       QUIÉNES LO VEN. Lista de ids de src/auth/roles.js
-     rolesEdicion  QUIÉNES PUEDEN MODIFICAR (opcional). Ver o modificar son
-                 dos permisos distintos: casi todos ven el padrón de locales,
-                 pero no cualquiera debería poder cambiarlo.
-                 Si el campo no está, NADIE edita: hay que declararlo a mano.
-                 Tiene que ser un subconjunto de `roles` (no se puede editar
-                 algo que no se ve); puedeEditar() lo verifica igual.
+   El Inicio ahora responde otras dos preguntas —"qué puedo iniciar" y "qué
+   requiere mi atención"— y para eso usa:
+       - ACCIONES_RAPIDAS de este archivo   (qué puedo iniciar)
+       - las bandejas de datos/vistas.js    (qué requiere mi atención)
+   La NAVEGACIÓN GENERAL es el menú lateral, y solo el menú lateral.
+
+   Si sacás un rol del array `roles` de un módulo, ese rol deja de ver la
+   tarjeta, deja de ver el ítem del menú Y no puede entrar escribiendo la URL.
+   Los tres a la vez, tocando un renglón.
+
+   AGREGAR UN MÓDULO NUEVO = 2 pasos: sumarlo acá + sumar su <Route> en App.jsx.
+
+   CAMPOS
+     id            identificador interno
+     titulo        texto de la tarjeta y del menú
+     descripcion   bajada de la tarjeta del Inicio
+     ruta          tiene que coincidir EXACTO con el path de App.jsx
+     grupo         en qué sección del menú va (ver SECCIONES en Sidebar.jsx)
+     roles         QUIÉNES LO VEN
+     rolesEdicion  QUIÉNES PUEDEN MODIFICAR. Ver y modificar son permisos
+                   distintos: casi todos ven el padrón, no cualquiera lo cambia.
+                   Si el campo no está, NADIE edita.
 
    ============================================================================
-   >>> OJO: EL REPARTO DE ABAJO ES UNA PROPUESTA, NO ESTÁ CONFIRMADO <<<
-   Lo armé según lo que sugiere el nombre de cada rol. HAY QUE VALIDARLO CON
-   EL ÁREA antes de darlo por bueno. Para corregirlo no hace falta programar:
-   se agrega o se saca el nombre del rol del array `roles`, y listo.
+   EL REPARTO SIGUE EL CAPÍTULO 7 DEL PLIEGO. Igual conviene validarlo con el
+   área antes de darlo por cerrado: corregirlo no requiere programar, se agrega
+   o se saca el nombre del rol del array.
 
-   Resumen de la propuesta:
+     MÓDULO                  RELEV  NOTIF  ADMIN  COORD  DIREC  TITULAR
+     Tablero                    ·      ·      SI     SI     SI      ·
+     Padrón de locales          SI     SI     SI     SI     SI      ·
+     Relevamientos              SI     ·      SI     SI     SI      ·
+     Notificaciones (emisión)   ·      ·      SI     SI     SI      ·
+     Mis entregas (campo)       ·      SI     ·      SI     ·       ·
+     Documentación              ·      ·      SI     SI     SI      ·
+     Validar presentaciones     ·      ·      SI     SI     ·       ·
+     Prórrogas                  ·      ·      SI     SI     SI      ·
+     Expedientes                ·      ·      SI     SI     SI      ·
+     Mapa                       SI     SI     SI     SI     SI      ·
+     Reportes                   ·      ·      ·      SI     SI      ·
+     Duplicados                 ·      ·      ·      SI     ·       ·
+     Informe 9 de Julio         ·      ·      SI     SI     ·       ·
+     Geocodificación pendiente  ·      ·      SI     SI     ·       ·
+     Config: usuarios           ·      ·      ·      ·      SI      ·
+     Config: rubros             ·      ·      ·      SI     SI      ·
+     Config: feriados           ·      ·      ·      SI     SI      ·
+     Config: plantilla cédula   ·      ·      ·      SI     SI      ·
+     Config: parámetros         ·      ·      ·      ·      SI      ·
+     Portal del titular         ·      ·      ·      ·      ·       SI
 
-     MÓDULO           ADMIN  INSPECTOR  RELEVADOR  NOTIFICADOR
-     Locales            SI      SI         SI          SI
-     Relevamientos      SI      SI         SI          --
-     Trámites           SI      SI         --          SI
-     Documentación      SI      SI         --          --
-     Expedientes        SI      --         --          --
-     Seguimiento        SI      SI         --          SI
-     Config: Rubros     SI      --         --          --
-     Config: Sedes      SI      --         --          --
-
-   El criterio que usé:
-     - Locales lo ven todos: es el padrón, todos necesitan ubicar el
-       establecimiento con el que están trabajando.
-     - El relevador es el más acotado: sale a la calle a cargar relevamientos,
-       no interviene en el circuito administrativo posterior.
-     - El notificador entrega notificaciones y controla plazos, por eso ve
-       Trámites y Seguimiento, pero no la documentación ni los expedientes.
-     - El inspector revisa documentación, pero NO ve expedientes: el
-       expediente es la instancia formal y quedó como tarea del administrador.
-       >>> ESTE ES EL PUNTO MÁS DUDOSO DE TODOS, PREGUNTARLO. <<<
-     - Configuración es solo del administrador: son tablas maestras y tocarlas
-       afecta a todo el sistema.
+   DOS DECISIONES QUE VALE LA PENA DISCUTIR:
+     - Los PLAZOS (5 y 3 días hábiles) solo los toca Dirección. Es explícito en
+       la sección 4.1: se pide que un cambio de criterio no requiera desarrollo,
+       pero tampoco quede al alcance del uso diario.
+     - EXPEDIENTES lo ve el administrativo, no solo coordinación. En la versión
+       anterior de la maqueta estaba restringido; el pliego pone "registrar
+       documentación y expedientes" entre las tareas del administrativo (7.2).
    ============================================================================ */
 
 export const MODULOS = [
-
-  /* ===================== GRUPO: OPERATIVO ===================== */
-
+  /* ===================== OPERATIVO ===================== */
+  {
+    id: 'tablero',
+    titulo: 'Tablero de control',
+    descripcion: 'Bandejas de trabajo: qué hay que hacer hoy y con qué locales',
+    ruta: '/tablero',
+    grupo: 'operativo',
+    roles: ['administrativo', 'coordinacion', 'direccion'],
+  },
   {
     id: 'locales',
-    titulo: 'Locales',
+    titulo: 'Padrón de locales',
     descripcion: 'Consultar y administrar los establecimientos registrados',
     ruta: '/locales',
     grupo: 'operativo',
-    enInicio: true,
-    // Todos: es el padrón base del sistema.
-    roles: ['administrador', 'inspector', 'relevador', 'notificador'],
-    // >>> CONFIRMAR CON EL ÁREA <<<
-    // Lo dejé solo para administrador porque el padrón es dato maestro: si un
-    // relevador corrige un CUIT desde la calle, no queda registro de quién lo
-    // cambió ni por qué. Si el área decide que el inspector también carga
-    // datos, se agrega 'inspector' a esta línea y listo.
-    rolesEdicion: ['administrador'],
+    roles: ['relevador', 'notificador', 'administrativo', 'coordinacion', 'direccion'],
+    rolesEdicion: ['administrativo', 'coordinacion'],
   },
   {
     id: 'relevamientos',
     titulo: 'Relevamientos',
-    descripcion: 'Registrar y consultar los relevamientos realizados',
+    descripcion: 'Cargar relevamientos de campo y controlar los pendientes',
     ruta: '/relevamientos',
     grupo: 'operativo',
-    enInicio: true,
-    // El notificador no releva: no le corresponde.
-    roles: ['administrador', 'inspector', 'relevador'],
+    roles: ['relevador', 'administrativo', 'coordinacion', 'direccion'],
+    rolesEdicion: ['relevador', 'coordinacion'],
   },
   {
-    id: 'tramites',
-    titulo: 'Trámites',
-    descripcion: 'Gestionar notificaciones, revisiones y actuaciones',
-    ruta: '/tramites',
+    id: 'notificaciones',
+    titulo: 'Notificaciones',
+    descripcion: 'Emitir cédulas, asignar notificadores y armar la hoja de ruta',
+    ruta: '/notificaciones',
     grupo: 'operativo',
-    enInicio: true,
-    // El relevador queda afuera del circuito administrativo.
-    roles: ['administrador', 'inspector', 'notificador'],
+    roles: ['administrativo', 'coordinacion', 'direccion'],
+    rolesEdicion: ['administrativo', 'coordinacion'],
   },
   {
     id: 'documentacion',
     titulo: 'Documentación',
-    descripcion: 'DDJJ, contratos y documentación presentada',
+    descripcion: 'DDJJ, DDJJ de reciclaje y contratos presentados',
     ruta: '/documentacion',
     grupo: 'operativo',
-    enInicio: true,
-    // Solo quien revisa documentación.
-    roles: ['administrador', 'inspector'],
+    roles: ['administrativo', 'coordinacion', 'direccion'],
+    rolesEdicion: ['administrativo', 'coordinacion'],
+  },
+  {
+    id: 'validaciones',
+    titulo: 'Validar presentaciones',
+    descripcion: 'Documentación que entró por el portal y espera aprobación',
+    ruta: '/validaciones',
+    grupo: 'operativo',
+    roles: ['administrativo', 'coordinacion'],
+    rolesEdicion: ['administrativo', 'coordinacion'],
+  },
+  {
+    id: 'prorrogas',
+    titulo: 'Prórrogas',
+    descripcion: 'Prórrogas otorgadas y solicitudes pendientes',
+    ruta: '/prorrogas',
+    grupo: 'operativo',
+    roles: ['administrativo', 'coordinacion', 'direccion'],
+    rolesEdicion: ['coordinacion'],
   },
   {
     id: 'expedientes',
     titulo: 'Expedientes',
-    descripcion: 'Consultar y seguir los expedientes generados',
+    descripcion: 'Expedientes de multa: generación y seguimiento',
     ruta: '/expedientes',
     grupo: 'operativo',
-    enInicio: true,
-    // PREGUNTAR: ¿el inspector debería ver los expedientes? Hoy no los ve.
-    roles: ['administrador'],
+    roles: ['administrativo', 'coordinacion', 'direccion'],
+    rolesEdicion: ['administrativo', 'coordinacion'],
   },
   {
-    id: 'seguimiento',
-    titulo: 'Seguimiento',
-    descripcion: 'Pendientes, vencimientos y acciones que requieren intervención',
-    ruta: '/seguimiento',
+    id: 'mapa',
+    titulo: 'Mapa',
+    descripcion: 'Los locales del padrón en el territorio, por estado',
+    ruta: '/mapa',
     grupo: 'operativo',
-    enInicio: true,
-    // Quienes tienen plazos que cumplir.
-    roles: ['administrador', 'inspector', 'notificador'],
+    roles: ['relevador', 'notificador', 'administrativo', 'coordinacion', 'direccion'],
+  },
+  {
+    id: 'reportes',
+    titulo: 'Reportes e indicadores',
+    descripcion: 'Métricas de gestión y producción por agente',
+    ruta: '/reportes',
+    grupo: 'operativo',
+    roles: ['coordinacion', 'direccion'],
   },
 
-  /* ===================== GRUPO: CONFIGURACIÓN =====================
-     Tablas maestras. A propósito NO salen como tarjeta en el Inicio
-     (enInicio: false): viven solo en el menú lateral. */
+  /* ===================== CAMPO ===================== */
+  {
+    id: 'relevar',
+    titulo: 'Relevar un local',
+    descripcion: 'Formulario de campo. Funciona sin conexión.',
+    ruta: '/campo/relevar',
+    grupo: 'campo',
+    roles: ['relevador', 'coordinacion'],
+    rolesEdicion: ['relevador', 'coordinacion'],
+  },
+  {
+    id: 'entregas',
+    titulo: 'Mis entregas',
+    descripcion: 'Cédulas asignadas y registro del resultado de la entrega',
+    ruta: '/campo/entregas',
+    grupo: 'campo',
+    roles: ['notificador', 'coordinacion'],
+    rolesEdicion: ['notificador', 'coordinacion'],
+  },
 
+  /* ===================== HERRAMIENTAS ===================== */
+  {
+    id: 'duplicados',
+    titulo: 'Duplicados',
+    descripcion: 'Detectar y unificar locales cargados más de una vez',
+    ruta: '/herramientas/duplicados',
+    grupo: 'herramientas',
+    roles: ['coordinacion'],
+    rolesEdicion: ['coordinacion'],
+  },
+  {
+    id: 'informe-9dj',
+    titulo: 'Informe 9 de Julio',
+    descripcion: 'Carga asistida del listado de contratos de la prestataria',
+    ruta: '/herramientas/informe-9dj',
+    grupo: 'herramientas',
+    roles: ['administrativo', 'coordinacion'],
+    rolesEdicion: ['administrativo', 'coordinacion'],
+  },
+  {
+    id: 'geocodificacion',
+    titulo: 'Geocodificación pendiente',
+    descripcion: 'Locales sin ubicación: hay que corregir la dirección',
+    ruta: '/herramientas/geocodificacion',
+    grupo: 'herramientas',
+    roles: ['administrativo', 'coordinacion'],
+    rolesEdicion: ['administrativo', 'coordinacion'],
+  },
+
+  /* ===================== CONFIGURACIÓN ===================== */
+  {
+    id: 'config-usuarios',
+    titulo: 'Usuarios y roles',
+    descripcion: 'Alta, baja y rol de los agentes',
+    ruta: '/config/usuarios',
+    grupo: 'configuracion',
+    roles: ['direccion'],
+    rolesEdicion: ['direccion'],
+  },
   {
     id: 'config-rubros',
     titulo: 'Rubros',
-    descripcion: 'Rubros de los establecimientos',
+    descripcion: 'Catálogo de rubros de los establecimientos',
     ruta: '/config/rubros',
     grupo: 'configuracion',
-    enInicio: false,
-    roles: ['administrador'],
+    roles: ['coordinacion', 'direccion'],
+    rolesEdicion: ['coordinacion', 'direccion'],
   },
   {
-    id: 'config-sedes',
-    titulo: 'Sedes',
-    descripcion: 'Sedes del sistema',
-    ruta: '/config/sedes',
+    id: 'config-feriados',
+    titulo: 'Feriados',
+    descripcion: 'Calendario para el cómputo de días hábiles',
+    ruta: '/config/feriados',
     grupo: 'configuracion',
-    enInicio: false,
-    roles: ['administrador'],
+    roles: ['coordinacion', 'direccion'],
+    rolesEdicion: ['coordinacion', 'direccion'],
+  },
+  {
+    id: 'config-plantilla',
+    titulo: 'Plantilla de cédula',
+    descripcion: 'Texto del documento de notificación',
+    ruta: '/config/plantilla',
+    grupo: 'configuracion',
+    roles: ['coordinacion', 'direccion'],
+    rolesEdicion: ['coordinacion', 'direccion'],
+  },
+  {
+    id: 'config-parametros',
+    titulo: 'Parámetros del sistema',
+    descripcion: 'Plazos de notificación y criterios de cómputo',
+    ruta: '/config/parametros',
+    grupo: 'configuracion',
+    roles: ['direccion'],
+    rolesEdicion: ['direccion'],
+  },
+
+  /* ===================== PORTAL DEL TITULAR ===================== */
+  {
+    id: 'portal',
+    titulo: 'Mis locales',
+    descripcion: 'Situación de tus establecimientos y presentación de documentación',
+    ruta: '/portal',
+    grupo: 'portal',
+    roles: ['titular'],
+    rolesEdicion: ['titular'],
   },
 ];
 
+/* ============================================================================
+   ACCIONES RÁPIDAS DEL INICIO  —  "¿QUÉ PUEDO INICIAR?"
+   ----------------------------------------------------------------------------
+   La franja de arriba del Inicio (pages/Home.jsx). Son los puntos de ENTRADA
+   al circuito: dan de alta algo nuevo o abren la pantalla donde ese rol
+   trabaja todos los días.
+
+   >>> LA DIFERENCIA CON MODULOS <<<
+   Un módulo es un LUGAR ("Padrón de locales"). Una acción rápida es algo que
+   se EMPIEZA ("Nuevo local"). Por eso una acción puede llevar a una ruta con
+   parámetros, y por eso el mismo destino puede aparecer con otro nombre según
+   el rol: el notificador no entra a "Mis entregas" para consultar, entra para
+   registrar el resultado de la entrega del día.
+
+   NO ES UNA TABLA DE PERMISOS NUEVA. El acceso real lo sigue gobernando
+   MODULOS a través de RutaProtegida: si alguien llegara acá con un rol que no
+   puede ver el destino, la ruta lo rebota igual. Este `roles` decide QUÉ SE
+   OFRECE, no qué se permite; conviene que sea un subconjunto de los `roles`
+   (o de los `rolesEdicion`) del módulo de destino.
+
+   CAMPOS
+     id           identificador interno
+     titulo       texto de la tarjeta
+     descripcion  la bajada, una línea
+     ruta         a dónde va. Puede llevar query string (ver `?nuevo=1`).
+     roles        a qué roles se les ofrece
+
+   >>> POR QUÉ 'Nuevo local' APUNTA A /locales?nuevo=1 <<<
+   El alta de un local es un modal que vive DENTRO del padrón (pages/Local.jsx),
+   no una pantalla con URL propia. Para no duplicar ese formulario, Local.jsx
+   aprendió a abrir su propio modal cuando la URL trae `?nuevo=1`. Así el Inicio
+   inicia el alta de verdad, y sigue habiendo un solo formulario de local.
+   ============================================================================ */
+export const ACCIONES_RAPIDAS = [
+  {
+    id: 'nuevo-local',
+    titulo: 'Nuevo local',
+    descripcion: 'Dar de alta un establecimiento en el padrón',
+    ruta: '/locales?nuevo=1',
+    roles: ['administrativo', 'coordinacion'],
+  },
+  {
+    id: 'nuevo-relevamiento',
+    titulo: 'Nuevo relevamiento',
+    descripcion: 'Relevar un local en territorio. Funciona sin conexión.',
+    ruta: '/campo/relevar',
+    roles: ['relevador', 'coordinacion'],
+  },
+  {
+    id: 'registrar-entrega',
+    titulo: 'Registrar una entrega',
+    descripcion: 'Cédulas asignadas y resultado de la entrega',
+    ruta: '/campo/entregas',
+    roles: ['notificador', 'coordinacion'],
+  },
+  {
+    id: 'emitir-cedulas',
+    titulo: 'Emitir cédulas',
+    descripcion: 'Generar notificaciones y armar la hoja de ruta',
+    ruta: '/notificaciones',
+    roles: ['administrativo', 'coordinacion'],
+  },
+  {
+    id: 'registrar-documentacion',
+    titulo: 'Registrar documentación',
+    descripcion: 'Cargar una DDJJ, una DDJJ de reciclaje o un contrato',
+    ruta: '/documentacion',
+    roles: ['administrativo', 'coordinacion'],
+  },
+  {
+    id: 'mis-relevamientos',
+    titulo: 'Mis relevamientos',
+    descripcion: 'Los relevamientos cargados y en qué quedó cada uno',
+    ruta: '/relevamientos',
+    roles: ['relevador'],
+  },
+  {
+    id: 'consultar-padron',
+    titulo: 'Consultar el padrón',
+    descripcion: 'Buscar un establecimiento y ver su situación',
+    ruta: '/locales',
+    roles: ['relevador', 'notificador', 'direccion'],
+  },
+  {
+    id: 'ver-reportes',
+    titulo: 'Reportes e indicadores',
+    descripcion: 'Métricas de gestión y producción por agente',
+    ruta: '/reportes',
+    roles: ['direccion', 'coordinacion'],
+  },
+  {
+    id: 'ver-mapa',
+    titulo: 'Ver el mapa',
+    descripcion: 'Los locales del padrón en el territorio, por estado',
+    ruta: '/mapa',
+    roles: ['relevador', 'notificador', 'direccion'],
+  },
+  {
+    id: 'mis-locales',
+    titulo: 'Mis locales',
+    descripcion: 'Situación de tus establecimientos y presentación de documentación',
+    ruta: '/portal',
+    roles: ['titular'],
+  },
+];
 
 /* ============================================================================
-   AYUDAS  —  las usan Home, Sidebar y RutaProtegida. No hace falta tocarlas
-   para cambiar permisos: para eso alcanza con el array de arriba.
+   AYUDAS  —  las usan Home, Sidebar y RutaProtegida. Para cambiar permisos no
+   hace falta tocarlas: alcanza con los arrays de arriba.
    ============================================================================ */
 
-// Todos los módulos que le corresponden a un rol.
 export function modulosPorRol(rol) {
   return MODULOS.filter((m) => m.roles.includes(rol));
 }
 
-// Los módulos de un grupo ('operativo' | 'configuracion') para ese rol.
-// El menú lateral llama a esto una vez por grupo.
 export function modulosPorRolYGrupo(rol, grupo) {
   return MODULOS.filter((m) => m.grupo === grupo && m.roles.includes(rol));
 }
 
-// Las tarjetas del Inicio: solo las marcadas con enInicio.
-export function modulosDeInicio(rol) {
-  return MODULOS.filter((m) => m.enInicio && m.roles.includes(rol));
+export function accionesRapidasPara(rol) {
+  return ACCIONES_RAPIDAS.filter((a) => a.roles.includes(rol));
 }
 
-// ¿Este rol puede MODIFICAR los datos de este módulo?
-// Lo usan las pantallas para mostrar u ocultar los botones de editar.
-//
-// Dos reglas defensivas:
-//   1. Sin `rolesEdicion` declarado, nadie edita. Preferí que agregar un
-//      módulo nuevo lo deje de solo lectura por olvido, y no editable por
-//      todos por olvido.
-//   2. Exige TAMBIÉN estar en `roles`: no se puede editar lo que no se ve,
-//      aunque alguien se equivoque y ponga un rol de más en rolesEdicion.
 export function puedeEditar(rol, idModulo) {
   const modulo = MODULOS.find((m) => m.id === idModulo);
   if (!modulo) return false;
@@ -199,14 +398,11 @@ export function puedeEditar(rol, idModulo) {
   return (modulo.rolesEdicion || []).includes(rol);
 }
 
-// ¿Este rol puede entrar a esta URL? Lo usa RutaProtegida.
-// El Inicio ('/') siempre está permitido: es la pantalla de aterrizaje y no
-// muestra nada que el rol no pueda ver (sus tarjetas ya vienen filtradas).
 export function puedeVerRuta(rol, ruta) {
   if (ruta === '/') return true;
   const modulo = MODULOS.find((m) => m.ruta === ruta);
-  // Si la ruta no está en la tabla, no la bloqueamos: puede ser una pantalla
-  // interna (un detalle, un formulario) que todavía no se registró acá.
+  // Ruta sin módulo declarado (por ejemplo la ficha de un local, que se abre
+  // desde el padrón): la controla el módulo del que depende, no esta tabla.
   if (!modulo) return true;
   return modulo.roles.includes(rol);
 }

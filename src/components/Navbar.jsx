@@ -37,9 +37,11 @@ import { Link } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import SelectorRol from './SelectorRol';
-import { USUARIO_ACTUAL } from '../auth/usuarioActual';
+import { useRol } from '../auth/rolContexto';
 
 function Navbar({ onAlternarMenu }) {
+  const { usuario, datosRol } = useRol();
+
   return (
     <header className="navbar">
 
@@ -86,7 +88,10 @@ function Navbar({ onAlternarMenu }) {
             Es un <div>, no un <button>: todavía no despliega nada. Cuando haya
             login acá va el menú de sesión. */}
         <div className="navbar-usuario">
-          <span className="navbar-usuario-nombre">{USUARIO_ACTUAL.nombre}</span>
+          <span className="navbar-usuario-nombre">
+            {usuario.nombre}
+            <small className="navbar-usuario-rol">{datosRol.etiqueta}</small>
+          </span>
           <AccountCircleIcon className="navbar-usuario-icono" />
         </div>
 

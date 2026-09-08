@@ -1,73 +1,57 @@
 /* ============================================================================
-   config/catalogos.js  —  LAS LISTAS FIJAS DEL SISTEMA (rubros, estados)
+   config/catalogos.js  —  LISTAS CORTAS QUE NO SON TABLAS
    ----------------------------------------------------------------------------
-   Son los valores que se pueden elegir en los desplegables de los formularios.
-   Antes estaban escritos a mano adentro de los datos de prueba de cada página;
-   acá están en un solo lugar, así el formulario y la tabla no se desalinean.
+   Acá quedan solo los enumerados que son parte del DOMINIO y no se administran
+   desde ninguna pantalla: la clasificación de un relevamiento es Gran Generador
+   o Generador Menor y no hay una tercera opción posible.
 
-   >>> PROVISORIO <<<
-   Cuando existan de verdad las pantallas de Configuración (Rubros, Sedes),
-   estas listas van a salir de la base de datos, no de este archivo. Este es el
-   lugar exacto que hay que reemplazar por la llamada al backend.
+   >>> LO QUE ANTES ESTABA ACÁ Y AHORA NO <<<
+     RUBROS          -> es una tabla administrable: sale del store (`rubros`),
+                        se edita en Configuración → Rubros. El pliego lo pide
+                        explícitamente (sección 5.2): hoy en el sistema viejo es
+                        una lista desplegable definida en la interfaz.
+     ESTADOS_LOCAL   -> son los 24 estados de la máquina: dominio/estados.js
+     TIPOS_TRAMITE   -> las notificaciones no son un catálogo, son actuaciones
+                        con instancia 1 o 2: dominio/actuaciones.js
 
-   SI HAY PROBLEMA ACÁ:
-     - "Falta un rubro en el desplegable": agregalo al array RUBROS.
-     - "Un estado sale con el badge gris": ese texto no está en ESTADOS_LOCAL.
-       Ojo que la comparación es por TEXTO EXACTO, con tilde y mayúsculas
-       incluidas ('En trámite' no es lo mismo que 'En tramite').
-     - "Agregué un estado y no tiene color": además de sumarlo acá, el color
-       tiene que existir como clase .badge-<color> en App.css sección 9.
+   Si buscás una lista y no está acá, mirá esos tres lugares antes de agregarla.
    ============================================================================ */
 
-// ===== A. RUBROS =====
-// Orden alfabético para que el desplegable se lea cómodo.
-export const RUBROS = [
-  'Comercial',
-  'Industrial',
-  'Servicios',
+/* Lo único que carga el relevador sobre el criterio de fondo. Sección 2.3. */
+export const CLASIFICACIONES = [
+  {
+    id: 'GRAN_GENERADOR',
+    etiqueta: 'Gran Generador',
+    descripcion: 'Produce residuos en volumen suficiente como para quedar excluido de la recolección domiciliaria común.',
+    color: 'naranja',
+  },
+  {
+    id: 'GENERADOR_MENOR',
+    etiqueta: 'Generador Menor',
+    descripcion: 'No alcanza ese umbral. Queda exento del circuito, sujeto a confirmación de coordinación.',
+    color: 'azul',
+  },
 ];
 
-// ===== B. ESTADOS DE UN LOCAL =====
-// `id` es el texto que se guarda y se muestra.
-// `color` tiene que coincidir con una clase .badge-<color> de App.css.
-export const ESTADOS_LOCAL = [
-  { id: 'Activo', color: 'verde' },
-  { id: 'En trámite', color: 'naranja' },
-];
-
-// ===== C. TIPOS DE TRÁMITE =====
-// Es el circuito administrativo. OJO: el ORDEN significa algo (1ra
-// notificación -> 2da notificación -> revisión). No los mezcles sin
-// confirmar con el área.
-// Antes esto eran las 4 tarjetas de la pantalla de Trámites; ahora son los
-// valores del desplegable "Tipo" y del filtro de esa columna.
-export const TIPOS_TRAMITE = [
-  'Primera Notificación',
-  'Segunda Notificación',
-  'Revisión de Documentación',
-];
-
-// ===== D. ESTADOS DE UN TRÁMITE =====
-// Misma forma que ESTADOS_LOCAL: `color` tiene que existir como clase
-// .badge-<color> en App.css sección 9.
-export const ESTADOS_TRAMITE = [
-  { id: 'Pendiente', color: 'azul' },
-  { id: 'En curso', color: 'amarillo' },
-  { id: 'Vencido', color: 'rojo' },
-  { id: 'Finalizado', color: 'verde' },
-];
-
-// ===== E. AYUDA =====
-// Devuelven el color de badge de un estado.
-// Si el estado no está en la lista devuelven 'gris', que es un color real
-// (existe .badge-gris). Antes, un estado desconocido dejaba el badge sin
-// ningún color de fondo y parecía un error de la pantalla.
-export function colorEstado(estado) {
-  const encontrado = ESTADOS_LOCAL.find((e) => e.id === estado);
-  return encontrado ? encontrado.color : 'gris';
+export function etiquetaClasificacion(id) {
+  return CLASIFICACIONES.find((c) => c.id === id)?.etiqueta ?? id ?? '—';
 }
 
-export function colorEstadoTramite(estado) {
-  const encontrado = ESTADOS_TRAMITE.find((e) => e.id === estado);
-  return encontrado ? encontrado.color : 'gris';
+export function colorClasificacion(id) {
+  return CLASIFICACIONES.find((c) => c.id === id)?.color ?? 'gris';
 }
+
+/* Alcance de un feriado (sección 4.1): el calendario tiene que contemplar los
+   tres niveles, porque un asueto municipal también suspende plazos. */
+export const ALCANCES_FERIADO = [
+  { id: 'nacional', etiqueta: 'Nacional' },
+  { id: 'provincial', etiqueta: 'Provincial (Tucumán)' },
+  { id: 'municipal', etiqueta: 'Asueto municipal' },
+];
+
+/* Resultado del control administrativo de un relevamiento (etapa 2). */
+export const RESULTADOS_CONTROL = [
+  { id: 'EXENTO_CONFIRMADO', etiqueta: 'Confirmar exención', ayuda: 'Cierra el recorrido del local. Es el único estado terminal.' },
+  { id: 'GRAN_GENERADOR', etiqueta: 'Corregir: sí es Gran Generador', ayuda: 'Pasa directo a la emisión de la primera notificación.' },
+  { id: 'HABILITADO', etiqueta: 'Habilitar notificación', ayuda: 'Datos registrales validados: entra en la cola de emisión.' },
+];

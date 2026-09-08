@@ -1,99 +1,316 @@
 /* ============================================================================
    pages/Home.jsx  —  PANTALLA DE INICIO  (URL: /#/)
    ----------------------------------------------------------------------------
-   RUTA EN: App.jsx -> <Route index element={<Home />} />
-   La ven TODOS los roles, pero cada uno ve DISTINTAS TARJETAS.
+   El Inicio responde DOS preguntas, y nada más que dos:
 
-   ESTA PANTALLA TIENE 4 BLOQUES (numerados abajo en el return):
-     1. Encabezado          -> componente PageHeader
-     2. Barra rol + fecha   -> el rol sale del contexto, la fecha se calcula acá
-     3. Separador "MÓDULOS PRINCIPALES"
-     4. Grilla de tarjetas  -> FILTRADA POR ROL
+       1. ¿QUÉ PUEDO INICIAR?        -> ACCIONES RÁPIDAS
+       2. ¿QUÉ REQUIERE MI ATENCIÓN? -> PENDIENTES DE TRABAJO
+                                        (y abajo, como contexto, INDICADORES)
 
-   >>> LAS TARJETAS YA NO ESTÁN ESCRITAS ACÁ <<<
-   Antes había un array `modulos` en este archivo. Se mudó a
-   src/config/modulos.js, que ahora alimenta a la vez las tarjetas de esta
-   pantalla y los ítems del menú lateral. Así no se pueden desalinear.
+   >>> LO QUE ESTA PANTALLA YA NO HACE <<<
+   Antes dibujaba una tarjeta por cada módulo del rol (el viejo campo
+   `enInicio` de config/modulos.js). Eran las mismas opciones que el menú
+   lateral, en la misma pantalla, con otra forma: diez tarjetas que decían
+   "Padrón de locales", "Relevamientos", "Documentación"... El Inicio era un
+   índice del menú, no un lugar de trabajo. Se quitó.
 
-   DÓNDE SE AGREGA UN MÓDULO NUEVO (ya no se toca este archivo):
-     1. sumarlo a src/config/modulos.js con enInicio: true
-     2. sumarle su <Route> en App.jsx
+   REPARTO DE RESPONSABILIDADES, para no volver a mezclarlas:
+       INICIO        empezar algo / ver qué está esperando   (esta pantalla)
+       MENÚ LATERAL  la navegación general                   (Sidebar.jsx)
+       PANTALLAS     la operación y la consulta detallada
+       TABLERO       la misma bandeja, pero con los locales adentro y sus
+                     botones de acción (pages/Tablero.jsx)
 
-   SI HAY PROBLEMA ACÁ:
-     - "A un rol le falta / le sobra una tarjeta": NO se toca este archivo.
-        Es el array `roles` de ese módulo en src/config/modulos.js.
-     - "Agregué un módulo y no sale la tarjeta": ¿le pusiste enInicio: true?
-        Los de configuración lo tienen en false a propósito.
-     - "La tarjeta aparece pero da pantalla vacía": falta el <Route>.
-     - "La fecha sale en inglés o rara": es el toLocaleDateString('es-ES')
-        de abajo. Depende del navegador del usuario.
-     - DATOS: esta pantalla no consulta ningún backend. Todo es fijo.
+   >>> LA DIFERENCIA CON EL TABLERO, QUE ES LA DUDA OBVIA <<<
+   Las dos pantallas leen las MISMAS bandejas (DEFINICION_BANDEJAS en
+   datos/vistas.js), así que nunca pueden contradecirse. Cambia la profundidad:
+   acá se ve el número y se entra; en el Tablero se ve la lista de locales y se
+   resuelve ahí mismo. Por eso el Inicio es una pasada de ojo y el Tablero es
+   la pantalla donde uno se queda. El link al Tablero está en la cabecera de la
+   sección de pendientes.
+
+   >>> NADA DE ESTO ESTÁ ESCRITO ACÁ <<<
+   Las acciones salen de ACCIONES_RAPIDAS (config/modulos.js), los pendientes
+   de las bandejas y los números de indicadores() (datos/vistas.js). Esta
+   pantalla solo los dibuja. Para agregar una acción rápida o cambiar quién ve
+   qué, este archivo no se toca.
+
+   CADA ROL VE LO SUYO sin ningún `if` de rol acá adentro: el filtrado ocurre
+   en el origen (`accionesRapidasPara(rol)`, `bandejasPara(rol)`), que es la
+   misma tabla de permisos que gobierna el menú y el bloqueo por URL.
    ============================================================================ */
 
+import { Link } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import PageHeader from '../components/ui/PageHeader';
+import { Vacio } from '../components/ui/Aviso';
 import { useRol } from '../auth/rolContexto';
-import { modulosDeInicio } from '../config/modulos';
+import { useDatos } from '../datos/datosContexto';
+import { accionesRapidasPara, puedeVerRuta } from '../config/modulos';
+
+/* Días dentro de los cuales un plazo ya se considera "encima". Es el mismo
+   umbral que usa el aviso del Tablero, para que las dos pantallas no discutan
+   sobre qué es urgente. */
+const DIAS_URGENTE = 3;
+
+/* A dónde manda una tarjeta de pendientes, para ESTE rol.
+
+   Una bandeja puede declarar `rutaPorRol` cuando el mismo pendiente se trabaja
+   en pantallas distintas según quién sea: las cédulas para entregar las ve el
+   administrativo en la pantalla de emisión y el notificador en la de campo.
+
+   El `puedeVerRuta` del final no es paranoia: si una bandeja apuntara a un
+   módulo que el rol no tiene, el link moriría en RutaProtegida y la tarjeta
+   sería una trampa. Devolviendo undefined, <Card> se dibuja sin link (muestra
+   el número, no navega), que es mucho mejor que un botón que rebota. */
+function destinoDeBandeja(bandeja, rol) {
+  const ruta = bandeja.rutaPorRol?.[rol] ?? bandeja.ruta;
+  if (!ruta) return undefined;
+  // El permiso se mira contra la ruta pelada: `?estado=...` no es parte del
+  // path que declara config/modulos.js.
+  return puedeVerRuta(rol, ruta.split('?')[0]) ? ruta : undefined;
+}
+
+/* El renglón al pie de una tarjeta de pendientes. No agrega información nueva:
+   mira los plazos de los locales que YA están en la bandeja y avisa si alguno
+   está vencido o a punto. Es lo que hace que "Prórrogas vigentes: 4" se
+   convierta en "4, y 2 vencen esta semana", que es lo que uno necesita saber
+   para decidir si entra ahora o después.
+
+   Devuelve null si no hay nada urgente: una tarjeta sin pie es una tarjeta
+   tranquila, y eso también es información. */
+function pieDePlazos(locales) {
+  const vencidos = locales.filter((l) => l.plazo?.vencido).length;
+  const proximos = locales.filter(
+    (l) => l.plazo && !l.plazo.vencido && l.diasRestantes !== null && l.diasRestantes <= DIAS_URGENTE,
+  ).length;
+
+  if (vencidos === 0 && proximos === 0) return null;
+
+  const partes = [];
+  if (vencidos > 0) partes.push(`${vencidos} con el plazo vencido`);
+  if (proximos > 0) partes.push(`${proximos} vence(n) en ${DIAS_URGENTE} día(s) o menos`);
+  return partes.join(' · ');
+}
 
 function Home() {
+  const { rol, datosRol, usuario } = useRol();
+  const { bandejasPara, presentacionesPendientes, indicadores } = useDatos();
 
-  // ===== A. QUIÉN ESTÁ USANDO EL SISTEMA =====
-  // `datosRol` trae la etiqueta linda para mostrar ("Administrador", etc.).
-  const { rol, datosRol } = useRol();
+  // ===== A. QUÉ PUEDE INICIAR ESTE ROL =====
+  const acciones = accionesRapidasPara(rol);
 
-  // ===== B. QUÉ TARJETAS LE CORRESPONDEN =====
-  // Filtrado en un solo lugar: src/config/modulos.js.
-  const modulos = modulosDeInicio(rol);
+  // ===== B. QUÉ ESTÁ ESPERANDO =====
+  /* Por prioridad, que es el orden de urgencia administrativa definido en
+     datos/vistas.js: primero lo que frena el circuito, después lo que hay que
+     emitir, al final lo informativo. Las bandejas vacías se descartan: el
+     Inicio tiene que mostrar lo que hay para hacer, no el catálogo completo de
+     situaciones posibles (para eso está el Tablero, que las lista todas
+     siempre en el mismo lugar). */
+  const bandejasDelRol = bandejasPara(rol, 'prioridad');
+  const bandejas = bandejasDelRol.filter((b) => b.locales.length > 0);
 
-  // ===== C. FECHA DE HOY =====
-  // Se calcula en cada render, con la fecha de la máquina del usuario.
-  const hoy = new Date();
-  const fechaFormateada = hoy.toLocaleDateString('es-ES', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  /* La validación de presentaciones NO es una bandeja: no agrupa locales por
+     estado, agrupa ACTUACIONES que entraron por el portal y esperan que un
+     agente las apruebe. Va como una tarjeta más porque para el usuario es un
+     pendiente igual que los otros, pero el dato sale de otro lado.
+
+     Importa que esté a la vista: mientras una presentación está sin validar el
+     plazo del local SIGUE CORRIENDO (sección 6.3 del pliego). */
+  const puedeValidar = puedeVerRuta(rol, '/validaciones');
+  const aValidar = puedeValidar ? presentacionesPendientes() : [];
+
+  const totalPendientes = bandejas.reduce((n, b) => n + b.locales.length, 0) + aValidar.length;
+
+  /* HAY UNA DIFERENCIA ENTRE "no tengo nada pendiente" Y "esto no va conmigo",
+     y la pantalla tiene que decir cosas distintas en cada caso.
+
+     El relevador y el titular no tienen NINGUNA bandeja asignada (las bandejas
+     son trabajo de oficina): mostrarles un cartel de "no hay nada pendiente"
+     sugiere que en algún momento va a aparecer algo ahí, y no es cierto. A esos
+     perfiles no se les dibuja la sección.
+
+     En cambio un administrativo con las bandejas en cero SÍ tiene que ver el
+     cartel: "hoy no hay nada" es información que estaba esperando. */
+  const leCorrespondenPendientes = bandejasDelRol.length > 0 || puedeValidar;
+
+  // ===== C. LOS NÚMEROS DEL MES =====
+  /* Los indicadores son del conjunto del organismo, no del usuario: los ve
+     quien tiene acceso al tablero (oficina y dirección). Un relevador o un
+     notificador no los necesita para su tarea, y al titular no le corresponden.
+     Se decide con la misma tabla de permisos que todo lo demás. */
+  const verIndicadores = puedeVerRuta(rol, '/tablero');
+  const ind = verIndicadores ? indicadores() : null;
+
+  const fechaFormateada = new Date().toLocaleDateString('es-ES', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   });
 
-  // ===== D. LO QUE SE DIBUJA =====
   return (
     <>
-      {/* ---------- BLOQUE 1: encabezado ----------
-          Sin botonVolver: ya estamos en el inicio. */}
-      <PageHeader etiqueta="INICIO" titulo="SISTEMA DE GRANDES GENERADORES" />
+      <PageHeader
+        etiqueta="INICIO"
+        titulo="SISTEMA DE GRANDES GENERADORES"
+        subtitulo={
+          /* Tres mensajes distintos para tres situaciones distintas. El tercero
+             es para el relevador y el titular, que no tienen bandejas: decirles
+             "no tenés nada esperando" sería contarles algo que no aplica. */
+          !leCorrespondenPendientes
+            ? datosRol.descripcion
+            : totalPendientes === 0
+              ? 'No tenés nada esperando. Podés iniciar algo nuevo desde las acciones de abajo.'
+              : `Tenés ${totalPendientes} caso(s) esperando una acción tuya.`
+        }
+      />
 
-      {/* ---------- BLOQUE 2: rol + fecha ----------
-          El rol ya NO está escrito fijo: muestra el que esté activo.
-          Mientras no haya login, se cambia con el selector de la navbar. */}
+      {/* ---------- Quién sos y cuándo ----------
+          Se mantiene tal cual estaba: es la referencia de con qué perfil se
+          entró, y de eso depende todo lo que se ve más abajo. */}
       <div className="info-bar">
         <div className="admin-badge">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="#1976d2">
             <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
           </svg>
-          <span>{datosRol.etiqueta}</span>
+          <span>
+            {usuario.nombre} · {datosRol.etiqueta}
+          </span>
         </div>
         <span className="fecha">{fechaFormateada}</span>
       </div>
 
-      {/* ---------- BLOQUE 3: separador ---------- */}
-      <div className="accesos-header">
-        <span>MÓDULOS PRINCIPALES</span>
-      </div>
+      {/* ======================================================================
+          1. ACCIONES RÁPIDAS
+          Van arriba porque es lo único que no depende de que haya datos: el
+          sistema siempre se puede usar para empezar algo, incluso el primer
+          día, con el padrón vacío.
+          ====================================================================== */}
+      {acciones.length > 0 && (
+        <>
+          <div className="accesos-header">
+            <span>Acciones rápidas</span>
+          </div>
 
-      {/* ---------- BLOQUE 4: grilla de tarjetas ----------
-          Una tarjeta por módulo permitido. Todas llevan `to`, o sea que todas
-          navegan (a diferencia de las de Trámites o Documentación). */}
-      {modulos.length > 0 ? (
-        <div className="grid-accesos">
-          {modulos.map((m) => (
-            <Card key={m.id} titulo={m.titulo} descripcion={m.descripcion} to={m.ruta} />
-          ))}
+          {/* Otra grilla y otra tarjeta que los pendientes, a propósito: estas
+              no tienen número (no cuentan nada, arrancan algo) y llevan el "+"
+              adelante. Ver App.css sección 7.b. */}
+          <div className="grid-acciones">
+            {acciones.map((a) => (
+              <Link key={a.id} to={a.ruta} className="card-accion">
+                <span className="card-accion-signo" aria-hidden="true">
+                  +
+                </span>
+                <span className="card-accion-texto">
+                  <strong>{a.titulo}</strong>
+                  <small>{a.descripcion}</small>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ======================================================================
+          2. PENDIENTES DE TRABAJO  —  la parte importante de la pantalla
+          ====================================================================== */}
+      {leCorrespondenPendientes && (
+        <>
+        <div className="accesos-header accesos-header-accion">
+          <span>Pendientes de trabajo</span>
+          {/* El Tablero es la versión profunda de esto mismo. El link va acá y no
+              como una tarjeta más para que no parezca otro pendiente. */}
+          {puedeVerRuta(rol, '/tablero') && (
+            <Link to="/tablero" className="accesos-header-link">
+              Abrir el tablero de trabajo →
+            </Link>
+          )}
         </div>
-      ) : (
-        /* Red de seguridad: hoy no pasa, porque los 4 roles tienen al menos
-           un módulo. Pero si alguien crea un rol sin permisos, mejor un aviso
-           claro que una pantalla vacía que parece un error del sistema. */
-        <p className="aviso-sin-modulos">
-          Tu usuario no tiene módulos asignados. Comunicate con el administrador
-          del sistema.
-        </p>
+
+        {bandejas.length === 0 && aValidar.length === 0 ? (
+          <Vacio titulo="No hay nada pendiente">
+            Ninguna de tus bandejas tiene casos esperando. Cuando entre un relevamiento para controlar, una cédula para
+            emitir o documentación para validar, va a aparecer acá.
+          </Vacio>
+        ) : (
+          <div className="grid-accesos">
+            {bandejas.map((b) => (
+              <Card
+                key={b.id}
+                titulo={b.titulo}
+                descripcion={b.descripcion}
+                valor={b.locales.length}
+                color={b.color}
+                to={destinoDeBandeja(b, rol)}
+                pie={pieDePlazos(b.locales)}
+              />
+            ))}
+
+            {/* Va al final de la grilla y no en su propia sección: para el
+                usuario es un pendiente más. */}
+            {aValidar.length > 0 && (
+              <Card
+                titulo="Documentación para validar"
+                descripcion="Presentaciones del portal que esperan aprobación de la oficina."
+                valor={aValidar.length}
+                color="amarillo"
+                to="/validaciones"
+                pie="Mientras no se aprueben, el plazo del local sigue corriendo."
+              />
+            )}
+          </div>
+        )}
+        </>
+      )}
+
+      {/* ======================================================================
+          3. INDICADORES DEL MES  —  información, no tareas
+          Van al final justamente por eso: nadie tiene que hacer nada con un
+          indicador. Si estuvieran arriba, empujarían los pendientes fuera de la
+          primera pantalla.
+          ====================================================================== */}
+      {ind && (
+        <>
+          <div className="accesos-header">
+            <span>Indicadores del mes</span>
+          </div>
+
+          <div className="grid-stats">
+            <div className="stat-card stat-card-azul">
+              <span className="stat-numero">{ind.relevamientosMes}</span>
+              <span className="stat-label">Relevamientos del mes</span>
+            </div>
+            <div className="stat-card stat-card-azul">
+              <span className="stat-numero">{ind.actuacionesMes}</span>
+              <span className="stat-label">Actuaciones del mes</span>
+            </div>
+            <div className="stat-card stat-card-naranja">
+              <span className="stat-numero">{ind.notificacionesMes}</span>
+              <span className="stat-label">Notificaciones del mes</span>
+            </div>
+            <div className="stat-card stat-card-verde">
+              <span className="stat-numero">{ind.exentos}</span>
+              <span className="stat-label">Locales exentos</span>
+            </div>
+            <div className="stat-card stat-card-rojo">
+              <span className="stat-numero">{ind.expedientes}</span>
+              <span className="stat-label">Expedientes (total)</span>
+            </div>
+            <div className="stat-card stat-card-amarillo">
+              <span className="stat-numero">{ind.datosIncompletos}</span>
+              <span className="stat-label">Locales con datos incompletos</span>
+            </div>
+          </div>
+
+          {/* Los indicadores completos, con corte por período y producción por
+              agente, están en Reportes. Esta franja es el titular. */}
+          {puedeVerRuta(rol, '/reportes') && (
+            <p className="inicio-pie-indicadores">
+              El detalle completo, con producción por agente, está en <Link to="/reportes">Reportes e indicadores</Link>.
+            </p>
+          )}
+        </>
       )}
     </>
   );

@@ -1,44 +1,38 @@
 /* ============================================================================
-   auth/RolProvider.jsx  —  GUARDA EL ROL ACTIVO Y LO REPARTE A TODA LA APP
+   auth/RolProvider.jsx  —  GUARDA QUIÉN ES EL USUARIO Y CON QUÉ ROL ENTRÓ
    ----------------------------------------------------------------------------
-   Es la MITAD ESCRITURA del sistema de roles.
-   Para LEER el rol desde una pantalla no se usa este archivo: se usa
-   `useRol()` de auth/rolContexto.js.
+   Es la mitad ESCRITURA del sistema de roles. Para LEER desde una pantalla se
+   usa `useRol()` de auth/rolContexto.js, nunca este archivo.
 
-   PROBLEMA QUE RESUELVE: el rol lo necesitan pantallas que están muy lejos
-   entre sí (la navbar, el menú, el inicio, el bloqueo de rutas). Pasarlo por
-   props de padre a hijo sería un infierno. El Context lo deja disponible en
-   cualquier componente, sin cadena de props.
+   QUÉ REPARTE:
+     rol       el id del rol activo ('coordinacion', 'relevador', ...)
+     datosRol  el objeto completo del rol, con etiqueta y descripción
+     usuario   la persona: { nombre, email, rol }
+     setRol    PROVISORIO, cambia rol y usuario juntos
 
-   QUIÉN LO USA: App.jsx envuelve toda la app con <RolProvider>.
-   Sin eso, useRol() tira error (a propósito).
+   POR QUÉ EL USUARIO VIVE ACÁ Y NO EN EL STORE DE DATOS: porque el store lo
+   necesita (firma la auditoría con el nombre del usuario), y si el usuario
+   viviera adentro del store habría una dependencia circular. Por eso en
+   App.jsx el orden es <RolProvider> por fuera y <DatosProvider> por dentro.
 
    >>> PROVISORIO <<<
-   Hoy el rol arranca en ROL_POR_DEFECTO y se cambia a mano con el selector de
-   la navbar. CUANDO HAYA LOGIN, se cambia SOLO ESTE ARCHIVO: el rol pasa a
-   salir de la sesión del usuario y se elimina el setRol público. Ninguna
-   pantalla se entera del cambio, porque todas leen con useRol().
+   CUANDO HAYA LOGIN se cambia SOLO ESTE ARCHIVO: el rol y el usuario pasan a
+   salir de la sesión de CiDiTuc y desaparece setRol. Ninguna pantalla se
+   entera, porque todas leen con useRol().
 
-   SI HAY PROBLEMA ACÁ:
-     - "Cambio el rol y no cambia nada en pantalla": el componente no está
-       leyendo con useRol(), o filtra con una lista propia en vez de usar
-       src/config/modulos.js.
-     - "Recargo la página (F5) y vuelve a Administrador": es lo esperado, el
-       rol vive en memoria. Se podría guardar en localStorage, pero preferí
-       no hacerlo: cuando exista login, un rol viejo guardado en el navegador
-       es justo el tipo de cosa que genera bugs difíciles de encontrar.
+   NOTA: el rol vive en memoria. Recargar (F5) vuelve al rol por defecto, y es
+   a propósito: un rol viejo guardado en el navegador es justo el tipo de cosa
+   que genera bugs difíciles de encontrar cuando aparezca el login de verdad.
    ============================================================================ */
 
 import { useMemo, useState } from 'react';
 import { RolContext } from './rolContexto';
 import { ROL_POR_DEFECTO, ROLES, esRolValido } from './roles';
+import { usuarioDeRol } from './usuarioActual';
 
 function RolProvider({ children }) {
   const [rol, setRolInterno] = useState(ROL_POR_DEFECTO);
 
-  // Filtro de seguridad: si alguien intenta setear un rol que no existe, lo
-  // ignoramos y avisamos por consola. Sin esto, un rol inventado dejaría al
-  // usuario con la pantalla vacía y sin ninguna pista del motivo.
   function setRol(nuevoRol) {
     if (!esRolValido(nuevoRol)) {
       console.warn(`[RolProvider] Rol desconocido: "${nuevoRol}". Se ignora.`);
@@ -47,15 +41,14 @@ function RolProvider({ children }) {
     setRolInterno(nuevoRol);
   }
 
-  // useMemo para no crear un objeto nuevo en cada render (haría re-renderizar
-  // de más a todo lo que consume el contexto).
   const valor = useMemo(
     () => ({
-      rol,                    // el id: 'administrador', 'inspector', ...
-      setRol,                 // PROVISORIO: desaparece cuando haya login
-      datosRol: ROLES[rol],   // el objeto completo, con etiqueta y descripción
+      rol,
+      setRol,
+      datosRol: ROLES[rol],
+      usuario: usuarioDeRol(rol),
     }),
-    [rol]
+    [rol],
   );
 
   return <RolContext.Provider value={valor}>{children}</RolContext.Provider>;

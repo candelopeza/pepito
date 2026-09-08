@@ -1,250 +1,240 @@
 /* ============================================================================
-   FormLocal.jsx  —  FORMULARIO DE UN LOCAL (ver / editar)
+   FormLocal.jsx  —  FORMULARIO DEL LOCAL (ver / editar / alta)
    ----------------------------------------------------------------------------
-   Es el contenido que va adentro del modal de pages/Local.jsx.
-   El MISMO formulario sirve para las dos cosas, según la prop `soloLectura`:
-       soloLectura = true   ->  botón "Ver":    campos bloqueados, sin Guardar
-       soloLectura = false  ->  botón "Editar": campos editables, con Guardar
+   Es el contenido del modal del padrón. El MISMO formulario sirve para las
+   tres cosas, según las props:
 
-   ESTILOS: App.css -> sección 10 (FORMULARIOS) y 12 (MODAL)
+     soloLectura = true    botón "Ver": campos bloqueados, sin Guardar
+     soloLectura = false   editar o dar de alta
+     esNuevo     = true    alta (cambia textos, no el formulario)
 
-   >>> POR QUÉ LOS INPUTS TIENEN placeholder=" " (UN ESPACIO) <<<
-   No es un descuido. Adentro del modal, la etiqueta de cada campo NO va
-   arriba: arranca DENTRO del recuadro y sube achicándose cuando el campo
-   toma foco o ya tiene algo escrito. Ese "ya tiene algo escrito" el CSS lo
-   detecta con :placeholder-shown, que solo funciona si el input TIENE un
-   placeholder. Con un placeholder de verdad (un ejemplo, digamos) la
-   etiqueta se quedaría abajo y las dos se pisarían; por eso va un espacio.
-   Si sacás el placeholder, las etiquetas dejan de subir. Ver App.css #12.
+   >>> QUÉ CAMPOS TIENE Y POR QUÉ <<<
+   Son los del modelo de datos del pliego (sección 5.1). Los tres primeros son
+   los DATOS REGISTRALES: sin CUIT, razón social y rubro el local no puede
+   avanzar a segunda notificación, porque la cédula no individualizaría bien al
+   sujeto obligado. Por eso están juntos y marcados.
 
-   PROPS:
-     local       (objeto)   el local a mostrar. No se modifica: se trabaja
-                            sobre una copia interna hasta que se guarda.
-     soloLectura (bool)     ver arriba
-     esNuevo     (bool)     true = se está dando de alta uno nuevo. Solo cambia
-                            textos (el botón y la ayuda del número); el
-                            formulario es exactamente el mismo.
-     onGuardar   (función)  recibe el local ya modificado. Solo se llama si
-                            pasó la validación.
-     onCancelar  (función)  cerrar sin guardar
+   >>> LA COORDENADA NO SE CARGA A MANO <<<
+   No hay campos de latitud y longitud, y no es un olvido. La ubicación del
+   local se obtiene SIEMPRE geocodificando la dirección declarada (sección 9.2).
+   Si cambiás la dirección y guardás, la coordenada se recalcula sola. Si la
+   dirección no se puede geocodificar, el local queda sin ubicación y aparece
+   en Herramientas → Geocodificación pendiente: no se le pone un valor
+   aproximado ni se copia la del relevamiento.
 
-   ---------------------------------------------------------------------------
-   EL ID NO SE PUEDE EDITAR. Se muestra pero está deshabilitado: es la clave
-   con la que la tabla identifica la fila. Si se pudiera cambiar, al guardar
-   no se encontraría cuál reemplazar.
-   ---------------------------------------------------------------------------
-
-   >>> LOS CAMBIOS NO SE GUARDAN EN NINGÚN LADO <<<
-   Se guardan en la memoria de la pantalla. Si recargás (F5) vuelve todo como
-   estaba. Cuando exista el backend, `onGuardar` en pages/Local.jsx es el
-   único lugar que hay que cambiar por la llamada a la API.
-
-   SI HAY PROBLEMA ACÁ:
-     - "Falta un rubro / un estado en el desplegable": no es este archivo,
-       son las listas de src/config/catalogos.js.
-     - "Doy de alta un local nuevo y los campos vienen con datos de otro":
-       eso NO es el código, es el AUTOCOMPLETADO DEL NAVEGADOR. Después de
-       guardar una vez, Chrome ofrece esos mismos valores en cualquier
-       formulario parecido. Por eso el <form> y los <input> de texto llevan
-       autoComplete="off". Si se saca, vuelve a pasar.
-     - "Abro un local, escribo, cancelo, abro otro y aparece lo que escribí":
-       no debería pasar. El estado arranca de la prop `local` una sola vez, al
-       montarse. Funciona porque el modal se desmonta al cerrarse. Si alguna
-       vez se deja montado, hay que agregarle un key={local.id}.
-     - "Guardo y no pasa nada": la validación encontró un error. Fijate los
-       mensajes rojos debajo de cada campo.
+   >>> EL CAMPO "CASA CENTRAL / SUCURSAL" NO ESTÁ <<<
+   Existe en el padrón viejo (columna C) pero no participa de ninguna regla ni
+   tiene uso operativo. El pliego dice expresamente que no se migre (5.3).
    ============================================================================ */
 
 import { useState } from 'react';
-import { RUBROS, ESTADOS_LOCAL } from '../config/catalogos';
+import Campo, { CampoSelect, CampoTexto } from './ui/Campo';
+import Aviso from './ui/Aviso';
+import { useDatos } from '../datos/datosContexto';
+import { faltantesRegistrales } from '../dominio/reglas';
 
-// Formato de CUIT que se acepta: 2 dígitos - 8 dígitos - 1 dígito.
-// Solo valida la FORMA, no el dígito verificador. Si más adelante hace falta
-// verificar que el CUIT sea real, el cálculo va acá.
-const FORMATO_CUIT = /^\d{2}-\d{8}-\d$/;
+/* 11 dígitos, con o sin guiones. No valida el dígito verificador: eso lo tiene
+   que hacer el backend contra la constancia de inscripción fiscal, no una
+   expresión regular en el navegador. */
+const FORMATO_CUIT = /^\d{2}-?\d{8}-?\d$/;
+const FORMATO_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function FormLocal({ local, soloLectura, esNuevo, onGuardar, onCancelar }) {
-
-  // ===== A. COPIA DE TRABAJO =====
-  // No se toca la prop `local`: hasta que no se aprieta Guardar, la tabla de
-  // atrás sigue mostrando los datos viejos. Así, cancelar no deja rastro.
+function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onCancelar }) {
+  const { rubros } = useDatos();
   const [datos, setDatos] = useState(local);
-
-  // Mensajes de error por campo: { nombre: 'texto', cuit: 'texto', ... }
-  // Vacío = no hay errores.
   const [errores, setErrores] = useState({});
 
-  // ===== B. ACTUALIZAR UN CAMPO =====
   function cambiar(campo, valor) {
     setDatos((previo) => ({ ...previo, [campo]: valor }));
   }
 
-  // ===== C. VALIDACIÓN =====
-  // Devuelve un objeto con los errores encontrados. Si sale vacío, está bien.
   function validar() {
     const nuevos = {};
+    if (!datos.nombreLocal?.trim()) nuevos.nombreLocal = 'El nombre del local no puede quedar vacío.';
+    if (!datos.direccion?.trim()) nuevos.direccion = 'La dirección no puede quedar vacía.';
 
-    if (!datos.nombre.trim()) {
-      nuevos.nombre = 'El nombre no puede quedar vacío.';
-    }
-    if (!datos.cuit.trim()) {
-      nuevos.cuit = 'El CUIT no puede quedar vacío.';
-    } else if (!FORMATO_CUIT.test(datos.cuit.trim())) {
+    // El CUIT es opcional en el alta: el relevador no lo pide en la calle y la
+    // oficina lo completa después. Pero si se carga, tiene que estar bien.
+    if (datos.cuit?.trim() && !FORMATO_CUIT.test(datos.cuit.trim())) {
       nuevos.cuit = 'El formato tiene que ser 30-12345678-9.';
     }
-    if (!datos.direccion.trim()) {
-      nuevos.direccion = 'La dirección no puede quedar vacía.';
+    if (datos.email?.trim() && !FORMATO_EMAIL.test(datos.email.trim())) {
+      nuevos.email = 'Ese correo no parece válido.';
     }
-
-    // Rubro y estado salen de desplegables, así que no pueden traer un valor
-    // inválido. No hace falta validarlos.
     return nuevos;
   }
 
-  // ===== D. ENVIAR =====
   function enviar(e) {
-    // Sin esto el navegador recarga la página entera al mandar el formulario.
     e.preventDefault();
-
     const encontrados = validar();
     setErrores(encontrados);
-
-    // Si hay al menos un error, no se guarda nada.
     if (Object.keys(encontrados).length > 0) return;
 
-    // Se limpian los espacios de más antes de guardar.
     onGuardar({
       ...datos,
-      nombre: datos.nombre.trim(),
-      cuit: datos.cuit.trim(),
+      nombreLocal: datos.nombreLocal.trim(),
+      razonSocial: (datos.razonSocial ?? '').trim(),
+      cuit: (datos.cuit ?? '').trim(),
       direccion: datos.direccion.trim(),
     });
   }
 
-  // ===== E. LO QUE SE DIBUJA =====
-  return (
-    <form
-      className="formulario formulario-modal"
-      onSubmit={enviar}
-      noValidate
-      autoComplete="off"
-    >
+  const faltan = faltantesRegistrales(datos);
 
-      {/* ---------- ID ----------
-          En un ALTA no se muestra: el número se asigna solo y todavía no
-          significa nada para quien está cargando. Al ver o editar sí, porque
-          es con lo que se identifica el registro. */}
+  return (
+    <form className="formulario formulario-modal" onSubmit={enviar} noValidate autoComplete="off">
+      {/* ---------- Aviso de datos registrales ----------
+          No bloquea el guardado: se puede guardar un local incompleto (así
+          entra el relevamiento). Lo que no se puede es NOTIFICARLO. */}
+      {faltan.length > 0 && (
+        <Aviso tipo="alerta" titulo="Faltan datos registrales">
+          Falta {faltan.join(', ')}. El local no puede avanzar a segunda notificación hasta que estén cargados: la cédula tiene que
+          individualizar correctamente al sujeto obligado.
+        </Aviso>
+      )}
+
+      <div className="form-grilla">
+        {/* ---------- Identificación ---------- */}
+        {!esNuevo && (
+          <Campo
+            id="campo-id"
+            etiqueta="N° de local"
+            valor={datos.id}
+            onChange={() => {}}
+            soloLectura
+            ayuda={datos.idLegacy ? `Id en el sistema anterior: ${datos.idLegacy}` : 'El número no se puede cambiar.'}
+          />
+        )}
+
+        <Campo
+          id="campo-nombre"
+          etiqueta="Nombre del local"
+          valor={datos.nombreLocal}
+          onChange={(v) => cambiar('nombreLocal', v)}
+          error={errores.nombreLocal}
+          soloLectura={soloLectura}
+          ancho={2}
+        />
+
+        {/* ---------- Datos registrales ---------- */}
+        <Campo
+          id="campo-razon"
+          etiqueta="Razón social"
+          valor={datos.razonSocial}
+          onChange={(v) => cambiar('razonSocial', v)}
+          soloLectura={soloLectura}
+          ayuda="Sale de la constancia de inscripción fiscal."
+          ancho={2}
+        />
+        <Campo
+          id="campo-cuit"
+          etiqueta="CUIT"
+          valor={datos.cuit}
+          onChange={(v) => cambiar('cuit', v)}
+          error={errores.cuit}
+          ayuda="Formato: 30-12345678-9"
+          soloLectura={soloLectura}
+        />
+        <CampoSelect
+          id="campo-rubro"
+          etiqueta="Rubro"
+          valor={datos.rubro}
+          onChange={(v) => cambiar('rubro', v)}
+          opciones={rubros.map((r) => ({ id: r.nombre, etiqueta: r.nombre }))}
+          soloLectura={soloLectura}
+          ayuda="Se administra en Configuración → Rubros."
+        />
+
+        {/* ---------- Domicilios ---------- */}
+        <Campo
+          id="campo-direccion"
+          etiqueta="Dirección del local"
+          valor={datos.direccion}
+          onChange={(v) => cambiar('direccion', v)}
+          error={errores.direccion}
+          soloLectura={soloLectura}
+          ayuda="Al guardar, la ubicación del mapa se recalcula desde esta dirección."
+          ancho={2}
+        />
+        <Campo
+          id="campo-fiscal"
+          etiqueta="Domicilio fiscal"
+          valor={datos.domicilioFiscal}
+          onChange={(v) => cambiar('domicilioFiscal', v)}
+          soloLectura={soloLectura}
+          ayuda="Puede ser distinto del domicilio del local."
+          ancho={2}
+        />
+
+        {/* ---------- Contacto ---------- */}
+        <Campo
+          id="campo-email"
+          etiqueta="Correo electrónico"
+          tipo="email"
+          valor={datos.email}
+          onChange={(v) => cambiar('email', v)}
+          error={errores.email}
+          soloLectura={soloLectura}
+        />
+        <Campo
+          id="campo-telefono"
+          etiqueta="Teléfono"
+          tipo="tel"
+          valor={datos.telefono}
+          onChange={(v) => cambiar('telefono', v)}
+          soloLectura={soloLectura}
+        />
+
+        {/* ---------- Vínculo con el portal ----------
+            PENDIENTE con la Dirección Técnica (sección 8.2): cómo se determina
+            qué locales corresponden a una persona autenticada en CiDiTuc.
+            CiDiTuc identifica personas por CUIL y el padrón identifica locales
+            por CUIT del titular, que puede ser una persona jurídica. Mientras
+            no se defina, la habilitación se carga a mano acá. */}
+        <Campo
+          id="campo-cuil"
+          etiqueta="CUIL del titular habilitado"
+          valor={datos.titularCuil}
+          onChange={(v) => cambiar('titularCuil', v)}
+          soloLectura={soloLectura}
+          ayuda="Quién puede ver este local desde el portal. Pendiente de definición con CiDiTuc."
+          ancho={2}
+        />
+
+        <CampoTexto
+          id="campo-obs"
+          etiqueta="Observaciones"
+          valor={datos.observaciones}
+          onChange={(v) => cambiar('observaciones', v)}
+          soloLectura={soloLectura}
+          ancho={2}
+        />
+      </div>
+
+      {/* ---------- Ubicación (informativa, no editable) ---------- */}
       {!esNuevo && (
-        <div className="form-grupo">
-          <label htmlFor="campo-id">N° de local</label>
-          <input id="campo-id" type="text" value={datos.id} disabled />
-          <span className="form-ayuda">El número no se puede cambiar.</span>
+        <div className="bloque-info">
+          <strong>Ubicación en el padrón</strong>
+          {datos.latitud !== null && datos.longitud !== null ? (
+            <span>
+              {datos.latitud}, {datos.longitud} — obtenida geocodificando la dirección declarada.
+            </span>
+          ) : (
+            <span>Sin ubicación. {datos.motivoSinGeo}</span>
+          )}
         </div>
       )}
 
-      {/* ---------- Nombre ---------- */}
-      <div className="form-grupo">
-        <label htmlFor="campo-nombre">Nombre</label>
-        <input
-          id="campo-nombre"
-          type="text"
-          autoComplete="off"
-          placeholder=" "
-          value={datos.nombre}
-          disabled={soloLectura}
-          className={errores.nombre ? 'con-error' : ''}
-          onChange={(e) => cambiar('nombre', e.target.value)}
-        />
-        {errores.nombre && <span className="form-error">{errores.nombre}</span>}
-      </div>
-
-      {/* ---------- CUIT ---------- */}
-      <div className="form-grupo">
-        <label htmlFor="campo-cuit">CUIT</label>
-        <input
-          id="campo-cuit"
-          type="text"
-          autoComplete="off"
-          value={datos.cuit}
-          disabled={soloLectura}
-          placeholder=" "
-          className={errores.cuit ? 'con-error' : ''}
-          onChange={(e) => cambiar('cuit', e.target.value)}
-        />
-        {/* El ejemplo de formato ya no puede ir de placeholder (ver la nota de
-            arriba), así que va como aclaración debajo. Se reemplaza por el
-            error cuando lo hay, para no amontonar dos textos chiquitos. */}
-        {errores.cuit
-          ? <span className="form-error">{errores.cuit}</span>
-          : <span className="form-ayuda">Formato: 30-12345678-9</span>}
-      </div>
-
-      {/* ---------- Dirección ---------- */}
-      <div className="form-grupo">
-        <label htmlFor="campo-direccion">Dirección</label>
-        <input
-          id="campo-direccion"
-          type="text"
-          autoComplete="off"
-          placeholder=" "
-          value={datos.direccion}
-          disabled={soloLectura}
-          className={errores.direccion ? 'con-error' : ''}
-          onChange={(e) => cambiar('direccion', e.target.value)}
-        />
-        {errores.direccion && <span className="form-error">{errores.direccion}</span>}
-      </div>
-
-      {/* ---------- Rubro: opciones de config/catalogos.js ---------- */}
-      <div className="form-grupo">
-        <label htmlFor="campo-rubro">Rubro</label>
-        <select
-          id="campo-rubro"
-          value={datos.rubro}
-          disabled={soloLectura}
-          onChange={(e) => cambiar('rubro', e.target.value)}
-        >
-          {RUBROS.map((r) => (
-            <option key={r} value={r}>{r}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* ---------- Estado: opciones de config/catalogos.js ---------- */}
-      <div className="form-grupo">
-        <label htmlFor="campo-estado">Estado</label>
-        <select
-          id="campo-estado"
-          value={datos.estado}
-          disabled={soloLectura}
-          onChange={(e) => cambiar('estado', e.target.value)}
-        >
-          {ESTADOS_LOCAL.map((es) => (
-            <option key={es.id} value={es.id}>{es.id}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* ---------- Botones ----------
-          En modo lectura solo hay "Cerrar": no tiene sentido ofrecer Guardar
-          si no se puede cambiar nada. */}
       <div className="form-acciones">
         {!soloLectura && (
           <button type="submit" className="btn-primario">
             {esNuevo ? 'Crear local' : 'Guardar cambios'}
           </button>
         )}
-        {/* En modo lectura este botón es un simple "Cerrar", así que va gris.
-            En alta o edición es "Cancelar" y va rojo, como pide el diseño. */}
-        <button
-          type="button"
-          className={soloLectura ? 'btn-secundario' : 'btn-peligro'}
-          onClick={onCancelar}
-        >
+        <button type="button" className={soloLectura ? 'btn-secundario' : 'btn-peligro'} onClick={onCancelar}>
           {soloLectura ? 'Cerrar' : 'Cancelar'}
         </button>
       </div>
-
     </form>
   );
 }

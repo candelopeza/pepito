@@ -13,8 +13,9 @@
      4. MAIN CONTENT + TÍTULOS . components/Layout.jsx + ui/PageHeader.jsx
      5. INFO BAR + BTN VOLVER .. ui/PageHeader.jsx + pages/Home.jsx
      6. SEPARADOR DE SECCIÓN ... todas las páginas (.accesos-header)
-     7. TARJETAS (GRID) ........ ui/Card.jsx (Home, Relevamiento, Tramite, Documentacion)
-     8. STAT CARDS ............. pages/Seguimiento.jsx
+     7. TARJETAS (GRID) ........ ui/Card.jsx (Home, Relevamiento, Documentacion)
+    7.b TARJETAS DE ACCIÓN .... pages/Home.jsx (acciones rápidas)
+     8. STAT CARDS ............. pages/Home.jsx, pages/Reportes.jsx
      9. TABLAS + BADGES ........ pages/Local.jsx, pages/Expediente.jsx
     10. FORMULARIOS ............ components/FormLocal.jsx
     11. RESPONSIVE ............. móvil / pantalla chica
@@ -341,6 +342,18 @@
 .selector-orden select:focus { outline: none; border-color: #1976d2; }
 .selector-orden-ayuda { color: #9e9e9e; font-size: 12px; }
 
+/* Link a la derecha del separador (el "Abrir el tablero de trabajo →" del
+   Inicio). Va acá, en la cabecera de la sección, y no como una tarjeta más:
+   una tarjeta al lado de los pendientes se lee como otro pendiente. */
+.accesos-header-link {
+  color: #1976d2;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.accesos-header-link:hover { text-decoration: underline; }
+
 
 /* ========== 7. TARJETAS (GRID DE ACCESOS) ==========
    Componente: components/ui/Card.jsx
@@ -370,23 +383,83 @@
 .card-titulo { color: #333; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
 .card-descripcion { color: #888; font-size: 13px; font-weight: 400; line-height: 1.4; }
 
-/* Aviso cuando un rol se quedó sin ningún módulo asignado (pages/Home.jsx).
-   Hoy no debería verse nunca: los 4 roles tienen módulos. */
-.aviso-sin-modulos {
-  background: #fff3e0;
-  border: 1px solid #ffcc80;
-  border-radius: 8px;
-  padding: 16px 20px;
-  color: #ef6c00;
-  font-size: 14px;
+/* ========== 7.b TARJETAS DE ACCIÓN (ACCIONES RÁPIDAS DEL INICIO) ==========
+   Usado en: pages/Home.jsx, franja de arriba.
+
+   >>> POR QUÉ NO SON .card-acceso <<<
+   Porque dicen otra cosa. Una .card-acceso de la sección 7 es un pendiente:
+   está centrada y su protagonista es el número (cuántos casos esperan). Estas
+   arrancan algo nuevo, no cuentan nada, y si se vieran iguales el Inicio
+   volvería a ser una grilla uniforme donde todo pesa lo mismo.
+
+   La diferencia es deliberadamente chica —la misma base blanca, el mismo radio
+   de 12px, la misma sombra y el mismo borde #e8ecf1 que TODAS las tarjetas del
+   sistema— y se apoya en tres cosas: el "+" azul, el texto alineado a la
+   izquierda y menos altura. Alcanza para que se lean como otra familia sin
+   romper la estética institucional. */
+.grid-acciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
 }
+
+.card-accion {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e8ecf1;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Mismo hover que .card-acceso: que el sistema entero responda igual al mouse. */
+.card-accion:hover {
+  box-shadow: 0 4px 16px rgba(25, 118, 210, 0.15);
+  border-color: #1976d2;
+  transform: translateY(-2px);
+}
+
+/* El "+" es la marca de "esto crea algo". Va en un círculo azul lleno porque
+   es el único elemento de la pantalla que inicia una operación. */
+.card-accion-signo {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #1976d2;
+  color: white;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-accion:hover .card-accion-signo { background: #1565c0; }
+
+.card-accion-texto { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.card-accion-texto strong { color: #333; font-size: 15px; font-weight: 700; }
+.card-accion-texto small { color: #888; font-size: 12px; line-height: 1.4; }
 
 
 /* ========== 8. STAT CARDS (números grandes) ==========
-   Usado SOLO en: pages/Seguimiento.jsx
-   El color lo elige el campo "color" del array pendientes de esa página:
-   arma la clase .stat-card-azul / -verde / -naranja / -amarillo / -rojo.
-   Si un número sale negro, ese "color" no coincide con ninguna clase de acá. */
+   Usado en: pages/Home.jsx (indicadores del mes), pages/Reportes.jsx
+   El color se elige en la página, agregando .stat-card-azul / -verde /
+   -naranja / -amarillo / -rojo al lado de .stat-card.
+   Si un número sale negro, esa clase de color no existe acá.
+
+   OJO, NO CONFUNDIR CON LA SECCIÓN 7: una stat card es un dato (no se puede
+   tocar, no lleva a ningún lado) y una .card-acceso es un pendiente (se toca y
+   navega). En el Inicio conviven las dos y la diferencia importa: si el número
+   del mes se pudiera clickear, parecería una tarea. */
 .grid-stats {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -401,6 +474,17 @@
 
 .stat-numero { font-size: 36px; font-weight: 800; margin-bottom: 8px; }
 .stat-label { font-size: 13px; color: #666; font-weight: 500; }
+
+/* Renglón debajo de la franja de indicadores del Inicio, que manda a Reportes
+   para el detalle. Es una nota al pie, no un botón: el peso visual tiene que
+   quedar en los pendientes de arriba. */
+.inicio-pie-indicadores {
+  margin-top: 16px;
+  color: #9e9e9e;
+  font-size: 13px;
+}
+.inicio-pie-indicadores a { color: #1976d2; font-weight: 600; text-decoration: none; }
+.inicio-pie-indicadores a:hover { text-decoration: underline; }
 
 .stat-card-azul .stat-numero { color: #1976d2; }
 .stat-card-verde .stat-numero { color: #2e7d32; }
@@ -569,6 +653,13 @@
   .main-content { padding: 20px; }
   .grid-accesos { grid-template-columns: 1fr; }
   .navbar-usuario-nombre { display: none; }
+
+  /* Las dos grillas nuevas del Inicio. Las acciones a una columna por el mismo
+     motivo que .grid-accesos; los indicadores a DOS y no a una porque son
+     números cortos: apilados de a uno obligarían a scrollear seis pantallas de
+     información que nadie tiene que accionar. */
+  .grid-acciones { grid-template-columns: 1fr; }
+  .grid-stats { grid-template-columns: repeat(2, 1fr); }
 
   /* Lo de abajo viene de la rama de cande.
      En celular el modal ocupa toda la pantalla: una ventanita centrada con

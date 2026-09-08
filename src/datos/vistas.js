@@ -51,6 +51,16 @@ export function conEstado(base, refISO = hoyISO()) {
    `ruta` es a dónde lleva "ver todos"; `accion` es el id de la acción que
    propone la bandeja (ver ACCIONES en dominio/reglas.js).
 
+   >>> INVARIANTE DE `ruta`: TIENE QUE SER ALCANZABLE POR TODOS LOS `roles` <<<
+   Si una bandeja la ve un rol que no tiene permiso sobre su `ruta`, el link
+   muere en RutaProtegida. Pasa con las dos bandejas de entrega: las ve el
+   notificador, pero el módulo 'notificaciones' (la pantalla de emisión) no es
+   suyo. Para eso está `rutaPorRol`: la misma bandeja manda a cada rol a la
+   pantalla donde ESE rol puede actuar. El notificador no emite cédulas, las
+   entrega, y su pantalla es la de campo.
+
+   El campo es opcional: sin él vale `ruta` para todos.
+
    >>> `prioridad` = EN QUÉ ORDEN SE ATIENDEN (1 = primero) <<<
    No es decorativa: es el orden en que el tablero muestra las bandejas cuando
    se ordena "por prioridad", que es el modo por defecto. El criterio es
@@ -95,6 +105,7 @@ export const DEFINICION_BANDEJAS = [
     descripcion: 'Cédulas emitidas pendientes de entrega. El plazo todavía no corre.',
     estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA'],
     ruta: '/notificaciones',
+    rutaPorRol: { notificador: '/campo/entregas' },
     color: 'azul',
     roles: ['administrativo', 'coordinacion', 'notificador', 'direccion'],
   },
@@ -104,7 +115,11 @@ export const DEFINICION_BANDEJAS = [
     titulo: 'Locales con datos incompletos',
     descripcion: 'No pueden avanzar: falta CUIT, razón social o rubro.',
     estados: ['COMPLETAR_DATOS'],
-    ruta: '/locales',
+    /* Es la única bandeja cuyo destino es una grilla de uso general: las demás
+       caen en una pantalla que YA muestra nada más que sus pendientes. Sin el
+       filtro, esta tarjeta dejaba al usuario frente al padrón completo y con la
+       búsqueda por hacer. Lo entiende pages/Local.jsx. */
+    ruta: '/locales?estado=COMPLETAR_DATOS',
     color: 'rojo',
     roles: ['administrativo', 'coordinacion', 'direccion'],
   },
@@ -115,6 +130,7 @@ export const DEFINICION_BANDEJAS = [
     descripcion: 'La cédula consta como no entregada: sin notificación fehaciente no hay avance.',
     estados: ['NOTIF1_NO_ENTREGADA', 'NOTIF2_NO_ENTREGADA'],
     ruta: '/notificaciones',
+    rutaPorRol: { notificador: '/campo/entregas' },
     color: 'rojo',
     roles: ['administrativo', 'coordinacion', 'notificador', 'direccion'],
   },
@@ -231,6 +247,13 @@ export function indicadores(base, locales, refISO = hoyISO()) {
 
   const relevamientosMes = base.relevamientos.filter((r) => delMes(r.fechaHora.slice(0, 10)));
 
+  /* Actuaciones del mes en curso. Se agregó para la sección "Indicadores del
+     mes" del Inicio: ahí conviven con `relevamientosMes`, que ya estaba, y
+     mezclar un número del mes con un total histórico en la misma franja da una
+     lectura falsa. Los totales de abajo se dejaron intactos porque son los que
+     usa pages/Reportes.jsx. */
+  const actuacionesMes = base.actuaciones.filter((a) => delMes(a.fecha.slice(0, 10)));
+
   const porAgente = {};
   base.relevamientos.forEach((r) => {
     porAgente[r.usuario] = porAgente[r.usuario] ?? { agente: r.usuario, relevamientos: 0, entregas: 0 };
@@ -258,6 +281,11 @@ export function indicadores(base, locales, refISO = hoyISO()) {
     relevamientosMes: relevamientosMes.length,
     relevamientosGG: relevamientosMes.filter((r) => r.clasificacion === 'GRAN_GENERADOR').length,
     relevamientosGM: relevamientosMes.filter((r) => r.clasificacion === 'GENERADOR_MENOR').length,
+
+    // --- actuaciones del período (las usa la franja del Inicio)
+    actuacionesMes: actuacionesMes.length,
+    notificacionesMes: actuacionesMes.filter((a) => a.tipo === 'NOTIFICACION').length,
+    expedientesMes: actuacionesMes.filter((a) => a.tipo === 'EXPEDIENTE').length,
 
     // --- notificaciones por instancia
     notif1Emitidas: porInstancia(1).length,

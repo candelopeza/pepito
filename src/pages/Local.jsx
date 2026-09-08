@@ -23,7 +23,7 @@
    ============================================================================ */
 
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GridActionsCellItem } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -61,14 +61,47 @@ function Local() {
   const { localesConEstado, rubros, guardarLocal, eliminarLocal } = useDatos();
   const puedeEditarLocales = puedeEditar(rol, 'locales');
 
+  /* ---------- Lo que puede venir pedido desde el Inicio ----------
+     Dos parámetros opcionales, y los dos son SOLO ESTADO INICIAL: si la URL
+     viene limpia (el caso normal, entrando por el menú) esta pantalla se
+     comporta exactamente como antes.
+
+       ?nuevo=1            abre el modal de alta ya al entrar
+       ?estado=CODIGO      arranca con el desplegable de estado filtrado
+
+     Existen porque el Inicio necesita ARRANCAR algo, no solo navegar: la
+     tarjeta "Nuevo local" tiene que abrir el formulario, y la tarjeta
+     "Locales con datos incompletos" tiene que llegar a la lista ya filtrada.
+     El alta es un modal de esta pantalla y no tiene URL propia, así que la
+     alternativa era duplicar el formulario en el Inicio. */
+  const [params, setParams] = useSearchParams();
+  const estadoPedido = params.get('estado') ?? '';
+
   const [buscar, setBuscar] = useState('');
   const [buscarCuit, setBuscarCuit] = useState('');
-  const [filtroEstado, setFiltroEstado] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState(
+    // Un código inventado en la URL dejaría la grilla vacía sin explicación.
+    () => (LISTA_ESTADOS.some((e) => e.codigo === estadoPedido) ? estadoPedido : ''),
+  );
   const [filtroRubro, setFiltroRubro] = useState('');
-  const [seleccion, setSeleccion] = useState(null);
+  const [seleccion, setSeleccion] = useState(
+    // El permiso se respeta igual que en el botón "+": sin `rolesEdicion` el
+    // parámetro no abre nada.
+    () => (params.get('nuevo') === '1' && puedeEditarLocales ? { local: { ...LOCAL_VACIO }, esNuevo: true } : null),
+  );
   const [aEliminar, setAEliminar] = useState(null);
 
-  const cerrarModal = () => setSeleccion(null);
+  const cerrarModal = () => {
+    setSeleccion(null);
+    /* Se limpia `nuevo` de la URL al cerrar: si quedara puesto, recargar la
+       página o compartir el link volvería a abrir el formulario de alta. El
+       filtro `estado` se deja, que es lo que la persona está mirando. */
+    if (params.has('nuevo')) {
+      const resto = new URLSearchParams(params);
+      resto.delete('nuevo');
+      setParams(resto, { replace: true });
+    }
+  };
 
   const columnas = useMemo(
     () => [

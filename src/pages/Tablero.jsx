@@ -131,18 +131,16 @@ function Bandeja({ bandeja }) {
 
 function Tablero() {
   const { rol } = useRol();
-  const { bandejasPara, porVencer, documentosPorVencer, presentacionesPendientes, localesConEstado } = useDatos();
+  const { bandejasPara, documentosPorVencer, presentacionesPendientes, localesConEstado } = useDatos();
 
   const [orden, setOrden] = useState(ordenGuardado);
 
   const bandejas = bandejasPara(rol, orden);
-  const vencen = porVencer(3);
   const docsVencen = documentosPorVencer(30);
   const pendientesValidar = presentacionesPendientes();
   const sinImprimir = localesConEstado.filter((l) => l.estado.endsWith('_GENERADA'));
 
   const total = bandejas.reduce((n, b) => n + b.locales.length, 0);
-  const ordenActual = ORDENES_BANDEJA.find((o) => o.id === orden) ?? ORDENES_BANDEJA[0];
 
   function cambiarOrden(nuevo) {
     setOrden(nuevo);
@@ -173,11 +171,9 @@ function Tablero() {
           avisos y las bandejas), así que va antes que eso.
 
           El sistema tiene 24 estados: sin esta ayuda nadie recuerda qué
-          significa cada color. Lleva el título adentro del recuadro y no un
-          separador propio, para que ocupe un solo renglón y no empuje las
-          bandejas fuera de la primera pantalla. */}
+          significa cada color. Va sin título: ocupa un solo renglón y no
+          empuja las bandejas fuera de la primera pantalla. */}
       <div className="leyenda">
-        <span className="leyenda-titulo">Cómo leer los colores</span>
         <span>
           <Badge color="naranja">Naranja</Badge> hay que hacer algo
         </span>
@@ -197,32 +193,23 @@ function Tablero() {
 
       {/* ---------- Avisos que no son bandejas ---------- */}
       {pendientesValidar.length > 0 && (
-        <Aviso tipo="alerta" titulo={`${pendientesValidar.length} presentación(es) del portal esperando validación`}>
-          Mientras no se aprueben NO suspenden ningún plazo. <Link to="/validaciones">Ir a validar</Link>.
-        </Aviso>
-      )}
-
-      {vencen.length > 0 && (
-        <Aviso tipo="info" titulo={`${vencen.length} plazo(s) vencen en 3 días o menos`}>
-          {vencen
-            .slice(0, 4)
-            .map((l) => `${l.nombreLocal} (${fmtFecha(l.plazo.vencimiento)})`)
-            .join(' · ')}
-          {vencen.length > 4 && ` y ${vencen.length - 4} más`}
-        </Aviso>
+        <Aviso
+          tipo="alerta"
+          titulo={`${pendientesValidar.length} presentación(es) del portal esperando validación`}
+          accion={<Link to="/validaciones">Ir a validar</Link>}
+        />
       )}
 
       {docsVencen.length > 0 && (
-        <Aviso tipo="info" titulo={`${docsVencen.length} documento(s) vencen en los próximos 30 días`}>
-          Cuando venzan, esos locales reingresan solos a primera notificación pendiente. Es el momento de avisarle al titular.
-        </Aviso>
+        <Aviso tipo="info" titulo={`${docsVencen.length} documento(s) vencen en los próximos 30 días`} />
       )}
 
       {sinImprimir.some((l) => l.estado.endsWith('_GENERADA')) && (
-        <Aviso tipo="info" titulo="Hay cédulas emitidas sin entregar">
-          Recordá que una cédula generada y no entregada no hace correr ningún plazo: el circuito no avanza hasta la entrega
-          efectiva. <Link to="/notificaciones">Ver la cola</Link>.
-        </Aviso>
+        <Aviso
+          tipo="info"
+          titulo="Hay cédulas emitidas sin entregar"
+          accion={<Link to="/notificaciones">Ver la cola</Link>}
+        />
       )}
 
       {/* ---------- Las bandejas ---------- */}
@@ -231,15 +218,21 @@ function Tablero() {
         {/* El selector solo tiene sentido si hay más de una bandeja que ordenar. */}
         {bandejas.length > 1 && (
           <div className="selector-orden">
-            <label htmlFor="tablero-orden">Ordenar</label>
-            <select id="tablero-orden" value={orden} onChange={(e) => cambiarOrden(e.target.value)}>
+            {/* Sin rótulo visible: el desplegable ya dice "Por prioridad" / "Por
+                cantidad", así que la palabra "Ordenar" al lado no agregaba nada. El
+                nombre accesible queda en aria-label, para el lector de pantalla. */}
+            <select
+              id="tablero-orden"
+              aria-label="Ordenar las bandejas"
+              value={orden}
+              onChange={(e) => cambiarOrden(e.target.value)}
+            >
               {ORDENES_BANDEJA.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.etiqueta}
                 </option>
               ))}
             </select>
-            <span className="selector-orden-ayuda">{ordenActual.ayuda}</span>
           </div>
         )}
       </div>

@@ -16,10 +16,18 @@
      Sin CUIT y razón social la cédula es impugnable.
    </Aviso>
 
+   PROP `accion` (opcional): un <Link> o un <button> que va a la DERECHA del
+   aviso, separado del texto. Es el "¿y ahora qué hago?": "Ir a validar", "Ver
+   la cola". Va ahí y no colgado al final del párrafo porque un link pegado a
+   una explicación se lee como parte de la prosa y se saltea.
+
+   <Aviso tipo="alerta" titulo="3 presentaciones esperando validación"
+          accion={<Link to="/validaciones">Ir a validar</Link>} />
+
    ESTILOS: App.css sección 14.
    ============================================================================ */
 
-function Aviso({ tipo = 'info', titulo, children, icono }) {
+function Aviso({ tipo = 'info', titulo, children, icono, accion }) {
   return (
     <div className={`aviso aviso-${tipo}`}>
       {icono && <span className="aviso-icono">{icono}</span>}
@@ -27,6 +35,7 @@ function Aviso({ tipo = 'info', titulo, children, icono }) {
         {titulo && <strong className="aviso-titulo">{titulo}</strong>}
         {children && <span className="aviso-texto">{children}</span>}
       </div>
+      {accion && <div className="aviso-accion">{accion}</div>}
     </div>
   );
 }

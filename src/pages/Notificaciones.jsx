@@ -5,7 +5,9 @@
 
      1. COLA DE EMISIÓN     locales habilitados sin cédula emitida
      2. CÉDULAS EMITIDAS    con su estado de impresión y de entrega
-     3. HOJA DE RUTA        el recorrido del día, imprimible
+     3. HOJA DE RUTA        el recorrido del día. SOLO EN PAPEL: en pantalla
+                            esas cédulas ya están en el bloque 2, así que la
+                            tabla se dibuja oculta y aparece al imprimir.
 
    >>> DECISIÓN ABIERTA: CUÁNDO SE DISPARA LA EMISIÓN (sección 9.6) <<<
    Hoy el sistema viejo emite en automático todas las mañanas. Es ágil, pero al
@@ -43,7 +45,7 @@ import { fmtFecha, fmtFechaHora, hoyISO } from '../dominio/fechas';
 import { ordenarPorProximidad } from '../dominio/geo';
 
 function Notificaciones() {
-  const { localesConEstado, cedulas, localPorId, parametros, generarCedula } = useDatos();
+  const { localesConEstado, cedulas, localPorId, generarCedula } = useDatos();
 
   const [buscar, setBuscar] = useState('');
   const [soloSinImprimir, setSoloSinImprimir] = useState(false);
@@ -168,16 +170,8 @@ function Notificaciones() {
         botonVolver
       />
 
-      <Aviso tipo="info" titulo={parametros.emisionAutomatica ? 'Emisión automática configurada' : 'Emisión manual con control previo'}>
-        {parametros.emisionAutomatica
-          ? 'El proceso diario genera todas las cédulas de la cola. Conviene revisar acá lo emitido antes de imprimir: un dato errado ya se materializó en un documento.'
-          : 'Coordinación revisa la cola y dispara la generación. Conviene prever igual una ejecución automática de respaldo al final de la mañana, para que el circuito no se detenga si nadie la disparó; esa ejecución tiene que quedar identificada como tal en la auditoría.'}{' '}
-        Se configura en Configuración → Parámetros (decisión pendiente, sección 9.6).
-      </Aviso>
-
       {/* ================= 1. COLA DE EMISIÓN ================= */}
       <div className="accesos-header">
-        <span>Cola de emisión ({cola.length})</span>
       </div>
 
       {trabados.length > 0 && (
@@ -196,9 +190,6 @@ function Notificaciones() {
               <button type="button" className="btn-primario" onClick={() => setLote(true)}>
                 Generar las {listos.length} cédulas de la cola
               </button>
-              <span className="texto-chico">
-                Emisión por lote. Los {trabados.length} local(es) con datos incompletos quedan afuera.
-              </span>
             </div>
           )}
 
@@ -238,7 +229,7 @@ function Notificaciones() {
 
       {/* ================= 2. CÉDULAS EMITIDAS ================= */}
       <div className="accesos-header">
-        <span>Cédulas emitidas ({emitidas.length})</span>
+    
       </div>
 
       <Grilla
@@ -260,7 +251,13 @@ function Notificaciones() {
         }
       />
 
-      {/* ================= 3. HOJA DE RUTA ================= */}
+      {/* ================= 3. HOJA DE RUTA (solo en papel) ================= */}
+      {/* En pantalla NO hay tercera tabla: las cédulas sin entregar ya están en
+          la grilla de arriba, con "Pendiente · el plazo no corre" en la columna
+          Entrega. Lo que sí existe es el documento que se le da al notificador:
+          ordenado por proximidad y con Resultado y Firma vacíos para completar
+          durante el recorrido. Va con .solo-papel, que lo oculta en pantalla y
+          lo muestra al imprimir. Acá queda solo el botón. */}
       <div className="accesos-header">
         <span>Hoja de ruta del {fmtFecha(hoyISO())}</span>
       </div>
@@ -271,14 +268,11 @@ function Notificaciones() {
         <>
           <div className="barra-lote">
             <button type="button" className="btn-secundario" onClick={() => window.print()}>
-              Imprimir hoja de ruta
+              Imprimir hoja de ruta ({hojaDeRuta.length} cédulas)
             </button>
-            <span className="texto-chico">
-              Ordenada por proximidad geográfica, no por nombre de calle: el recorrido real es más corto.
-            </span>
           </div>
 
-          <table className="tabla-datos solo-impresion">
+          <table className="tabla-datos solo-papel">
             <thead>
               <tr>
                 <th>#</th>

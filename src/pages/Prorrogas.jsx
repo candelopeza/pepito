@@ -34,7 +34,7 @@ import { diasEntre, fmtFecha, hoyISO } from '../dominio/fechas';
 import { estaVigente } from '../dominio/vigencias';
 
 function Prorrogas() {
-  const { actuaciones, localesConEstado, localPorId, parametros } = useDatos();
+  const { actuaciones, localesConEstado, localPorId } = useDatos();
 
   const otorgadas = actuaciones
     .filter((a) => a.tipo === 'PRORROGA')
@@ -57,27 +57,26 @@ function Prorrogas() {
         botonVolver
       />
 
-      <Aviso tipo="info" titulo="Es el único plazo que se carga a mano">
-        Los plazos de notificación son fijos (5 y 3 días hábiles) y los define la Dirección. La cantidad de días de una prórroga la
-        decide coordinación en cada caso, y no tiene valor por defecto.
-        {parametros.topeProrrogaDias
-          ? ` Tope configurado: ${parametros.topeProrrogaDias} días, máximo ${parametros.maxProrrogasPorLocal} por local (pendiente de definición con el área legal).`
-          : ' Sin tope configurado.'}
-      </Aviso>
+      {/* Sin cuerpo: el título ya dice la regla, y el botón lleva a la bandeja
+          del tablero donde el local va a aparecer cuando venza. */}
+      <Aviso
+        tipo="alerta"
+        titulo="Si vence sin presentación, el local pasa solo a generación de expediente"
+        accion={<Link to="/tablero">Expedientes para generar</Link>}
+      />
 
-      <Aviso tipo="alerta" titulo="Si vence sin presentación, el local pasa solo a generación de expediente">
-        No hay que hacer nada para que pase ni se puede olvidar: al vencer, el local aparece en la bandeja{' '}
-        <Link to="/tablero">Expedientes para generar</Link> del tablero. Si presentó documentación durante la prórroga, sale del
-        circuito y no llega ahí.
-      </Aviso>
-
-      {/* ================= VIGENTES ================= */}
+      {/* ================= OTORGADAS ================= */}
+      {/* Vigentes y vencidas en UNA tabla, de la más reciente a la más vieja.
+          Antes eran dos tablas con casi las mismas columnas, y la situación de
+          la prórroga era el título de cada una. Ahora es una columna: la fila
+          dice sola si sigue suspendiendo el circuito o cómo terminó, y la
+          pantalla tiene una tabla menos que recorrer. */}
       <div className="accesos-header">
-        <span>Prórrogas vigentes</span>
+        <span>Prórrogas otorgadas ({otorgadas.length})</span>
       </div>
 
-      {vigentes.length === 0 ? (
-        <Vacio titulo="Ninguna prórroga en curso">No hay locales con el circuito sancionatorio suspendido.</Vacio>
+      {otorgadas.length === 0 ? (
+        <Vacio titulo="Todavía no se otorgó ninguna prórroga">No hay locales con el circuito sancionatorio suspendido.</Vacio>
       ) : (
         <table className="tabla-datos">
           <thead>
@@ -86,29 +85,40 @@ function Prorrogas() {
               <th>Otorgada</th>
               <th>Días</th>
               <th>Vence</th>
-              <th>Restan</th>
+              <th>Situación</th>
+              <th>Estado actual del local</th>
               <th>Motivo</th>
               <th>Otorgó</th>
             </tr>
           </thead>
           <tbody>
-            {vigentes.map((p) => (
+            {otorgadas.map((p) => (
               <tr key={p.id}>
                 <td>
                   <Link to={`/locales/${p.localId}`} className="link-local">
                     {p.local?.nombreLocal ?? `Local ${p.localId}`}
                   </Link>
-                  <small className="celda-sub">
-                    <BadgeEstado codigo={p.local?.estado} />
-                  </small>
                 </td>
                 <td>{fmtFecha(p.fecha)}</td>
                 <td>{p.diasOtorgados}</td>
                 <td>{fmtFecha(p.fechaVencimiento)}</td>
                 <td>
-                  {/* Cuando esto llegue a 0, el local cae solo en la bandeja de
-                      expedientes: no hay que hacer nada para que pase. */}
-                  <strong>{diasEntre(hoyISO(), p.fechaVencimiento)} día(s)</strong>
+                  {p.vigente ? (
+                    /* Cuando esto llegue a 0, el local cae solo en la bandeja de
+                       expedientes: no hay que hacer nada para que pase. */
+                    <Badge color="amarillo">Vigente · restan {diasEntre(hoyISO(), p.fechaVencimiento)} día(s)</Badge>
+                  ) : p.local?.estadoGrupo === 'documental' ? (
+                    /* Terminó con documentación vigente: presentó durante la
+                       prórroga y salió del circuito. */
+                    <Badge color="verde">Presentó durante la prórroga</Badge>
+                  ) : (
+                    <Badge color="naranja">Venció sin presentación</Badge>
+                  )}
+                </td>
+                <td>
+                  {/* La consecuencia, a la vista: el que venció sin presentar
+                      ya figura para generar expediente. */}
+                  <BadgeEstado codigo={p.local?.estado} />
                 </td>
                 <td className="celda-motivo">{p.motivo}</td>
                 <td>{p.usuario}</td>
@@ -156,57 +166,6 @@ function Prorrogas() {
             ))}
           </tbody>
         </table>
-      )}
-
-      {/* ================= HISTÓRICO ================= */}
-      {otorgadas.length > vigentes.length && (
-        <>
-          <div className="accesos-header">
-            <span>Prórrogas vencidas</span>
-          </div>
-          <table className="tabla-datos">
-            <thead>
-              <tr>
-                <th>Local</th>
-                <th>Otorgada</th>
-                <th>Días</th>
-                <th>Venció</th>
-                <th>Resultado</th>
-                <th>Situación actual del local</th>
-              </tr>
-            </thead>
-            <tbody>
-              {otorgadas
-                .filter((p) => !p.vigente)
-                .map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <Link to={`/locales/${p.localId}`} className="link-local">
-                        {p.local?.nombreLocal ?? `Local ${p.localId}`}
-                      </Link>
-                    </td>
-                    <td>{fmtFecha(p.fecha)}</td>
-                    <td>{p.diasOtorgados}</td>
-                    <td>{fmtFecha(p.fechaVencimiento)}</td>
-                    <td>
-                      {/* Si el local terminó con documentación vigente,
-                          presentó durante la prórroga y salió del circuito. */}
-                      {p.local?.estadoGrupo === 'documental' ? (
-                        <Badge color="verde">Presentó durante la prórroga</Badge>
-                      ) : (
-                        <Badge color="naranja">Venció sin presentación</Badge>
-                      )}
-                    </td>
-                    <td>
-                      {/* La consecuencia, a la vista: el que venció sin
-                          presentar ya figura para generar expediente. */}
-                      <BadgeEstado codigo={p.local?.estado} />
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </>
       )}
     </>
   );

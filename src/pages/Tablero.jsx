@@ -26,11 +26,14 @@
    La elección queda guardada en el navegador: nadie tiene que volver a
    elegirla cada mañana.
 
-   ADEMÁS DE LAS BANDEJAS HAY DOS AVISOS QUE NO SON BANDEJAS:
-     - plazos por vencer: el local sigue en su estado, no hay nada que hacer
-       todavía, pero conviene verlo antes de que venza.
+   ADEMÁS DE LAS BANDEJAS HAY TRES AVISOS QUE NO SON BANDEJAS. Van arriba,
+   con solo el título y (si corresponde) un botón para ir a resolverlo:
+     - presentaciones del portal esperando validación: mientras no se
+       aprueben no suspenden ningún plazo. El botón lleva a Validaciones.
      - documentación por vencer: cuando caduque, el local reingresa solo al
        circuito. Es la oportunidad de avisarle al titular antes de intimarlo.
+     - cédulas emitidas sin entregar: una cédula generada no hace correr el
+       plazo hasta la entrega efectiva. El botón lleva a la cola de emisión.
    ============================================================================ */
 
 import { useState } from 'react';
@@ -204,7 +207,7 @@ function Tablero() {
         <Aviso tipo="info" titulo={`${docsVencen.length} documento(s) vencen en los próximos 30 días`} />
       )}
 
-      {sinImprimir.some((l) => l.estado.endsWith('_GENERADA')) && (
+      {sinImprimir.length > 0 && (
         <Aviso
           tipo="info"
           titulo="Hay cédulas emitidas sin entregar"

@@ -46,15 +46,10 @@ function Validaciones() {
       />
 
       {pendientes.length === 0 ? (
-        <Vacio titulo="No hay nada para validar">
-          Cuando un titular presente documentación desde el portal, va a aparecer acá antes de tener efecto sobre el estado de su
-          local.
-        </Vacio>
+        <Vacio titulo="No hay nada para validar" />
       ) : (
         <>
-          <Aviso tipo="alerta" titulo="Mientras están acá, los plazos siguen corriendo">
-            Una presentación sin validar no suspende nada. Si el local está por vencer, resolvé esta validación primero.
-          </Aviso>
+          <Aviso tipo="alerta" titulo="Mientras están acá, los plazos siguen corriendo" />
 
           <table className="tabla-datos">
             <thead>

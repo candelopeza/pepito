@@ -16,11 +16,15 @@
 
    PROPS
      local     el local YA enriquecido (con .estado calculado)
-     compacto  botones chicos, para usar dentro de una fila de tabla
+     compacto  para una fila de tabla: UN solo botón "Acciones" que despliega
+               el menú con las opciones, en vez de un botón por acción
      alTerminar  (opcional) se llama después de ejecutar una acción
    ============================================================================ */
 
 import { useState } from 'react';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Modal from './ui/Modal';
 import Confirmar from './ui/Confirmar';
 import Aviso from './ui/Aviso';
@@ -32,6 +36,27 @@ import VistaCedula from './VistaCedula';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { accionesDisponibles, faltantesRegistrales } from '../dominio/reglas';
+
+/* El menú que se abre desde el botón "Acciones" de una fila. Es el Menu de MUI
+   (ya está en el bundle por la grilla) porque sale por portal: así no lo
+   recorta el overflow: hidden de la tabla ni el de la bandeja, y cierra solo
+   con Escape o con un clic afuera. Estos dos objetos lo visten con el mismo
+   lenguaje que .btn-tabla —azul institucional, esquinas de 8px— y le sacan la
+   tipografía propia de MUI. */
+const ESTILO_MENU = {
+  mt: 0.5,
+  minWidth: 230,
+  borderRadius: 2,
+  border: '1px solid #e8ecf1',
+  boxShadow: '0 6px 20px rgba(0, 0, 0, 0.12)',
+};
+const ESTILO_ITEM = {
+  fontFamily: 'inherit',
+  fontSize: 14,
+  color: '#333',
+  py: 1.1,
+  '&:hover': { backgroundColor: '#e3f2fd', color: '#1565c0' },
+};
 
 function AccionesLocal({ local, compacto = false, alTerminar }) {
   const { rol } = useRol();
@@ -58,6 +83,8 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
      los modales: así no puede haber dos abiertos a la vez. */
   const [abierta, setAbierta] = useState(null);
   const [form, setForm] = useState({});
+  // El botón desde el que se abrió el menú (modo compacto). null = cerrado.
+  const [anclaMenu, setAnclaMenu] = useState(null);
 
   const disponibles = accionesDisponibles(local.estado, rol, local);
   const faltan = faltantesRegistrales(local);
@@ -86,48 +113,79 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
     alTerminar?.();
   }
 
-  const claseBoton = compacto ? 'btn-tabla' : 'btn-accion';
+  /* La lista de opciones ya resuelta para este local y este rol. Se arma una
+     sola vez y la dibujan las dos variantes: botones grandes en la ficha, menú
+     desplegable en una fila. Un local bloqueado no ofrece el circuito, solo
+     levantar el bloqueo (y eso, coordinación). */
+  const opciones = [];
+  if (local.bloqueado) {
+    if (rol === 'coordinacion') opciones.push({ id: 'desbloquear', etiqueta: 'Levantar bloqueo' });
+  } else {
+    opciones.push(...disponibles);
+  }
+  /* Ver la cédula emitida, desde cualquier pantalla. Requisito válido para las
+     dos alternativas de emisión (sección 9.6). */
+  if (cedulaPendiente) opciones.push({ id: 'ver-cedula', etiqueta: 'Ver cédula' });
+
+  function elegir(id) {
+    setAnclaMenu(null);
+    abrir(id);
+  }
 
   return (
     <>
       {/* ======================= LOS BOTONES ======================= */}
-      <div className={compacto ? 'celda-acciones' : 'acciones-local'}>
-        {local.bloqueado ? (
-          rol === 'coordinacion' && (
-            <button type="button" className={claseBoton} onClick={() => abrir('desbloquear')}>
-              Levantar bloqueo
-            </button>
-          )
+      {compacto ? (
+        /* En una fila de tabla: UN botón que despliega las opciones. Antes cada
+           acción era un botón propio, una fila con cuatro ocupaba dos renglones
+           y la columna Acciones era lo más ancho de la tabla. Con el menú todas
+           las filas miden lo mismo y se ve de un vistazo dónde hay algo para
+           hacer. El número dice cuántas opciones hay sin tener que abrirlo. */
+        opciones.length === 0 ? (
+          <span className="texto-gris">—</span>
         ) : (
-          disponibles.map((a) => (
+          <>
             <button
-              key={a.id}
               type="button"
-              className={claseBoton}
-              title={a.ayuda}
-              onClick={() => abrir(a.id)}
+              className="btn-tabla btn-menu-acciones"
+              aria-haspopup="menu"
+              aria-expanded={Boolean(anclaMenu)}
+              onClick={(e) => setAnclaMenu(e.currentTarget)}
             >
-              {a.etiqueta}
+              Opciones ({opciones.length})
+              <ExpandMoreIcon fontSize="inherit" />
             </button>
-          ))
-        )}
+            <Menu
+              anchorEl={anclaMenu}
+              open={Boolean(anclaMenu)}
+              onClose={() => setAnclaMenu(null)}
+              slotProps={{ paper: { sx: ESTILO_MENU } }}
+            >
+              {opciones.map((o) => (
+                <MenuItem key={o.id} title={o.ayuda} sx={ESTILO_ITEM} onClick={() => elegir(o.id)}>
+                  {o.etiqueta}
+                </MenuItem>
+              ))}
+            </Menu>
+          </>
+        )
+      ) : (
+        <div className="acciones-local">
+          {opciones.map((o) => (
+            <button key={o.id} type="button" className="btn-accion" title={o.ayuda} onClick={() => abrir(o.id)}>
+              {o.etiqueta}
+            </button>
+          ))}
 
-        {/* Ver la cédula emitida, desde cualquier pantalla. Requisito válido
-            para las dos alternativas de emisión (sección 9.6). */}
-        {cedulaPendiente && (
-          <button type="button" className={claseBoton} onClick={() => abrir('ver-cedula')}>
-            Ver cédula
-          </button>
-        )}
-
-        {disponibles.length === 0 && !local.bloqueado && !compacto && (
-          <span className="sin-acciones">
-            {local.estado === 'EXENTO_CONFIRMADO'
-              ? 'Exención confirmada: es el único estado terminal, no hay más actos.'
-              : 'No hay acciones disponibles para tu rol en este estado.'}
-          </span>
-        )}
-      </div>
+          {opciones.length === 0 && (
+            <span className="sin-acciones">
+              {local.estado === 'EXENTO_CONFIRMADO'
+                ? 'Exención confirmada: es el único estado terminal, no hay más actos.'
+                : 'No hay acciones disponibles para tu rol en este estado.'}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ======================= CONTROL DEL RELEVAMIENTO ======================= */}
       <Confirmar

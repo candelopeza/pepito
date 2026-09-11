@@ -160,8 +160,8 @@ export const DEFINICION_BANDEJAS = [
    que el día que se sume un tercero (por plazo más próximo, por ejemplo) no
    haya que buscarlo entre el JSX. */
 export const ORDENES_BANDEJA = [
-  { id: 'prioridad', etiqueta: 'Por prioridad', ayuda: 'Primero lo que frena el circuito, después lo que hay que emitir.' },
-  { id: 'cantidad', etiqueta: 'Por cantidad', ayuda: 'Primero la bandeja con más locales esperando.' },
+  { id: 'prioridad', etiqueta: 'Por prioridad' },
+  { id: 'cantidad', etiqueta: 'Por cantidad' },
 ];
 
 /* Ordena una lista de bandejas ya armadas (con su `locales` adentro).

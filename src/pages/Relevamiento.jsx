@@ -35,7 +35,7 @@ import { Link } from 'react-router-dom';
 import PageHeader from '../components/ui/PageHeader';
 import Grilla from '../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
-import Aviso, { Vacio } from '../components/ui/Aviso';
+import { Vacio } from '../components/ui/Aviso';
 import AccionesLocal from '../components/AccionesLocal';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
@@ -181,60 +181,49 @@ function Relevamiento() {
       {pendientes.length === 0 ? (
         <Vacio titulo="Todo controlado">No hay relevamientos esperando el control administrativo.</Vacio>
       ) : (
-        <>
-          <Aviso tipo="info" titulo="Ningún relevamiento produce efectos hasta que pasa por acá">
-            Sobre un Generador Menor podés confirmar la exención (cierra su recorrido) o corregir la clasificación. Sobre un Gran
-            Generador, completar los datos registrales y habilitar la notificación.
-          </Aviso>
-
-          <table className="tabla-datos tabla-bandeja">
-            <thead>
-              <tr>
-                <th>Local</th>
-                <th>Dirección</th>
-                <th>Clasificó</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendientes.map((l) => {
-                const rel = relevamientos.find((r) => r.localId === l.id);
-                return (
-                  <tr key={l.id}>
-                    <td>
-                      <Link to={`/locales/${l.id}`} className="link-local">
-                        {l.nombreLocal}
-                      </Link>
-                      <small className="celda-sub">{rel ? rel.usuario : 'sin relevamiento'}</small>
-                    </td>
-                    <td>{l.direccion}</td>
-                    <td>
-                      {rel ? (
-                        <Badge color={colorClasificacion(rel.clasificacion)}>{etiquetaClasificacion(rel.clasificacion)}</Badge>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td>
-                      <BadgeEstado codigo={l.estado} />
-                    </td>
-                    <td>
-                      <AccionesLocal local={l} compacto />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </>
+        <table className="tabla-datos tabla-bandeja">
+          <thead>
+            <tr>
+              <th>Local</th>
+              <th>Dirección</th>
+              <th>Clasificó</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pendientes.map((l) => {
+              const rel = relevamientos.find((r) => r.localId === l.id);
+              return (
+                <tr key={l.id}>
+                  <td>
+                    <Link to={`/locales/${l.id}`} className="link-local">
+                      {l.nombreLocal}
+                    </Link>
+                    <small className="celda-sub">{rel ? rel.usuario : 'sin relevamiento'}</small>
+                  </td>
+                  <td>{l.direccion}</td>
+                  <td>
+                    {rel ? (
+                      <Badge color={colorClasificacion(rel.clasificacion)}>{etiquetaClasificacion(rel.clasificacion)}</Badge>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td>
+                    <BadgeEstado codigo={l.estado} />
+                  </td>
+                  <td>
+                    <AccionesLocal local={l} compacto />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       )}
 
       {/* ================= LISTADO COMPLETO ================= */}
-      <div className="accesos-header">
-        <span>Todos los relevamientos</span>
-      </div>
-
       <Grilla
         filas={filas}
         columnas={columnas}

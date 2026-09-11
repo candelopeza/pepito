@@ -328,7 +328,6 @@
    del Tablero). El separador sigue siendo el mismo: solo se vuelve flex. */
 .accesos-header-accion { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .selector-orden { display: flex; align-items: center; gap: 8px; }
-.selector-orden label { color: #9e9e9e; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
 .selector-orden select {
   border: 1px solid #e0e0e0;
   border-radius: 6px;
@@ -340,7 +339,6 @@
   cursor: pointer;
 }
 .selector-orden select:focus { outline: none; border-color: #1976d2; }
-.selector-orden-ayuda { color: #9e9e9e; font-size: 12px; }
 
 /* Link a la derecha del separador (el "Abrir el tablero de trabajo →" del
    Inicio). Va acá, en la cabecera de la sección, y no como una tarjeta más:
@@ -370,7 +368,13 @@
   background: white; border-radius: 12px; padding: 28px 20px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e8ecf1;
   cursor: pointer; transition: all 0.2s ease; min-height: 140px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  /* Arriba y no al centro: las tarjetas de una fila miden todas lo mismo, pero
+     su contenido no (una descripción puede ocupar una línea o tres, y el pie de
+     plazos aparece solo si hay vencimientos). Centrando verticalmente, cada
+     número caía a una altura distinta según cuánto texto tuviera debajo. Con
+     flex-start todos arrancan en el mismo punto y la fila se lee de un vistazo;
+     el pie se va abajo solo, con el margin-top: auto de .card-pie. */
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
   text-decoration: none; color: inherit; text-align: center;
 }
 
@@ -427,21 +431,39 @@
 }
 
 /* El "+" es la marca de "esto crea algo". Va en un círculo azul lleno porque
-   es el único elemento de la pantalla que inicia una operación. */
+   es el único elemento de la pantalla que inicia una operación.
+
+   NO se dibuja con la tipografía. El glifo "+" se apoya en el eje matemático de
+   la fuente, que no es el centro del cuadratín: por eso con `align-items:
+   center` queda uno o dos píxeles corrido, y cuánto se corre depende de qué
+   fuente resolvió el sistema. Las dos barras van con ::before/::after al 50%,
+   que es centrado geométrico exacto y no depende de la fuente. El "+" de
+   Home.jsx sigue en el HTML (ya está aria-hidden), solo se oculta con
+   font-size: 0. */
 .card-accion-signo {
+  position: relative;
   flex-shrink: 0;
   width: 40px;
   height: 40px;
   border-radius: 50%;
   background: #1976d2;
   color: white;
-  font-size: 24px;
-  font-weight: 400;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 0;
+  margin: 0;
 }
+
+/* Las barras de la cruz: 16px de largo y 2px de grosor sobre un círculo de 40. */
+.card-accion-signo::before,
+.card-accion-signo::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background: currentColor;
+  border-radius: 1px;
+}
+.card-accion-signo::before { width: 12px; height: 2px; transform: translate(-50%, -50%); }
+.card-accion-signo::after { width: 2px; height: 12px; transform: translate(-50%, -50%); }
 
 .card-accion:hover .card-accion-signo { background: #1565c0; }
 
@@ -507,14 +529,38 @@
   overflow: hidden;
 }
 
-.tabla-datos { width: 100%; border-collapse: collapse; }
-.tabla-datos th {
-  background: #f5f7fa; color: #666; font-size: 12px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.5px;
-  padding: 16px; text-align: left; border-bottom: 1px solid #e0e0e0;
+/* >>> MISMO ENCABEZADO QUE LA GRILLA DE MUI <<<
+   El sistema tiene dos clases de tabla: esta (HTML plano, para las bandejas
+   con botones de acción) y la grilla de ui/Grilla.jsx (MUI, para los listados
+   grandes con exportar y paginar). Tienen que verse de la misma familia: el
+   mismo azul institucional en el encabezado, texto blanco, filas que se marcan
+   al pasar el mouse. Antes esta era gris y la otra azul, y en una pantalla con
+   las dos —Notificaciones, Relevamiento— parecían de dos sistemas distintos.
+   Si se cambia un color acá, cambiarlo también en ESTILO de Grilla.jsx.
+
+   border-collapse: separate (y no collapse) es lo que permite que el radio de
+   12px recorte el encabezado azul: con collapse el navegador ignora el
+   overflow: hidden de la tabla. */
+.tabla-datos {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  background: white; border-radius: 12px; overflow: hidden;
+  border: 1px solid #e8ecf1; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
+.tabla-datos th {
+  background: #1976d2; color: white; font-size: 14px; font-weight: 700;
+  padding: 14px 16px; text-align: left;
+  border-right: 1px solid rgba(255, 255, 255, 0.35);
+}
+.tabla-datos th:last-child { border-right: none; }
 .tabla-datos td { padding: 16px; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #444; }
-.tabla-datos tr:hover { background: #f8fafc; }
+.tabla-datos tbody tr:last-child td { border-bottom: none; }
+.tabla-datos tbody tr:hover { background: #f8fafc; }
+
+/* Existe solo en el papel. Lo usa la hoja de ruta de Notificaciones: en
+   pantalla esas mismas cédulas ya están en la grilla de emitidas, así que
+   mostrar la tabla también sería el mismo dato dos veces. Al imprimir aparece
+   con las columnas Resultado y Firma vacías, para completar en el recorrido. */
+@media screen { .solo-papel { display: none; } }
 
 .btn-tabla {
   background: #e3f2fd; color: #1976d2; border: none;
@@ -660,6 +706,11 @@
      información que nadie tiene que accionar. */
   .grid-acciones { grid-template-columns: 1fr; }
   .grid-stats { grid-template-columns: repeat(2, 1fr); }
+
+  /* En pantalla angosta la acción del aviso no entra al lado del texto: baja
+     y se alinea a la izquierda, debajo del título. */
+  .aviso { flex-wrap: wrap; }
+  .aviso-accion { margin-left: 0; }
 
   /* Lo de abajo viene de la rama de cande.
      En celular el modal ocupa toda la pantalla: una ventanita centrada con
@@ -1192,10 +1243,23 @@
   padding: 14px 18px; border-radius: 8px; margin-bottom: 20px;
   border-left: 4px solid;
 }
-.aviso-cuerpo { display: flex; flex-direction: column; gap: 4px; }
+.aviso-cuerpo { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
 .aviso-titulo { font-size: 14px; font-weight: 700; }
 .aviso-texto { font-size: 13px; line-height: 1.55; }
 .aviso a { color: inherit; font-weight: 700; }
+
+/* La acción del aviso: va a la derecha y con recuadro, no colgada al final
+   del párrafo. Un link metido en la explicación se lee como texto y se
+   saltea; suelto y con borde se ve que es el boton de ese aviso. Hereda el
+   color del recuadro (currentColor), así que el de validaciones sale ámbar y
+   el de cedulas azul sin una regla por tipo. */
+.aviso-accion { margin-left: auto; flex-shrink: 0; align-self: center; }
+.aviso-accion a {
+  display: inline-block; padding: 7px 16px; border-radius: 6px;
+  border: 1px solid currentColor; font-size: 13px; white-space: nowrap;
+  text-decoration: none; transition: background 0.2s ease;
+}
+.aviso-accion a:hover { background: rgba(255, 255, 255, 0.65); }
 
 .aviso-info    { background: #e3f2fd; border-color: #1976d2; color: #0d47a1; }
 .aviso-ok      { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; }
@@ -1232,7 +1296,11 @@
 }
 .btn-accion:hover { background: #1976d2; border-color: #1976d2; color: white; }
 .sin-acciones { color: #90a4ae; font-size: 13px; font-style: italic; }
-.celda-acciones { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* El botón "Acciones (N)" de una fila de tabla. Es un .btn-tabla con la flecha
+   al lado; el menú que abre lo viste MUI desde AccionesLocal.jsx (ESTILO_MENU). */
+.btn-menu-acciones { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.btn-menu-acciones svg { font-size: 16px; }
 .confirmar-cuerpo { font-size: 14px; color: #444; line-height: 1.6; }
 .confirmar-cuerpo p { margin-bottom: 12px; }
 
@@ -1278,33 +1346,41 @@
   margin-bottom: 16px; overflow: hidden;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
+/* La cabecera es azul, del mismo azul que el encabezado de las tablas: la
+   parte de arriba de la tarjeta (título + nombres de columna) es UN bloque
+   azul y solo las filas son blancas. Antes la cabecera era blanca y quedaba
+   una franja azul suelta en el medio de la tarjeta. */
 .bandeja-cabecera {
   display: flex; align-items: center; gap: 16px; width: 100%;
-  padding: 16px 20px; background: white; border: none; cursor: pointer;
-  text-align: left; font-family: inherit;
+  padding: 16px 20px; background: #1976d2; border: none; cursor: pointer;
+  text-align: left; font-family: inherit; color: white;
 }
-.bandeja-cabecera:hover { background: #f8fafc; }
+.bandeja-cabecera:hover { background: #1565c0; }
 /* El contador va primero y grande: lo primero que se quiere saber de una
-   bandeja es cuántos hay, no cómo se llama. */
+   bandeja es cuántos hay, no cómo se llama. Sobre el fondo azul va en un
+   recuadro blanco y el color de la bandeja pasa al número: un cuadrado azul
+   sobre azul desaparecía. */
 .bandeja-contador {
-  flex: 0 0 48px; height: 48px; border-radius: 10px;
+  flex: 0 0 48px; height: 48px; border-radius: 10px; background: white;
   display: flex; align-items: center; justify-content: center;
-  font-size: 20px; font-weight: 800; color: white;
+  font-size: 20px; font-weight: 800;
 }
-.bandeja-contador-azul { background: #1976d2; }
-.bandeja-contador-verde { background: #2e7d32; }
-.bandeja-contador-naranja { background: #ef6c00; }
-.bandeja-contador-amarillo { background: #f9a825; }
-.bandeja-contador-rojo { background: #c62828; }
+.bandeja-contador-azul { color: #1976d2; }
+.bandeja-contador-verde { color: #2e7d32; }
+.bandeja-contador-naranja { color: #ef6c00; }
+.bandeja-contador-amarillo { color: #f9a825; }
+.bandeja-contador-rojo { color: #c62828; }
 .bandeja-titulo { display: flex; flex-direction: column; gap: 3px; flex: 1; }
-.bandeja-titulo strong { font-size: 15px; color: #263238; }
-.bandeja-titulo small { font-size: 12px; color: #90a4ae; }
-.bandeja-flecha { color: #b0bec5; font-size: 12px; }
-.bandeja-cuerpo { border-top: 1px solid #eceff1; }
+.bandeja-titulo strong { font-size: 15px; color: white; }
+.bandeja-titulo small { font-size: 12px; color: rgba(255, 255, 255, 0.8); }
+.bandeja-flecha { color: rgba(255, 255, 255, 0.75); font-size: 12px; }
 .bandeja-vacia { padding: 20px; color: #b0bec5; font-size: 13px; }
-/* Dentro de una bandeja la tabla no lleva su propio marco: ya está enmarcada. */
-.tabla-bandeja { background: white; }
-.tabla-bandeja th { background: #f5f7fa; color: #607d8b; }
+/* Dentro de una .bandeja del tablero la tabla no lleva su propio marco: ya la
+   enmarca la sección. Los nombres de columna van en un azul un tono más oscuro
+   que la cabecera, para que se lean como la segunda línea del mismo bloque y
+   no como otra tabla pegada abajo. */
+.bandeja-cuerpo .tabla-datos { border-radius: 0; border: none; box-shadow: none; }
+.bandeja-cuerpo .tabla-datos th { background: #1565c0; }
 .tabla-bandeja td { padding: 12px 16px; vertical-align: top; }
 
 /* Leyenda de colores. Tablero y mapa. */
@@ -1315,14 +1391,6 @@
 }
 .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
 
-/* Título dentro del propio recuadro: la leyenda del tablero va arriba de la
-   página y no lleva separador aparte, para no empujar las bandejas. */
-.leyenda-titulo {
-  color: #9e9e9e; font-size: 12px; font-weight: 700; letter-spacing: 1px;
-  text-transform: uppercase; padding-right: 4px; border-right: 1px solid #e8ecf1;
-  margin-right: 4px; align-self: stretch;
-}
-
 
 /* ========== 14.6 TARJETAS CON NÚMERO ==========
    components/ui/Card.jsx (Home y Portal) */
@@ -1332,7 +1400,9 @@
 .card-valor-naranja { color: #ef6c00; }
 .card-valor-amarillo { color: #f9a825; }
 .card-valor-rojo { color: #c62828; }
-.card-pie { margin-top: 12px; font-size: 12px; color: #90a4ae; }
+/* margin-top: auto lo empuja al fondo de la tarjeta: así el pie queda alineado
+   entre tarjetas aunque arriba haya distinta cantidad de texto. */
+.card-pie { margin-top: auto; padding-top: 12px; font-size: 12px; color: #90a4ae; }
 /* Cuando la tarjeta es un <button> hay que apagarle el estilo del navegador. */
 .card-acceso-boton {
   background: white; border: 1px solid #e8ecf1; text-align: left;
@@ -1576,6 +1646,10 @@
   .cedula-papel { border: none; padding: 0; }
   /* Que las tablas largas no se corten a la mitad de una fila. */
   .tabla-datos tr { page-break-inside: avoid; }
+  /* En papel el encabezado va gris: el azul lleno gasta tinta y muchas
+     impresoras lo sacan negro. */
+  .tabla-datos { box-shadow: none; border-radius: 0; }
+  .tabla-datos th { background: #f5f7fa; color: #333; border-right-color: #ddd; }
 }
 
 

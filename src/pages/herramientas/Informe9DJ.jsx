@@ -105,11 +105,6 @@ function Informe9DJ() {
     <>
       <PageHeader etiqueta="HERRAMIENTAS" titulo="INFORME DE 9 DE JULIO" botonVolver />
 
-      <Aviso tipo="info" titulo="Carga manual asistida, no automática">
-        El pliego recomienda reemplazar el procesamiento automático desde correo con OCR por esta pantalla: el sistema propone los
-        cambios y un agente confirma. Un cruce equivocado altera el estado legal de un local, y automatizado no se detecta.
-      </Aviso>
-
       {!cargado ? (
         <>
           {/* MAQUETA: no hay lectura real de archivo. Cuando exista, acá va un

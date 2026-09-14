@@ -30,11 +30,6 @@ function Rubros() {
     <>
       <PageHeader etiqueta="CONFIGURACIÓN" titulo="RUBROS DE LOS ESTABLECIMIENTOS" botonVolver />
 
-      <Aviso tipo="info" titulo="El rubro es un dato registral">
-        Junto con el CUIT y la razón social, es uno de los tres datos que la cédula necesita para individualizar correctamente al
-        sujeto obligado. Un local sin rubro no puede avanzar a segunda notificación.
-      </Aviso>
-
       <CrudCatalogo
         clave="rubros"
         titulo="rubro"

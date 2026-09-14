@@ -175,12 +175,6 @@ function Expediente() {
         </table>
       )}
 
-      <Aviso tipo="info" titulo="Integración con expedientes municipales (pendiente, sección 8.3)">
-        Hoy el número se genera fuera del sistema y se transcribe a mano. La integración debería permitir iniciar el expediente
-        desde acá y recibir el número asignado. Conviene diseñarla de modo que la indisponibilidad de ese sistema no bloquee la
-        operación: si la comunicación falla, se registra el número a mano y se reconcilia después. El formulario ya acepta las dos
-        cosas.
-      </Aviso>
     </>
   );
 }

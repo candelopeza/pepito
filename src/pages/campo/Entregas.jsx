@@ -64,7 +64,7 @@ function Entregas() {
       <PageHeader
         etiqueta="CAMPO"
         titulo="MIS ENTREGAS"
-        subtitulo={`${ruta.length} cédula(s) para entregar · recorrido ordenado por proximidad`}
+        subtitulo={`${ruta.length} cédula(s) para entregar ordenado por proximidad`}
         botonVolver
         acciones={
           rol === 'coordinacion' && (
@@ -81,14 +81,9 @@ function Entregas() {
         </Aviso>
       )}
 
-      <Aviso tipo="info" titulo="El plazo arranca cuando registrás la entrega">
-        Una cédula generada y no entregada no hace correr ningún plazo. Cargá el resultado el mismo día, con la fecha real de
-        entrega: de esa fecha dependen la segunda notificación y el expediente.
-      </Aviso>
 
       {ruta.length === 0 ? (
         <Vacio titulo="No tenés entregas pendientes">
-          Cuando coordinación te asigne una cédula, va a aparecer acá con su dirección y su número.
         </Vacio>
       ) : (
         <ol className="lista-entregas">

@@ -66,11 +66,6 @@ function Plantilla() {
   return (
     <>
       <PageHeader etiqueta="CONFIGURACIÓN" titulo="PLANTILLA DE LA CÉDULA" botonVolver />
-
-      <Aviso tipo="info" titulo="El texto lo edita el área, sin pasar por desarrollo">
-        Lo que va entre llaves se reemplaza con los datos reales del local al generar la cédula. El resto es texto libre.
-      </Aviso>
-
       {inexistentes.length > 0 && (
         <Aviso tipo="bloqueo" titulo="Hay variables que no existen">
           {inexistentes.map((c) => `{${c}}`).join(', ')}. Van a salir así en la cédula impresa. Revisá la lista de variables

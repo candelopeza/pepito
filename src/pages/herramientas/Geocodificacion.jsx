@@ -52,15 +52,9 @@ function Geocodificacion() {
           </button>
         }
       />
-
-      <Aviso tipo="info" titulo="La ubicación del local sale SIEMPRE de la dirección declarada">
-        Es la única fuente válida: alimenta el mapa, el ruteo de notificaciones y cualquier análisis territorial. La coordenada que
-        captura el celular en el relevamiento es una métrica del trabajo de campo y NO se copia acá bajo ninguna circunstancia.
-      </Aviso>
-
       {sinGeo.length === 0 ? (
         <Vacio titulo="Todos los locales tienen ubicación">
-          No hay direcciones para corregir. El proceso diario de geocodificación completa las que falten.
+          No hay direcciones para corregir.
         </Vacio>
       ) : (
         <>
@@ -100,27 +94,10 @@ function Geocodificacion() {
               ))}
             </tbody>
           </table>
-
-          <Aviso tipo="alerta" titulo="Mientras no tengan ubicación">
-            Estos locales no aparecen en el mapa y no entran en el ruteo por proximidad: si tienen una cédula asignada, van al final
-            de la hoja de ruta y el notificador los ubica a mano.
-          </Aviso>
         </>
       )}
 
       {/* ---------- El límite contra el que se valida ---------- */}
-      <div className="accesos-header">
-        <span>Validación territorial</span>
-      </div>
-      <div className="bloque-info">
-        <strong>Polígono del ejido municipal — {LIMITE_MUNICIPAL.length} vértices</strong>
-        <span>
-          Toda coordenada obtenida se valida contra este polígono y la que cae afuera se descarta en lugar de guardarse. El
-          polígono cargado hoy es una aproximación para la maqueta:{' '}
-          <strong>hay que reemplazarlo por la capa KML de límites municipales que tiene la Dirección de Ambiente</strong>. Se
-          cambia en un solo lugar: dominio/geo.js.
-        </span>
-      </div>
 
       {editando && (
         <Modal abierto etiqueta="PADRÓN" titulo={`Corregir la dirección de ${editando.nombreLocal}`} ancho="ancho" onCerrar={() => setEditando(null)}>

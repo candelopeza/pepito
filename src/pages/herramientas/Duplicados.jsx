@@ -59,17 +59,8 @@ function Duplicados() {
         subtitulo={`${pares.length} par(es) candidatos · ${fusiones.length} fusión(es) realizadas`}
         botonVolver
       />
-
-      <Aviso tipo="info" titulo="El sistema propone, vos decidís">
-        Coincidencia <Badge color="rojo">alta</Badge> = mismo CUIT normalizado. <Badge color="naranja">Media</Badge> = nombre
-        parecido y misma dirección. <Badge color="amarillo">Baja</Badge> = solo el nombre se parece; revisala con cuidado, puede
-        ser un local distinto.
-      </Aviso>
-
       {pares.length === 0 ? (
         <Vacio titulo="No se detectaron duplicados">
-          Se comparan CUIT normalizado, nombre comercial y calle con altura. Si sabés de un duplicado que no aparece, avisá qué
-          criterio lo detectaría.
         </Vacio>
       ) : (
         pares.map((par) => {

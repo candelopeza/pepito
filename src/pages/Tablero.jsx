@@ -166,16 +166,6 @@ function Tablero() {
         }
         botonVolver
       />
-
-      {/* ---------- Cómo leer los colores ----------
-          VA ARRIBA A PROPÓSITO. Estaba al final de la página y no servía de
-          nada: para entender un badge había que bajar hasta el último renglón
-          y volver. Es la referencia para leer TODO lo que viene abajo (los
-          avisos y las bandejas), así que va antes que eso.
-
-          El sistema tiene 24 estados: sin esta ayuda nadie recuerda qué
-          significa cada color. Va sin título: ocupa un solo renglón y no
-          empuja las bandejas fuera de la primera pantalla. */}
       <div className="leyenda">
         <span>
           <Badge color="naranja">Naranja</Badge> hay que hacer algo
@@ -217,25 +207,28 @@ function Tablero() {
 
       {/* ---------- Las bandejas ---------- */}
       <div className="accesos-header accesos-header-accion">
-        <span>Situaciones que requieren intervención</span>
         {/* El selector solo tiene sentido si hay más de una bandeja que ordenar. */}
         {bandejas.length > 1 && (
-          <div className="selector-orden">
-            {/* Sin rótulo visible: el desplegable ya dice "Por prioridad" / "Por
-                cantidad", así que la palabra "Ordenar" al lado no agregaba nada. El
-                nombre accesible queda en aria-label, para el lector de pantalla. */}
-            <select
-              id="tablero-orden"
-              aria-label="Ordenar las bandejas"
-              value={orden}
-              onChange={(e) => cambiarOrden(e.target.value)}
-            >
-              {ORDENES_BANDEJA.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.etiqueta}
-                </option>
-              ))}
-            </select>
+          <div className="selector-orden" role="radiogroup" aria-label="Ordenar las bandejas">
+            {/* Dos botones tipo pastilla en vez de un desplegable: las opciones son
+                solo dos y así se ve de un vistazo cuál está activa, sin abrir nada.
+                Cada una lleva un ícono chico que dice de qué se trata el orden. */}
+            <span className="selector-orden-rotulo"></span>
+            {ORDENES_BANDEJA.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                role="radio"
+                aria-checked={orden === o.id}
+                className={`selector-orden-opcion${orden === o.id ? ' activa' : ''}`}
+                onClick={() => cambiarOrden(o.id)}
+              >
+                <span className="selector-orden-icono" aria-hidden="true">
+                  {o.id === 'prioridad' ? '⚑' : '≡'}
+                </span>
+                {o.etiqueta}
+              </button>
+            ))}
           </div>
         )}
       </div>

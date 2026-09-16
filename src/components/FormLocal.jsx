@@ -88,8 +88,7 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           entra el relevamiento). Lo que no se puede es NOTIFICARLO. */}
       {faltan.length > 0 && (
         <Aviso tipo="alerta" titulo="Faltan datos registrales">
-          Falta {faltan.join(', ')}. El local no puede avanzar a segunda notificación hasta que estén cargados: la cédula tiene que
-          individualizar correctamente al sujeto obligado.
+
         </Aviso>
       )}
 
@@ -102,7 +101,7 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
             valor={datos.id}
             onChange={() => {}}
             soloLectura
-            ayuda={datos.idLegacy ? `Id en el sistema anterior: ${datos.idLegacy}` : 'El número no se puede cambiar.'}
+
           />
         )}
 
@@ -123,8 +122,7 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           valor={datos.razonSocial}
           onChange={(v) => cambiar('razonSocial', v)}
           soloLectura={soloLectura}
-          ayuda="Sale de la constancia de inscripción fiscal."
-          ancho={2}
+
         />
         <Campo
           id="campo-cuit"
@@ -132,7 +130,6 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           valor={datos.cuit}
           onChange={(v) => cambiar('cuit', v)}
           error={errores.cuit}
-          ayuda="Formato: 30-12345678-9"
           soloLectura={soloLectura}
         />
         <CampoSelect
@@ -142,7 +139,6 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           onChange={(v) => cambiar('rubro', v)}
           opciones={rubros.map((r) => ({ id: r.nombre, etiqueta: r.nombre }))}
           soloLectura={soloLectura}
-          ayuda="Se administra en Configuración → Rubros."
         />
 
         {/* ---------- Domicilios ---------- */}
@@ -153,8 +149,7 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           onChange={(v) => cambiar('direccion', v)}
           error={errores.direccion}
           soloLectura={soloLectura}
-          ayuda="Al guardar, la ubicación del mapa se recalcula desde esta dirección."
-          ancho={2}
+
         />
         <Campo
           id="campo-fiscal"
@@ -162,8 +157,7 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           valor={datos.domicilioFiscal}
           onChange={(v) => cambiar('domicilioFiscal', v)}
           soloLectura={soloLectura}
-          ayuda="Puede ser distinto del domicilio del local."
-          ancho={2}
+
         />
 
         {/* ---------- Contacto ---------- */}
@@ -197,8 +191,6 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           valor={datos.titularCuil}
           onChange={(v) => cambiar('titularCuil', v)}
           soloLectura={soloLectura}
-          ayuda="Quién puede ver este local desde el portal. Pendiente de definición con CiDiTuc."
-          ancho={2}
         />
 
         <CampoTexto

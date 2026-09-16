@@ -202,9 +202,6 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
           <strong>{local.nombreLocal}</strong> queda como <strong>Relevado - Exento</strong>. Es el único estado terminal del
           sistema: el local no vuelve a entrar al circuito de notificaciones.
         </p>
-        <p className="texto-chico">
-          El control lo hace el propio equipo de coordinación. El local no se deriva a ninguna brigada de inspección externa.
-        </p>
       </Confirmar>
 
       <Confirmar
@@ -237,7 +234,7 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
           <strong>{local.nombreLocal}</strong> entra en la cola de emisión de la primera cédula.
         </p>
         {faltan.length > 0 && (
-          <Aviso tipo="alerta" titulo="Ojo: faltan datos registrales">
+          <Aviso tipo="alerta" titulo="Faltan datos registrales">
             Falta {faltan.join(', ')}. Podés habilitarlo, pero no vas a poder emitir la cédula hasta cargarlos.
           </Aviso>
         )}

@@ -76,9 +76,10 @@ function Entregas() {
       />
 
       {sinAsignar.length > 0 && rol === 'coordinacion' && (
-        <Aviso tipo="alerta" titulo={`${sinAsignar.length} cédula(s) emitidas sin notificador asignado`}>
-          Nadie las va a entregar hasta que se asignen. <Link to="/notificaciones">Ir a la cola de emisión</Link>.
-        </Aviso>
+        <Aviso
+     tipo="alerta" titulo={`${sinAsignar.length} cédula(s) emitidas sin notificador asignado`}
+        accion={<Link to="/tablero">Expedientes para generar</Link>}
+      />
       )}
 
 

@@ -327,18 +327,29 @@
 /* Variante con un control a la derecha del título (el orden de las bandejas
    del Tablero). El separador sigue siendo el mismo: solo se vuelve flex. */
 .accesos-header-accion { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.selector-orden { display: flex; align-items: center; gap: 8px; }
-.selector-orden select {
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-family: inherit;
-  color: #424242;
-  background-color: #fff;
-  cursor: pointer;
+/* Selector segmentado: un rótulo chico y dos pastillas dentro de un mismo
+   marco gris. La activa se pinta de blanco con sombra suave y texto azul, la
+   otra queda gris y se aclara al pasar el mouse. */
+.selector-orden {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 3px; background: #f1f3f5; border: 1px solid #e0e0e0; border-radius: 999px;
 }
-.selector-orden select:focus { outline: none; border-color: #1976d2; }
+.selector-orden-rotulo {
+  padding: 0 8px 0 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: #9e9e9e;
+}
+.selector-orden-opcion {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border: none; border-radius: 999px; background: transparent;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: #757575;
+  cursor: pointer; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.selector-orden-opcion:hover { color: #424242; }
+.selector-orden-opcion.activa {
+  background: #fff; color: #1976d2; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.selector-orden-opcion:focus-visible { outline: 2px solid #1976d2; outline-offset: 1px; }
+.selector-orden-icono { font-size: 12px; line-height: 1; }
 
 /* Link a la derecha del separador (el "Abrir el tablero de trabajo →" del
    Inicio). Va acá, en la cabecera de la sección, y no como una tarjeta más:

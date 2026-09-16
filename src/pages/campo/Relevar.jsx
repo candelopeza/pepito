@@ -153,14 +153,6 @@ function Relevar() {
           fecha y la coordenada del momento en que los guardaste.
         </Aviso>
       )}
-
-      {gps.estado === 'sin-permiso' && (
-        <Aviso tipo="info" titulo="El relevamiento se guarda igual, sin coordenada">
-          La coordenada del dispositivo es una métrica de cobertura de campo, no la ubicación del local: esa se obtiene después
-          geocodificando la dirección que cargues. El relevamiento no queda incompleto por esto.
-        </Aviso>
-      )}
-
       {/* ---------- El formulario ---------- */}
       <form className="formulario formulario-campo" onSubmit={guardar} noValidate autoComplete="off">
         <Campo
@@ -169,7 +161,6 @@ function Relevar() {
           valor={datos.direccionRelevada}
           onChange={(v) => cambiar('direccionRelevada', v)}
           error={errores.direccionRelevada}
-          ayuda="Con altura. De esta dirección sale la ubicación oficial del local."
         />
         <Campo
           id="rel-nombre"
@@ -177,7 +168,6 @@ function Relevar() {
           valor={datos.nombreLocal}
           onChange={(v) => cambiar('nombreLocal', v)}
           error={errores.nombreLocal}
-          ayuda="El nombre del cartel, como se lo conoce."
         />
         <CampoSelect
           id="rel-rubro"
@@ -201,13 +191,7 @@ function Relevar() {
           etiqueta="Observaciones"
           valor={datos.observaciones}
           onChange={(v) => cambiar('observaciones', v)}
-          ayuda="Lo que viste y no entra en los campos de arriba."
         />
-
-        <Aviso tipo="info" titulo="No se piden CUIT ni razón social">
-          El relevador no tiene facultades de inspector: no está autorizado a requerirle esos datos al comerciante. Los completa la
-          oficina desde la constancia de inscripción fiscal.
-        </Aviso>
 
         <div className="form-acciones">
           <button type="submit" className="btn-primario">

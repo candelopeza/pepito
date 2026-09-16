@@ -131,11 +131,7 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
           valor={datos.numeroConfirmado}
           onChange={(v) => cambiar('numeroConfirmado', digitosCedula(v))}
           error={errores.numeroConfirmado}
-          ayuda={
-            numeroArmado
-              ? `Se va a registrar como ${numeroArmado}. Compará contra el papel que entregaste.`
-              : 'Escribí solo el número del papel que entregaste: para CED-001275 alcanza con 1275.'
-          }
+
           ancho={2}
         />
 
@@ -158,7 +154,6 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
             onChange={(v) => cambiar('fechaEntrega', v)}
             error={errores.fechaEntrega}
             max={hoyISO()}
-            ayuda="Desde acá corre el plazo. No es la fecha de emisión de la cédula."
           />
         )}
 
@@ -168,7 +163,7 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
           valor={datos.evidencia}
           onChange={(v) => cambiar('evidencia', v)}
           error={errores.evidencia}
-          ayuda="Maqueta: escribí el nombre del archivo."
+          ayuda=" Subir la imagen PNG o JPG"
         />
 
         <CampoTexto

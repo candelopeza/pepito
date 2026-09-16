@@ -171,19 +171,6 @@ function Reportes() {
           </tbody>
         </table>
       )}
-
-      {/* ================= NUMERACIONES ================= */}
-      <div className="accesos-header">
-        <span>Numeraciones administrativas</span>
-      </div>
-      <Aviso tipo="info" titulo="Secuencias controladas, sin reutilización">
-        Los números de cédula y de expediente son numeraciones con significado legal (sección 5.4): queda constancia de qué número
-        se emitió, cuándo y para qué local, y ningún número se reutiliza. Al importar del sistema anterior tienen que continuar
-        desde el último valor emitido, sin repetir ni saltear.
-        <br />
-        Última cédula emitida: <strong>CED-{String(secuencias.cedula).padStart(6, '0')}</strong> · último expediente:{' '}
-        <strong>N° {secuencias.expediente}</strong>
-      </Aviso>
     </>
   );
 }

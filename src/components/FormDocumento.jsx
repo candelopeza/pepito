@@ -124,7 +124,6 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
           valor={datos.numero}
           onChange={(v) => cambiar('numero', v)}
           error={errores.numero}
-          ayuda={esContrato ? 'Número de contrato con el prestador.' : 'Número de la declaración jurada.'}
         />
 
         <Campo
@@ -162,7 +161,7 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
             valor={fmtFecha(vencimientoCalculado)}
             onChange={() => {}}
             soloLectura
-            ayuda="Un año calendario exacto. Ese día ya no está vigente."
+            ayuda="Ese día ya no está vigente."
           />
         )}
 
@@ -175,7 +174,7 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
           valor={datos.archivo}
           onChange={(v) => cambiar('archivo', v)}
           error={errores.archivo}
-          ayuda="Maqueta: escribí el nombre del archivo. Todavía no hay subida real."
+          ayuda="Escribi el nombre del archivo."
           ancho={2}
         />
 
@@ -190,8 +189,7 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
 
       {vencimientoCalculado && (
         <Aviso tipo="ok" titulo={`Al registrarse, el local sale del circuito sancionatorio hasta el ${fmtFecha(vencimientoCalculado)}`}>
-          La documentación vigente tiene prioridad sobre cualquier notificación en curso. Cuando venza, el local reingresa solo a
-          primera notificación pendiente.
+          La documentación vigente tiene prioridad sobre cualquier notificación en curso.
         </Aviso>
       )}
 

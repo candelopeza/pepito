@@ -1,0 +1,16 @@
+{
+  "name": "grandesgeneradores-backend",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "API del sistema Grandes Generadores. Node + Express sobre MariaDB.",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env servidor.js",
+    "start": "node --env-file-if-exists=.env servidor.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "mysql2": "^3.14.1"
+  }
+}

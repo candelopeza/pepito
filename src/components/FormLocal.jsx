@@ -86,11 +86,7 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
       {/* ---------- Aviso de datos registrales ----------
           No bloquea el guardado: se puede guardar un local incompleto (así
           entra el relevamiento). Lo que no se puede es NOTIFICARLO. */}
-      {faltan.length > 0 && (
-        <Aviso tipo="alerta" titulo="Faltan datos registrales">
 
-        </Aviso>
-      )}
 
       <div className="form-grilla">
         {/* ---------- Identificación ---------- */}

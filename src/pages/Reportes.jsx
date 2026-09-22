@@ -75,6 +75,7 @@ function Reportes() {
       </div>
 
       {/* ================= RELEVAMIENTOS ================= */}
+      <span>  </span>
       <div className="accesos-header">
         <span>Relevamientos del período, por clasificación</span>
       </div>
@@ -105,16 +106,6 @@ function Reportes() {
           ayuda="Emitidas pero sin constancia de impresión"
         />
       </div>
-
-      {/* La brecha entre emitidas y entregadas es el dato más útil de acá:
-          dice cuánto trabajo administrativo no llegó a producir efecto. */}
-      {i.notif1Emitidas > i.notif1Entregadas && (
-        <Aviso tipo="info" titulo="Brecha entre emisión y entrega">
-          Se emitieron {i.notif1Emitidas} primeras notificaciones y {i.notif1Entregadas} llegaron a tener entrega fehaciente. Las
-          que faltan no hacen correr ningún plazo: son actos iniciados que todavía no produjeron efecto jurídico.
-        </Aviso>
-      )}
-
       {/* ================= DOCUMENTACIÓN ================= */}
       <div className="accesos-header">
         <span>Documentación recibida, por tipo</span>

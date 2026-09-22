@@ -1459,7 +1459,7 @@
 .historial { list-style: none; margin-bottom: 24px; }
 .historial-fila {
   background: white; border: 1px solid #e8ecf1; border-left: 4px solid #cfd8dc;
-  border-radius: 8px; padding: 14px 18px; margin-bottom: 10px;
+  border-radius: 12px; padding: 16px 24px 12px; margin-bottom: 12px;
 }
 /* El color del borde izquierdo es el del tipo de actuación: se puede recorrer
    el historial de un vistazo sin leer las etiquetas. */
@@ -1469,17 +1469,24 @@
 .historial-rojo { border-left-color: #c62828; }
 .historial-gris { border-left-color: #90a4ae; }
 
-.hist-cabecera { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
-.hist-fecha { font-size: 13px; font-weight: 700; color: #37474f; }
-.hist-usuario { font-size: 12px; color: #90a4ae; margin-left: auto; }
-.hist-cuerpo { display: flex; flex-direction: column; gap: 5px; }
-.hist-linea {
-  display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
-  font-size: 13px; color: #546e7a;
+.hist-cabecera {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 10px; border-bottom: 1px solid #eef2f6;
 }
+.hist-fecha { font-size: 14px; font-weight: 700; color: #37474f; }
+.hist-usuario { font-size: 12px; color: #90a4ae; margin-left: auto; }
+/* El cuerpo es la misma grilla de etiqueta + valor que "Datos del padrón"
+   (.ficha-datos / .dato): el historial se lee igual que el resto de la ficha. */
+.hist-cuerpo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 28px; padding-top: 4px;
+}
+.hist-cuerpo .dato { padding: 8px 0; }
+.hist-cuerpo .dato-valor { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .hist-pendiente { color: #ef6c00; font-weight: 600; }
 .hist-vencido { color: #c62828; font-weight: 600; }
 .hist-obs { font-style: italic; color: #78909c; }
+.hist-nota { font-size: 12px; color: #90a4ae; }
 
 
 /* ========== 14.9 APP DE CAMPO ==========

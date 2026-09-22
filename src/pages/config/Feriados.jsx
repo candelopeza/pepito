@@ -66,12 +66,6 @@ function Feriados() {
         subtitulo={`${feriados.length} fecha(s) cargadas · ${proximos.length} por venir`}
         botonVolver
       />
-
-      <Aviso tipo="alerta" titulo="De esta tabla depende que las intimaciones sean válidas">
-        El sistema anterior no contempla feriados: solo excluye sábados y domingos. Con este calendario cargado, los plazos se
-        computan como corresponde. Si falta un feriado, los plazos de esos días vencen antes de lo debido.
-      </Aviso>
-
       <div className="bloque-info">
         <strong>Verificación en vivo</strong>
         <span>

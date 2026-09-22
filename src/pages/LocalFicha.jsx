@@ -84,7 +84,6 @@ function LocalFicha() {
       <div className="ficha-situacion">
         <div className="ficha-estado">
           <BadgeEstado codigo={local.estado} />
-          <span className="ficha-estado-codigo">{local.estado}</span>
         </div>
 
         {local.plazo && (
@@ -199,8 +198,6 @@ function LocalFicha() {
         </div>
       ) : (
         <Vacio titulo="Sin relevamiento asociado">
-          El local no entró por un relevamiento de campo: puede venir de la importación del sistema anterior, del informe de la
-          prestataria o de un alta manual de la oficina.
         </Vacio>
       )}
 

@@ -229,8 +229,8 @@ function Informe9DJ() {
           Se van a registrar {aAplicar.length} contrato(s) con origen <strong>Informe 9 de Julio</strong>.
         </p>
         <p className="texto-chico">
-          Los locales afectados pasan a "Contrato vigente - 9 de Julio", que es un estado distinto del contrato presentado por el
-          titular: su vigencia solo se puede modificar por esta misma vía. Cada cambio de estado queda en la auditoría.
+          Los locales afectados pasan a "Contrato vigente - 9 de Julio", su vigencia solo se puede modificar por esta misma vía.
+          Cada cambio de estado queda en la auditoría.
         </p>
       </Confirmar>
     </>

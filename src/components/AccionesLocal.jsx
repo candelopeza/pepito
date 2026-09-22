@@ -374,11 +374,6 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
             <span>Prórrogas otorgadas hasta ahora: {prorrogasPrevias}</span>
           </div>
 
-          <Aviso tipo="info" titulo="Es el único plazo que se carga a mano">
-            Los plazos de notificación son fijos (5 y 3 días hábiles). La cantidad de días de la prórroga no lo es, y no tiene valor
-            por defecto: la define coordinación en cada caso. Se cuentan corridos desde hoy.
-          </Aviso>
-
           <Campo
             id="pro-dias"
             etiqueta="Días de plazo concedidos"
@@ -453,11 +448,6 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
             ayuda="Dejalo vacío para que lo asigne el sistema. Se carga a mano si el sistema de expedientes municipales no responde."
           />
 
-          <Aviso tipo="alerta" titulo="No es un estado terminal">
-            Desde un local en Expediente, coordinación puede reingresarlo al circuito: eso genera una nueva primera notificación y
-            reinicia la intimación desde cero.
-          </Aviso>
-
           <div className="form-acciones">
             <button
               type="button"
@@ -512,10 +502,6 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
       {/* ======================= BLOQUEO MANUAL ======================= */}
       <Modal abierto={abierta === 'bloquear'} etiqueta="EXCEPCIÓN" titulo="Bloqueo manual del recálculo" onCerrar={cerrar}>
         <div className="formulario formulario-modal">
-          <Aviso tipo="alerta" titulo="Usalo solo para casos excepcionales">
-            El local queda excluido del cálculo automático de estado: los plazos siguen pasando pero el sistema no lo mueve. Su
-            estado se congela en <strong>{local.estadoEtiqueta}</strong>.
-          </Aviso>
           <CampoTexto
             id="blo-motivo"
             etiqueta="Motivo del bloqueo"

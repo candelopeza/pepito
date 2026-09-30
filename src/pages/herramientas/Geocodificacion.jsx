@@ -22,9 +22,10 @@
    departamentos: sirve como filtro previo, no como validación.
    ============================================================================ */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
+import Grilla from '../../components/ui/Grilla';
 import Badge from '../../components/ui/Badge';
 import Aviso, { Vacio } from '../../components/ui/Aviso';
 import Modal from '../../components/ui/Modal';
@@ -38,6 +39,63 @@ function Geocodificacion() {
 
   const sinGeo = localesConEstado.filter((l) => l.sinGeo);
   const total = localesConEstado.length;
+
+  /* Las columnas necesitan setEditando (el botón de corregir), así que se
+     arman adentro del componente. */
+  const columnasSinGeo = useMemo(
+    () => [
+      {
+        field: 'nombreLocal',
+        headerName: 'Local',
+        flex: 1,
+        minWidth: 200,
+        renderCell: ({ row }) => (
+          <span className="celda-apilada">
+            <Link to={`/locales/${row.id}`} className="link-local">
+              {row.nombreLocal}
+            </Link>
+            <small className="celda-sub">N° {row.id}</small>
+          </span>
+        ),
+      },
+      {
+        field: 'direccion',
+        headerName: 'Dirección declarada',
+        flex: 1.2,
+        minWidth: 200,
+        renderCell: ({ row }) => row.direccion || <Badge color="rojo">Sin dirección</Badge>,
+      },
+      { field: 'motivoSinGeo', headerName: 'Por qué no se pudo', flex: 1, minWidth: 200 },
+      {
+        field: 'coordenadaRelevamiento',
+        headerName: 'Coordenada del relevamiento',
+        width: 240,
+        sortable: false,
+        filterable: false,
+        /* Se muestra a propósito, con la advertencia: es el dato que en el
+           sistema viejo se terminaba copiando al padrón. */
+        renderCell: () => (
+          <span className="celda-apilada texto-gris">
+            no se usa para el padrón
+            <small className="celda-sub">aunque exista, no es la ubicación del establecimiento</small>
+          </span>
+        ),
+      },
+      {
+        field: 'accion',
+        headerName: 'Acción',
+        width: 200,
+        sortable: false,
+        filterable: false,
+        renderCell: ({ row }) => (
+          <button type="button" className="btn-tabla" onClick={() => setEditando(row)}>
+            Corregir dirección
+          </button>
+        ),
+      },
+    ],
+    [],
+  );
 
   return (
     <>
@@ -58,42 +116,13 @@ function Geocodificacion() {
         </Vacio>
       ) : (
         <>
-          <table className="tabla-datos">
-            <thead>
-              <tr>
-                <th>Local</th>
-                <th>Dirección declarada</th>
-                <th>Por qué no se pudo</th>
-                <th>Coordenada del relevamiento</th>
-                <th>Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sinGeo.map((l) => (
-                <tr key={l.id}>
-                  <td>
-                    <Link to={`/locales/${l.id}`} className="link-local">
-                      {l.nombreLocal}
-                    </Link>
-                    <small className="celda-sub">N° {l.id}</small>
-                  </td>
-                  <td>{l.direccion || <Badge color="rojo">Sin dirección</Badge>}</td>
-                  <td>{l.motivoSinGeo}</td>
-                  {/* Se muestra a propósito, con la advertencia: es el dato que
-                      en el sistema viejo se terminaba copiando al padrón. */}
-                  <td className="texto-gris">
-                    no se usa para el padrón
-                    <small className="celda-sub">aunque exista, no es la ubicación del establecimiento</small>
-                  </td>
-                  <td>
-                    <button type="button" className="btn-tabla" onClick={() => setEditando(l)}>
-                      Corregir dirección
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Grilla
+            filas={sinGeo}
+            columnas={columnasSinGeo}
+            nombreArchivo="locales-sin-coordenada"
+            vacio="Todos los locales tienen coordenada."
+            alto="auto"
+          />
         </>
       )}
 

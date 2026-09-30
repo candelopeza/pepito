@@ -29,17 +29,17 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import DeleteIcon from '@mui/icons-material/Delete';
+import LockIcon from '@mui/icons-material/Lock';
 import PageHeader from '../components/ui/PageHeader';
 import Modal from '../components/ui/Modal';
 import Confirmar from '../components/ui/Confirmar';
 import Grilla from '../components/ui/Grilla';
 import { BadgeEstado } from '../components/ui/Badge';
-import { CampoSelect } from '../components/ui/Campo';
 import FormLocal from '../components/FormLocal';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
-import { LISTA_ESTADOS } from '../dominio/estados';
+import { LISTA_ESTADOS, etiquetaEstado } from '../dominio/estados';
 import { fmtFecha } from '../dominio/fechas';
 
 const LOCAL_VACIO = {
@@ -58,7 +58,7 @@ const LOCAL_VACIO = {
 function Local() {
   const { rol } = useRol();
   const navegar = useNavigate();
-  const { localesConEstado, rubros, guardarLocal, eliminarLocal } = useDatos();
+  const { localesConEstado, guardarLocal, eliminarLocal } = useDatos();
   const puedeEditarLocales = puedeEditar(rol, 'locales');
 
   /* ---------- Lo que puede venir pedido desde el Inicio ----------
@@ -77,13 +77,12 @@ function Local() {
   const [params, setParams] = useSearchParams();
   const estadoPedido = params.get('estado') ?? '';
 
-  const [buscar, setBuscar] = useState('');
-  const [buscarCuit, setBuscarCuit] = useState('');
-  const [filtroEstado, setFiltroEstado] = useState(
-    // Un código inventado en la URL dejaría la grilla vacía sin explicación.
-    () => (LISTA_ESTADOS.some((e) => e.codigo === estadoPedido) ? estadoPedido : ''),
+  /* Solo lectura: lo fija la URL al entrar y se limpia desde el aviso de abajo.
+     Un código inventado en la URL dejaría la grilla vacía sin explicación, así
+     que se valida contra la lista de estados. */
+  const [filtroEstado, setFiltroEstado] = useState(() =>
+    LISTA_ESTADOS.some((e) => e.codigo === estadoPedido) ? estadoPedido : '',
   );
-  const [filtroRubro, setFiltroRubro] = useState('');
   const [seleccion, setSeleccion] = useState(
     // El permiso se respeta igual que en el botón "+": sin `rolesEdicion` el
     // parámetro no abre nada.
@@ -130,7 +129,13 @@ function Local() {
             <BadgeEstado codigo={row.estado} />
             {/* El candado marca los locales excluidos del recálculo. Sin esto,
                 un local bloqueado parece uno normal que no avanza. */}
-            {row.bloqueado && <span title={row.bloqueadoMotivo}> 🔒</span>}
+            {/* El candado marca los locales excluidos del recálculo. Va como
+                icono y no como emoji: los emoji los dibuja cada sistema
+                operativo a su manera y desentonan con el resto de la interfaz,
+                que usa los iconos de Material. */}
+            {row.bloqueado && (
+              <LockIcon fontSize="inherit" titleAccess={row.bloqueadoMotivo} sx={{ ml: 0.5, color: '#78909c' }} />
+            )}
           </span>
         ),
       },
@@ -194,27 +199,19 @@ function Local() {
     [puedeEditarLocales, navegar],
   );
 
-  const filas = useMemo(() => {
-    const q = buscar.trim().toLowerCase();
-    const qc = buscarCuit.replace(/\D/g, '');
+  /* LA BÚSQUEDA Y LOS FILTROS SON LOS DE LA GRILLA.
+     Antes esta pantalla tenía dos buscadores y dos desplegables propios encima
+     de la tabla, que hacían lo mismo que el buscador rápido y los filtros por
+     columna del Data Grid. Dos filtros sobre los mismos datos confunden: si uno
+     buscaba arriba y filtraba en la columna, el resultado salía de la
+     combinación y no había forma de ver por qué faltaba una fila.
 
-    return localesConEstado.filter((l) => {
-      // El buscador general mira nombre, razón social, dirección e id legacy:
-      // el pliego pide "búsqueda por cualquier campo" y en la práctica se
-      // busca por lo que uno recuerda, que nunca es el campo que corresponde.
-      const enTexto =
-        !q ||
-        [l.nombreLocal, l.razonSocial, l.direccion, l.idLegacy, String(l.id)]
-          .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(q));
-
-      const enCuit = !qc || String(l.cuit).replace(/\D/g, '').includes(qc);
-      const enEstado = !filtroEstado || l.estado === filtroEstado;
-      const enRubro = !filtroRubro || l.rubro === filtroRubro;
-
-      return enTexto && enCuit && enEstado && enRubro;
-    });
-  }, [localesConEstado, buscar, buscarCuit, filtroEstado, filtroRubro]);
+     Lo único que queda acá es el filtro que llega POR URL: el tablero manda a
+     /locales?estado=COMPLETAR_DATOS y esa lista tiene que aparecer ya filtrada. */
+  const filas = useMemo(
+    () => (filtroEstado ? localesConEstado.filter((l) => l.estado === filtroEstado) : localesConEstado),
+    [localesConEstado, filtroEstado],
+  );
 
   return (
     <>
@@ -225,36 +222,31 @@ function Local() {
         botonVolver
       />
 
-      {/* ---------- Filtros por estado y rubro ----------
-          Van fuera de la grilla porque son los dos que se usan siempre. */}
-      <div className="filtros-fila">
-        <CampoSelect
-          id="filtro-estado"
-          etiqueta="Filtrar por estado"
-          valor={filtroEstado}
-          onChange={setFiltroEstado}
-          opciones={LISTA_ESTADOS.map((e) => ({ id: e.codigo, etiqueta: e.etiqueta }))}
-          vacio="Todos los estados"
-        />
-        <CampoSelect
-          id="filtro-rubro"
-          etiqueta="Filtrar por rubro"
-          valor={filtroRubro}
-          onChange={setFiltroRubro}
-          opciones={rubros.map((r) => ({ id: r.nombre, etiqueta: r.nombre }))}
-          vacio="Todos los rubros"
-        />
-      </div>
+      {filtroEstado && (
+        <div className="filtro-activo">
+          <span>
+            Mostrando solo los locales en estado <strong>{etiquetaEstado(filtroEstado)}</strong>.
+          </span>
+          <button
+            type="button"
+            className="btn-secundario"
+            onClick={() => {
+              setFiltroEstado('');
+              const resto = new URLSearchParams(params);
+              resto.delete('estado');
+              setParams(resto, { replace: true });
+            }}
+          >
+            Ver todo el padrón
+          </button>
+        </div>
+      )}
 
       <Grilla
         filas={filas}
         columnas={columnas}
         nombreArchivo="padron-locales"
         vacio="Ningún local coincide con la búsqueda."
-        buscadores={[
-          { placeholder: 'Buscar por nombre, razón social o dirección...', valor: buscar, onChange: setBuscar },
-          { placeholder: 'Buscar por CUIT...', valor: buscarCuit, onChange: setBuscarCuit },
-        ]}
         botones={
           puedeEditarLocales && (
             <button

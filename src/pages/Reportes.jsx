@@ -21,6 +21,7 @@
    ============================================================================ */
 
 import PageHeader from '../components/ui/PageHeader';
+import Grilla from '../components/ui/Grilla';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import { useDatos } from '../datos/datosContexto';
 import { fmtFecha, hoyISO } from '../dominio/fechas';
@@ -35,8 +36,23 @@ function Metrica({ valor, etiqueta, color = 'azul', ayuda }) {
   );
 }
 
+/* El rendimiento por agente. Las filas NO tienen `id` (la clave es el nombre
+   del agente), así que la grilla lo recibe por `idFila`. */
+const COLUMNAS_AGENTES = [
+  { field: 'agente', headerName: 'Agente', flex: 1, minWidth: 200 },
+  { field: 'relevamientos', headerName: 'Relevamientos', width: 160 },
+  { field: 'entregas', headerName: 'Entregas registradas', width: 200 },
+  {
+    field: 'total',
+    headerName: 'Total',
+    width: 120,
+    valueGetter: (_v, row) => row.relevamientos + row.entregas,
+    renderCell: ({ row }) => <strong>{row.relevamientos + row.entregas}</strong>,
+  },
+];
+
 function Reportes() {
-  const { indicadores, secuencias } = useDatos();
+  const { indicadores } = useDatos();
   const i = indicadores();
 
   const mes = new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
@@ -148,28 +164,14 @@ function Reportes() {
       {i.porAgente.length === 0 ? (
         <Vacio titulo="Sin producción registrada" />
       ) : (
-        <table className="tabla-datos">
-          <thead>
-            <tr>
-              <th>Agente</th>
-              <th>Relevamientos</th>
-              <th>Entregas registradas</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {i.porAgente.map((a) => (
-              <tr key={a.agente}>
-                <td>{a.agente}</td>
-                <td>{a.relevamientos}</td>
-                <td>{a.entregas}</td>
-                <td>
-                  <strong>{a.relevamientos + a.entregas}</strong>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Grilla
+          filas={i.porAgente}
+          columnas={COLUMNAS_AGENTES}
+          idFila={(fila) => fila.agente}
+          nombreArchivo="rendimiento-por-agente"
+          vacio="Todavía no hay actividad registrada por agente."
+          alto="auto"
+        />
       )}
     </>
   );

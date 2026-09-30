@@ -26,9 +26,10 @@
    distinto del de un contrato presentado por el titular.
    ============================================================================ */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
+import Grilla from '../../components/ui/Grilla';
 import Badge from '../../components/ui/Badge';
 import Aviso, { Vacio } from '../../components/ui/Aviso';
 import Confirmar from '../../components/ui/Confirmar';
@@ -98,8 +99,72 @@ function Informe9DJ() {
   const aAplicar = analisis.filter((a) => !excluidas.includes(a.indice));
   const dudosas = analisis.filter((a) => a.accion === 'dudosa');
 
-  const alternar = (indice) =>
-    setExcluidas((prev) => (prev.includes(indice) ? prev.filter((x) => x !== indice) : [...prev, indice]));
+  /* Va memorizada porque las columnas de la grilla dependen de ella: si
+     cambiara de identidad en cada render, las columnas se rearmarían solas. */
+  const alternar = useCallback(
+    (indice) =>
+      setExcluidas((prev) => (prev.includes(indice) ? prev.filter((x) => x !== indice) : [...prev, indice])),
+    [],
+  );
+
+  /* Las filas del informe ya analizadas. La columna "Aplicar" mantiene el
+     checkbox propio en vez de usar la selección del Data Grid: acá lo
+     seleccionado no es una selección temporal, es la decisión de qué filas se
+     van a aplicar, y viene marcada por defecto. */
+  const columnasAnalisis = useMemo(
+    () => [
+      {
+        field: 'aplicar',
+        headerName: 'Aplicar',
+        width: 90,
+        sortable: false,
+        filterable: false,
+        valueGetter: (_v, row) => (excluidas.includes(row.indice) ? 'No' : 'Sí'),
+        renderCell: ({ row }) => (
+          <input
+            type="checkbox"
+            checked={!excluidas.includes(row.indice)}
+            onChange={() => alternar(row.indice)}
+            aria-label={`Aplicar la fila de ${row.razonSocial}`}
+          />
+        ),
+      },
+      { field: 'cuit', headerName: 'CUIT informado', width: 150 },
+      { field: 'razonSocial', headerName: 'Razón social', flex: 1, minWidth: 200 },
+      { field: 'direccion', headerName: 'Dirección', flex: 1, minWidth: 180 },
+      { field: 'numeroContrato', headerName: 'Contrato', width: 150 },
+      {
+        field: 'vencimiento',
+        headerName: 'Vence',
+        width: 120,
+        renderCell: ({ row }) => fmtFecha(row.vencimiento),
+      },
+      {
+        field: 'accion',
+        headerName: 'Qué haría',
+        flex: 1.2,
+        minWidth: 260,
+        renderCell: ({ row }) => (
+          <span className="celda-apilada">
+            <span>
+              {row.accion === 'alta' && <Badge color="azul">Alta de local</Badge>}
+              {row.accion === 'actualiza' && <Badge color="verde">Actualiza existente</Badge>}
+              {row.accion === 'dudosa' && <Badge color="naranja">Coincidencia dudosa</Badge>}
+            </span>
+            <small className="celda-sub">{row.detalle}</small>
+            {row.local && (
+              <small className="celda-sub">
+                <Link to={`/locales/${row.local.id}`} className="link-local">
+                  Ver el local
+                </Link>
+              </small>
+            )}
+          </span>
+        ),
+      },
+    ],
+    [excluidas, alternar],
+  );
 
   return (
     <>
@@ -134,51 +199,15 @@ function Informe9DJ() {
             </Aviso>
           )}
 
-          <table className="tabla-datos">
-            <thead>
-              <tr>
-                <th>Aplicar</th>
-                <th>CUIT informado</th>
-                <th>Razón social</th>
-                <th>Dirección</th>
-                <th>Contrato</th>
-                <th>Vence</th>
-                <th>Qué haría</th>
-              </tr>
-            </thead>
-            <tbody>
-              {analisis.map((a) => (
-                <tr key={a.indice} className={a.accion === 'dudosa' ? 'fila-dudosa' : ''}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={!excluidas.includes(a.indice)}
-                      onChange={() => alternar(a.indice)}
-                      aria-label={`Aplicar la fila de ${a.razonSocial}`}
-                    />
-                  </td>
-                  <td>{a.cuit}</td>
-                  <td>{a.razonSocial}</td>
-                  <td>{a.direccion}</td>
-                  <td>{a.numeroContrato}</td>
-                  <td>{fmtFecha(a.vencimiento)}</td>
-                  <td>
-                    {a.accion === 'alta' && <Badge color="azul">Alta de local</Badge>}
-                    {a.accion === 'actualiza' && <Badge color="verde">Actualiza existente</Badge>}
-                    {a.accion === 'dudosa' && <Badge color="naranja">Coincidencia dudosa</Badge>}
-                    <small className="celda-sub">{a.detalle}</small>
-                    {a.local && (
-                      <small className="celda-sub">
-                        <Link to={`/locales/${a.local.id}`} className="link-local">
-                          Ver el local
-                        </Link>
-                      </small>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Grilla
+            filas={analisis}
+            columnas={columnasAnalisis}
+            idFila={(fila) => fila.indice}
+            nombreArchivo="informe-9-de-julio"
+            vacio="El archivo no trajo ninguna fila."
+            alto="auto"
+            filasPorPagina={25}
+          />
 
           <div className="barra-lote">
             <button type="button" className="btn-primario" disabled={aAplicar.length === 0} onClick={() => setConfirmar(true)}>

@@ -5,17 +5,14 @@
    Es donde alguien decide un acto administrativo, así que tiene que mostrar
    TODO el contexto de esa decisión en un solo lugar (sección 6.1).
 
-   CUATRO BLOQUES:
-     1. Situación actual   estado calculado, plazo en curso, documentación
-                           vigente, y las acciones que corresponden
+   TRES BLOQUES:
+     1. Situación actual   estado, plazo en curso, documentación vigente, y las
+                           acciones que corresponden
      2. Datos del padrón   incluido el relevamiento de origen
      3. Historial          todas las actuaciones en orden cronológico
-     4. Auditoría          cada cambio de estado, con actor, momento y motivo
 
-   EL BLOQUE 4 NO EXISTE EN EL SISTEMA VIEJO. Hoy el estado se sobrescribe sin
-   dejar rastro: no se puede saber cuándo un local pasó a expediente ni quién
-   lo movió. Sin eso no hay métricas de tiempo de ciclo y, sobre todo, no hay
-   nada que mostrar ante una impugnación (sección 5.2).
+   EL HISTORIAL ES LA TRAZABILIDAD. Cada trámite guarda quién lo registró y
+   cuándo, así que de ahí sale qué le pasó al local y en qué orden.
 
    LAS DOS COORDENADAS SE MUESTRAN SEPARADAS Y ETIQUETADAS. No es un detalle
    estético: son datos distintos con propósitos distintos, y confundirlos es el
@@ -30,7 +27,7 @@ import { Dato } from '../components/ui/Campo';
 import AccionesLocal from '../components/AccionesLocal';
 import HistorialActuaciones from '../components/HistorialActuaciones';
 import { useDatos } from '../datos/datosContexto';
-import { etiquetaEstado } from '../dominio/estados';
+
 import { ETIQUETA_DOCUMENTO } from '../dominio/actuaciones';
 import { fmtFecha, fmtFechaHora } from '../dominio/fechas';
 import { faltantesRegistrales } from '../dominio/reglas';
@@ -38,7 +35,7 @@ import { colorClasificacion, etiquetaClasificacion } from '../config/catalogos';
 
 function LocalFicha() {
   const { id } = useParams();
-  const { localPorId, actuacionesDeLocal, relevamientosDeLocal, auditoriaDeLocal, usuarios } = useDatos();
+  const { localPorId, actuacionesDeLocal, relevamientosDeLocal, usuarios } = useDatos();
 
   const local = localPorId(id);
 
@@ -57,7 +54,6 @@ function LocalFicha() {
 
   const actuaciones = actuacionesDeLocal(local.id);
   const relevamientos = relevamientosDeLocal(local.id);
-  const auditoria = [...auditoriaDeLocal(local.id)].reverse();
   const faltan = faltantesRegistrales(local);
   const relevamientoOrigen = relevamientos[0] ?? null;
 
@@ -210,39 +206,10 @@ function LocalFicha() {
       </div>
       <HistorialActuaciones actuaciones={actuaciones} usuarios={usuarios} />
 
-      {/* ================= 4. AUDITORÍA DE ESTADOS ================= */}
-      <div className="accesos-header">
-        <span>Historial de cambios de estado ({auditoria.length})</span>
-      </div>
-      {auditoria.length === 0 ? (
-        <Vacio titulo="Sin cambios registrados">
-          La auditoría empieza a llenarse con los cambios que se hacen desde la aplicación. Los estados que vienen de la
-          importación del sistema anterior no tienen historial: allá el estado se sobrescribía sin dejar rastro.
-        </Vacio>
-      ) : (
-        <table className="tabla-datos">
-          <thead>
-            <tr>
-              <th>Momento</th>
-              <th>De</th>
-              <th>A</th>
-              <th>Motivo</th>
-              <th>Actor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {auditoria.map((a) => (
-              <tr key={a.id}>
-                <td>{fmtFechaHora(a.momento)}</td>
-                <td>{a.estadoAnterior ? etiquetaEstado(a.estadoAnterior) : '—'}</td>
-                <td>{etiquetaEstado(a.estadoNuevo)}</td>
-                <td>{a.motivo}</td>
-                <td>{a.actor}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {/* LA AUDITORÍA DE ESTADOS se sacó de esta ficha: la base no tiene una
+          tabla de auditoría (se decidió no agregarla) y el historial del local
+          son sus trámites, que ya se muestran arriba con quién los registró y
+          cuándo. Una sección vacía permanente sugería que faltaba cargar algo. */}
     </>
   );
 }

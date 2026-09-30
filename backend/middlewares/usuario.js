@@ -7,22 +7,68 @@
 
    >>> PROVISORIO HASTA CiDiTuc (capítulo 8 del pliego) <<<
    Hoy no hay login. El front manda en cada pedido dos headers:
-     x-usuario-nombre: Mariano Agustín
+     x-usuario-nombre: el id_persona del agente en el padrón municipal
      x-usuario-rol:    coordinacion
    y el servidor les cree. Cuando exista el inicio de sesión único, este
-   archivo cambia para leer el token y buscar el usuario en la tabla `usuarios`.
-   Las rutas NO se tocan: siguen usando req.usuario y requiereRol().
+   archivo cambia para leer el token. Las rutas NO se tocan: siguen usando
+   req.usuario y requiereRol().
+
+   LO QUE SÍ SE VERIFICA CONTRA LA BASE: si el nombre coincide con un
+   `id_persona` de la tabla `usuario`, se toma el rol de SU tipo_usuario y no
+   el que vino en el header. Un agente cargado en la base no puede subirse el
+   rol editando un header; solo los que no están cargados usan lo declarado.
    ============================================================================ */
+
+import { consultar } from '../conexion-bd.js';
+import { ROL_POR_TUSUARIO } from '../mapeo.js';
 
 const ROLES_VALIDOS = ['relevador', 'notificador', 'administrativo', 'coordinacion', 'direccion', 'titular', 'sistema'];
 
+/* Caché de los usuarios de la base. Son tres filas hoy y no cambian entre
+   pedido y pedido: consultarlas en cada request es latencia regalada. Se
+   vence sola para que un alta nueva no obligue a reiniciar el servidor. */
+let cache = { usuarios: null, vence: 0 };
+const DURACION_CACHE_MS = 60_000;
+
+async function usuariosDeLaBase() {
+  if (cache.usuarios && Date.now() < cache.vence) return cache.usuarios;
+  const filas = await consultar('SELECT id_usuario, id_persona, id_tusuario FROM usuario WHERE habilita = 1');
+  const mapa = new Map(filas.map((u) => [String(u.idPersona).toLowerCase(), u]));
+  cache = { usuarios: mapa, vence: Date.now() + DURACION_CACHE_MS };
+  return mapa;
+}
+
 /* Se ejecuta en TODOS los pedidos (ver servidor.js). Deja en req.usuario
-   { nombre, rol } o null si no vino nada. */
-export function identificarUsuario(req, _res, next) {
-  const nombre = req.get('x-usuario-nombre');
-  const rol = req.get('x-usuario-rol');
-  req.usuario = nombre && ROLES_VALIDOS.includes(rol) ? { nombre: decodeURIComponent(nombre), rol } : null;
-  next();
+   { id, nombre, rol } o null si no vino nada identificable. */
+export async function identificarUsuario(req, _res, next) {
+  try {
+    const cabeceraNombre = req.get('x-usuario-nombre');
+    const cabeceraRol = req.get('x-usuario-rol');
+    if (!cabeceraNombre) {
+      req.usuario = null;
+      return next();
+    }
+
+    const nombre = decodeURIComponent(cabeceraNombre);
+    const registrado = (await usuariosDeLaBase()).get(nombre.toLowerCase());
+
+    if (registrado) {
+      // Está en la base: manda su tipo_usuario, no lo que dijo el header.
+      req.usuario = {
+        id: registrado.idUsuario,
+        nombre,
+        rol: ROL_POR_TUSUARIO[registrado.idTusuario] ?? 'sistema',
+      };
+    } else if (ROLES_VALIDOS.includes(cabeceraRol)) {
+      // No está cargado todavía: vale lo declarado, como antes.
+      req.usuario = { id: null, nombre, rol: cabeceraRol };
+    } else {
+      req.usuario = null;
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
 }
 
 /* Se pone en las rutas que necesitan un rol puntual.

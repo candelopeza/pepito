@@ -24,7 +24,20 @@ import { deLocal } from '../dominio/actuaciones.js';
 export function conEstado(base, refISO = hoyISO()) {
   const ctx = { hoy: refISO };
   return base.locales.map((l) => {
-    const codigo = resolverEstado(l, base.actuaciones, ctx);
+    /* EL ESTADO LO MANDA EL BACKEND. Cada local viene de GET /locales con su
+       `estado` ya resuelto a partir de lo que hay GUARDADO en la base
+       (local.id_estado y el último trámite del circuito, ver backend/mapeo.js).
+
+       Se recalcula con resolverEstado() solo si no vino, que hoy pasa cuando
+       estas funciones se usan con datos armados a mano: las pruebas de
+       pruebas/criterios.mjs y cualquier cálculo sobre un local que todavía no
+       se guardó.
+
+       POR QUÉ NO SE RECALCULA SIEMPRE: la base tiene 2.441 trámites cargados
+       por el área, y su estado es el resultado de ese trabajo. Recalcularlo
+       acá podría mostrar en pantalla algo distinto de lo que el área registró
+       a mano, y en ese caso la pantalla estaría mintiendo sobre el expediente. */
+    const codigo = l.estado ?? resolverEstado(l, base.actuaciones, ctx);
     const plazo = plazoEnCurso(l, base.actuaciones, refISO);
     return {
       ...l,
@@ -237,34 +250,60 @@ export function cedulas(base) {
    que permitir sumar métricas nuevas sin rehacer la pantalla. Por eso todo
    sale de este objeto y pages/Reportes.jsx solo lo dibuja.
    ============================================================================ */
+/* Con qué se muestran los registros que no tienen agente cargado. Es una
+   etiqueta de presentación: no existe ningún usuario que se llame así. */
+const SIN_AGENTE = 'Sin agente registrado';
+
 export function indicadores(base, locales, refISO = hoyISO()) {
   const desdeMes = `${refISO.slice(0, 7)}-01`;
-  const delMes = (fecha) => fecha >= desdeMes && fecha <= refISO;
+
+  /* `fecha` puede venir vacía: en el padrón real hay actuaciones cargadas sin
+     fecha (ocho presentaciones de documentación, al momento de escribir esto).
+     Un registro sin fecha no pertenece a ningún mes, así que no cuenta — pero
+     no puede tumbar la pantalla, que es lo que pasaba cuando esto hacía
+     `fecha.slice(0, 10)` directo sobre un null.
+
+     Se normaliza acá y no en cada llamada para que la regla sea una sola. */
+  const delMes = (fecha) => {
+    const dia = String(fecha ?? '').slice(0, 10);
+    return Boolean(dia) && dia >= desdeMes && dia <= refISO;
+  };
 
   const notificaciones = base.actuaciones.filter((a) => a.tipo === 'NOTIFICACION');
   const porInstancia = (n) => notificaciones.filter((a) => a.instancia === n);
   const entregadas = (lista) => lista.filter((a) => a.resultado && a.resultado !== 'NO_ENTREGADA');
 
-  const relevamientosMes = base.relevamientos.filter((r) => delMes(r.fechaHora.slice(0, 10)));
+  const relevamientosMes = base.relevamientos.filter((r) => delMes(r.fechaHora));
 
   /* Actuaciones del mes en curso. Se agregó para la sección "Indicadores del
      mes" del Inicio: ahí conviven con `relevamientosMes`, que ya estaba, y
      mezclar un número del mes con un total histórico en la misma franja da una
      lectura falsa. Los totales de abajo se dejaron intactos porque son los que
      usa pages/Reportes.jsx. */
-  const actuacionesMes = base.actuaciones.filter((a) => delMes(a.fecha.slice(0, 10)));
+  const actuacionesMes = base.actuaciones.filter((a) => delMes(a.fecha));
 
+  /* El rendimiento por agente.
+
+     >>> OJO CON LOS REGISTROS SIN AGENTE <<<
+     En el padrón real casi todos los relevamientos vienen sin usuario: la tabla
+     `usuario` de la base tiene tres filas y los trámites históricos no apuntan
+     a ninguna. Esos registros se agrupan bajo una etiqueta legible en vez de
+     quedar con el agente en null.
+
+     No es cosmético: la grilla necesita una clave única por fila, y una fila
+     con la clave en null tumbaba la pantalla de Reportes entera. */
   const porAgente = {};
   base.relevamientos.forEach((r) => {
-    porAgente[r.usuario] = porAgente[r.usuario] ?? { agente: r.usuario, relevamientos: 0, entregas: 0 };
-    porAgente[r.usuario].relevamientos += 1;
+    const agente = r.usuario || SIN_AGENTE;
+    porAgente[agente] = porAgente[agente] ?? { agente, relevamientos: 0, entregas: 0 };
+    porAgente[agente].relevamientos += 1;
   });
   notificaciones.forEach((a) => {
     if (!a.resultado) return;
     const u = base.usuarios.find((x) => x.id === a.notificadorId);
-    if (!u) return;
-    porAgente[u.nombre] = porAgente[u.nombre] ?? { agente: u.nombre, relevamientos: 0, entregas: 0 };
-    porAgente[u.nombre].entregas += 1;
+    const agente = u?.nombre || SIN_AGENTE;
+    porAgente[agente] = porAgente[agente] ?? { agente, relevamientos: 0, entregas: 0 };
+    porAgente[agente].entregas += 1;
   });
 
   return {

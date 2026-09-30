@@ -47,8 +47,6 @@ function Documentacion() {
   const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, usuarios, registrarDocumento } = useDatos();
   const puedeCargar = puedeEditar(rol, 'documentacion');
 
-  const [buscar, setBuscar] = useState('');
-  const [filtroTipo, setFiltroTipo] = useState('');
   const [modal, setModal] = useState(false);
   const [paso, setPaso] = useState(0);
   const [localId, setLocalId] = useState('');
@@ -148,15 +146,11 @@ function Documentacion() {
     [],
   );
 
-  const filas = useMemo(() => {
-    const q = buscar.trim().toLowerCase();
-    return documentos.filter((d) => {
-      const enTexto =
-        !q || [d.nombreLocal, d.numero, d.expedienteTramite].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
-      const enTipo = !filtroTipo || d.tipo === filtroTipo;
-      return enTexto && enTipo;
-    });
-  }, [documentos, buscar, filtroTipo]);
+  /* LA BÚSQUEDA ES LA DE LA GRILLA. Esta pantalla tenía su propio buscador
+     encima de la tabla, que hacía lo mismo que el buscador rápido del Data
+     Grid. Con los dos puestos, el resultado salía de combinarlos y no había
+     forma de entender por qué faltaba una fila. */
+  const filas = documentos;
 
   const sinExpediente = documentos.filter((d) => !d.expedienteTramite && d.origen !== 'INFORME_9DJ').length;
 
@@ -176,16 +170,7 @@ function Documentacion() {
         </Aviso>
       )}
 
-      <div className="filtros-fila">
-        <CampoSelect
-          id="filtro-tipo-doc"
-          etiqueta="Filtrar por tipo"
-          valor={filtroTipo}
-          onChange={setFiltroTipo}
-          opciones={TIPOS_DOCUMENTO.map((t) => ({ id: t, etiqueta: ETIQUETA_DOCUMENTO[t] }))}
-          vacio="Todos los tipos"
-        />
-      </div>
+
 
       <Grilla
         filas={filas}
@@ -193,7 +178,6 @@ function Documentacion() {
         nombreArchivo="documentacion"
         vacio="Todavía no hay documentación registrada."
         ordenInicial={[{ field: 'fechaEmision', sort: 'desc' }]}
-        buscadores={[{ placeholder: 'Buscar por local, número o expediente...', valor: buscar, onChange: setBuscar }]}
         botones={
           puedeCargar && (
             <button

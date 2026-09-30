@@ -6,7 +6,9 @@
   "description": "API del sistema Grandes Generadores. Node + Express sobre MariaDB.",
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env servidor.js",
-    "start": "node --env-file-if-exists=.env servidor.js"
+    "start": "node --env-file-if-exists=.env servidor.js",
+    "probar": "node --env-file-if-exists=.env probar-conexion.js",
+    "inspeccionar": "node --env-file-if-exists=.env inspeccionar-base.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

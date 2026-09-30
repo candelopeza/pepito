@@ -26,11 +26,12 @@
    cuántos registros dependen del ítem y avisa antes de la baja.
    ============================================================================ */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Campo, { CampoSelect } from './ui/Campo';
 import Modal from './ui/Modal';
 import Confirmar from './ui/Confirmar';
 import Aviso, { Vacio } from './ui/Aviso';
+import Grilla from './ui/Grilla';
 import { useDatos } from '../datos/datosContexto';
 
 function CrudCatalogo({ clave, titulo, campos, columnas, enUso, soloLectura = false, orden }) {
@@ -42,6 +43,65 @@ function CrudCatalogo({ clave, titulo, campos, columnas, enUso, soloLectura = fa
   const [errores, setErrores] = useState({});
 
   const lista = orden ? [...datos[clave]].sort(orden) : datos[clave];
+
+  /* Las columnas del Data Grid salen de los mismos `campos` que ya declara cada
+     pantalla: no hay que describir la tabla dos veces. `render` de un campo se
+     convierte en `renderCell` de la columna.
+
+     `flex` reparte el ancho sobrante entre las columnas de datos; las dos
+     últimas (en uso y acciones) van con ancho fijo porque su contenido no
+     crece. */
+  const columnasGrilla = useMemo(() => {
+    const deDatos = campos
+      .filter((c) => columnas.includes(c.id))
+      .map((c) => ({
+        field: c.id,
+        headerName: c.etiqueta,
+        flex: 1,
+        minWidth: 140,
+        ...(c.render ? { renderCell: ({ row }) => c.render(row) } : {}),
+      }));
+
+    if (enUso) {
+      deDatos.push({
+        field: '__enUso',
+        headerName: 'En uso',
+        width: 110,
+        // Se calcula al vuelo, así que hay que decirle a la grilla de dónde
+        // sacar el valor para poder ordenar y filtrar por esta columna.
+        valueGetter: (_v, row) => enUso(row),
+      });
+    }
+
+    if (!soloLectura) {
+      deDatos.push({
+        field: '__acciones',
+        headerName: 'Acciones',
+        width: 190,
+        sortable: false,
+        filterable: false,
+        renderCell: ({ row }) => (
+          <span className="celda-acciones">
+            <button
+              type="button"
+              className="btn-tabla"
+              onClick={() => {
+                setErrores({});
+                setEditando(row);
+              }}
+            >
+              Editar
+            </button>
+            <button type="button" className="btn-tabla" onClick={() => setAEliminar(row)}>
+              Eliminar
+            </button>
+          </span>
+        ),
+      });
+    }
+
+    return deDatos;
+  }, [campos, columnas, enUso, soloLectura]);
 
   function abrirNuevo() {
     const vacio = {};
@@ -82,50 +142,13 @@ function CrudCatalogo({ clave, titulo, campos, columnas, enUso, soloLectura = fa
       {lista.length === 0 ? (
         <Vacio titulo={`Todavía no hay ningún ${titulo}`} />
       ) : (
-        <table className="tabla-datos">
-          <thead>
-            <tr>
-              {campos
-                .filter((c) => columnas.includes(c.id))
-                .map((c) => (
-                  <th key={c.id}>{c.etiqueta}</th>
-                ))}
-              {enUso && <th>En uso</th>}
-              {!soloLectura && <th>Acciones</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {lista.map((item) => (
-              <tr key={item.id}>
-                {campos
-                  .filter((c) => columnas.includes(c.id))
-                  .map((c) => (
-                    <td key={c.id}>
-                      {c.render ? c.render(item) : String(item[c.id] ?? '—')}
-                    </td>
-                  ))}
-                {enUso && <td>{enUso(item)}</td>}
-                {!soloLectura && (
-                  <td className="celda-acciones">
-                    <button
-                      type="button"
-                      className="btn-tabla"
-                      onClick={() => {
-                        setErrores({});
-                        setEditando(item);
-                      }}
-                    >
-                      Editar
-                    </button>
-                    <button type="button" className="btn-tabla" onClick={() => setAEliminar(item)}>
-                      Eliminar
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Grilla
+          filas={lista}
+          columnas={columnasGrilla}
+          nombreArchivo={clave}
+          vacio={`Todavía no hay ningún ${titulo}`}
+          alto="auto"
+        />
       )}
 
       {/* ---------- Alta / edición ---------- */}

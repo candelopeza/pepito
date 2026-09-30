@@ -23,10 +23,22 @@
    El clic en el fondo usa onMouseDown y compara el elemento, así arrastrar
    para seleccionar texto no cierra la ventana.
 
+   >>> SE DIBUJA CON UN PORTAL, DIRECTO EN <body> <<<
+   No donde está escrito en el JSX. Es obligatorio: un modal abierto desde un
+   botón que vive DENTRO de una tabla (el Data Grid) quedaba encerrado en ella.
+   `position: fixed` deja de referirse a la pantalla cuando algún ancestro tiene
+   `transform`, `filter` o `contain`, y el Data Grid usa transform para
+   desplazar las filas. Resultado: la ventana aparecía adentro de la tabla,
+   recortada y sin poder verse entera.
+
+   El portal la saca de ese árbol y la cuelga del <body>, donde `position: fixed`
+   vuelve a significar "respecto de la pantalla".
+
    ESTILOS: App.css sección 12.
    ============================================================================ */
 
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 function Modal({ abierto, etiqueta, titulo, ancho = 'normal', onCerrar, children }) {
   useEffect(() => {
@@ -54,7 +66,7 @@ function Modal({ abierto, etiqueta, titulo, ancho = 'normal', onCerrar, children
     if (e.target === e.currentTarget) onCerrar();
   }
 
-  return (
+  return createPortal(
     <div className="modal-fondo" onMouseDown={alTocarFondo}>
       <div
         className={`modal-caja ${ancho === 'ancho' ? 'modal-caja-ancha' : ''}`}
@@ -76,7 +88,8 @@ function Modal({ abierto, etiqueta, titulo, ancho = 'normal', onCerrar, children
 
         <div className="modal-cuerpo">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

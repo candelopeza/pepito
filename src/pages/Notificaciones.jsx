@@ -44,10 +44,54 @@ import { faltantesRegistrales } from '../dominio/reglas';
 import { fmtFecha, fmtFechaHora, hoyISO } from '../dominio/fechas';
 import { ordenarPorProximidad } from '../dominio/geo';
 
+/* Columnas de la COLA DE EMISIÓN (la primera tabla). Las de las cédulas ya
+   emitidas se arman adentro del componente porque dependen de los datos.
+
+   La columna de acciones es la que importa: desde acá se emite la cédula sin
+   entrar a la ficha del local. */
+const COLUMNAS_COLA = [
+  {
+    field: 'nombreLocal',
+    headerName: 'Local',
+    flex: 1.2,
+    minWidth: 200,
+    renderCell: ({ row }) => (
+      <span className="celda-apilada">
+        <Link to={`/locales/${row.id}`} className="link-local">
+          {row.nombreLocal}
+        </Link>
+        <small className="celda-sub">{row.razonSocial || 'sin razón social'}</small>
+      </span>
+    ),
+  },
+  { field: 'direccion', headerName: 'Dirección', flex: 1.2, minWidth: 180 },
+  {
+    field: 'instancia',
+    headerName: 'Instancia',
+    width: 150,
+    // Sale del estado, así que se calcula: sin valueGetter no se podría
+    // ordenar ni filtrar por esta columna.
+    valueGetter: (_v, row) => (row.estado.startsWith('NOTIF2') ? '2° notificación' : '1° notificación'),
+  },
+  {
+    field: 'estado',
+    headerName: 'Estado',
+    width: 210,
+    renderCell: ({ row }) => <BadgeEstado codigo={row.estado} />,
+  },
+  {
+    field: 'acciones',
+    headerName: 'Acciones',
+    width: 260,
+    sortable: false,
+    filterable: false,
+    renderCell: ({ row }) => <AccionesLocal local={row} compacto />,
+  },
+];
+
 function Notificaciones() {
   const { localesConEstado, cedulas, localPorId, generarCedula } = useDatos();
 
-  const [buscar, setBuscar] = useState('');
   const [soloSinImprimir, setSoloSinImprimir] = useState(false);
   const [viendo, setViendo] = useState(null);
   const [lote, setLote] = useState(false);
@@ -151,15 +195,16 @@ function Notificaciones() {
     [],
   );
 
-  const filas = useMemo(() => {
-    const q = buscar.trim().toLowerCase();
-    return emitidas.filter((c) => {
-      const enTexto =
-        !q || [c.numeroCedula, c.local?.nombreLocal, c.local?.direccion].filter(Boolean).some((v) => v.toLowerCase().includes(q));
-      const enImpresion = !soloSinImprimir || !c.impresaEn;
-      return enTexto && enImpresion;
-    });
-  }, [emitidas, buscar, soloSinImprimir]);
+  /* LA BÚSQUEDA ES LA DE LA GRILLA. Esta pantalla tenía su propio buscador
+     encima de la tabla, que hacía lo mismo que el buscador rápido del Data
+     Grid. Con los dos puestos, el resultado salía de combinarlos y no había
+     forma de entender por qué faltaba una fila. */
+  /* El filtro de "solo sin imprimir" SÍ se queda: no es una búsqueda, es una
+     vista distinta de la misma lista y no existe como columna. */
+  const filas = useMemo(
+    () => (soloSinImprimir ? emitidas.filter((c) => !c.impresaEn) : emitidas),
+    [emitidas, soloSinImprimir],
+  );
 
   return (
     <>
@@ -193,37 +238,13 @@ function Notificaciones() {
             </div>
           )}
 
-          <table className="tabla-datos tabla-bandeja">
-            <thead>
-              <tr>
-                <th>Local</th>
-                <th>Dirección</th>
-                <th>Instancia</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cola.map((l) => (
-                <tr key={l.id}>
-                  <td>
-                    <Link to={`/locales/${l.id}`} className="link-local">
-                      {l.nombreLocal}
-                    </Link>
-                    <small className="celda-sub">{l.razonSocial || 'sin razón social'}</small>
-                  </td>
-                  <td>{l.direccion}</td>
-                  <td>{l.estado.startsWith('NOTIF2') ? '2° notificación' : '1° notificación'}</td>
-                  <td>
-                    <BadgeEstado codigo={l.estado} />
-                  </td>
-                  <td>
-                    <AccionesLocal local={l} compacto />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Grilla
+            filas={cola}
+            columnas={COLUMNAS_COLA}
+            nombreArchivo="cola-de-emision"
+            vacio="No hay locales esperando cédula."
+            alto="auto"
+          />
         </>
       )}
 
@@ -238,7 +259,6 @@ function Notificaciones() {
         nombreArchivo="cedulas"
         vacio="Todavía no se emitió ninguna cédula."
         ordenInicial={[{ field: 'fecha', sort: 'desc' }]}
-        buscadores={[{ placeholder: 'Buscar por N° de cédula, local o dirección...', valor: buscar, onChange: setBuscar }]}
         botones={
           <button
             type="button"

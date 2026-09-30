@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node pruebas/criterios.mjs"
+    "test": "node pruebas/criterios.mjs",
+    "humo": "node pruebas/humo-api.mjs",
+    "criterios": "node pruebas/criterios-estado.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

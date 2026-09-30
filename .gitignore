@@ -28,3 +28,4 @@ dist-ssr
 
 # Backend: credenciales de la base, nunca al repo
 backend/.env
+backend/revision/

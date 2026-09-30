@@ -30,8 +30,9 @@
    columna aparece o desaparece; no hay nada más que tocar.
    ============================================================================ */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import AddIcon from '@mui/icons-material/Add';
 import PageHeader from '../components/ui/PageHeader';
 import Grilla from '../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
@@ -50,8 +51,12 @@ const ROLES_METRICAS_CAMPO = ['coordinacion', 'direccion', 'administrador'];
 
 function Relevamiento() {
   const { rol } = useRol();
+<<<<<<< HEAD
   const { relevamientos, localesConEstado, localPorId, permisos } = useDatos();
   const [buscar, setBuscar] = useState('');
+=======
+  const { relevamientos, localesConEstado, localPorId } = useDatos();
+>>>>>>> origin/cande
 
   const veMetricasCampo = ROLES_METRICAS_CAMPO.includes(rol);
 
@@ -149,13 +154,68 @@ function Relevamiento() {
     [localPorId, veMetricasCampo],
   );
 
-  const filas = useMemo(() => {
-    const q = buscar.trim().toLowerCase();
-    if (!q) return relevamientos;
-    return relevamientos.filter((r) =>
-      [r.nombreLocal, r.direccionRelevada, r.usuario, r.rubro].filter(Boolean).some((v) => v.toLowerCase().includes(q)),
-    );
-  }, [relevamientos, buscar]);
+  /* LA BÚSQUEDA ES LA DE LA GRILLA. Esta pantalla tenía su propio buscador
+     encima de la tabla, que hacía lo mismo que el buscador rápido del Data
+     Grid. Con los dos puestos, el resultado salía de combinarlos y no había
+     forma de entender por qué faltaba una fila. */
+  const filas = relevamientos;
+
+  /* Las columnas necesitan la lista de relevamientos para mostrar quién
+     clasificó cada local, así que se arman acá y no como constante del módulo. */
+  const columnasPendientes = useMemo(
+    () => [
+      {
+        field: 'nombreLocal',
+        headerName: 'Local',
+        flex: 1.2,
+        minWidth: 200,
+        renderCell: ({ row }) => {
+          const rel = relevamientos.find((r) => r.localId === row.id);
+          return (
+            <span className="celda-apilada">
+              <Link to={`/locales/${row.id}`} className="link-local">
+                {row.nombreLocal}
+              </Link>
+              <small className="celda-sub">{rel ? rel.usuario : 'sin relevamiento'}</small>
+            </span>
+          );
+        },
+      },
+      { field: 'direccion', headerName: 'Dirección', flex: 1.2, minWidth: 180 },
+      {
+        field: 'clasifico',
+        headerName: 'Clasificó',
+        width: 180,
+        valueGetter: (_v, row) => {
+          const rel = relevamientos.find((r) => r.localId === row.id);
+          return rel ? etiquetaClasificacion(rel.clasificacion) : '—';
+        },
+        renderCell: ({ row }) => {
+          const rel = relevamientos.find((r) => r.localId === row.id);
+          return rel ? (
+            <Badge color={colorClasificacion(rel.clasificacion)}>{etiquetaClasificacion(rel.clasificacion)}</Badge>
+          ) : (
+            '—'
+          );
+        },
+      },
+      {
+        field: 'estado',
+        headerName: 'Estado',
+        width: 210,
+        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} />,
+      },
+      {
+        field: 'acciones',
+        headerName: 'Acciones',
+        width: 260,
+        sortable: false,
+        filterable: false,
+        renderCell: ({ row }) => <AccionesLocal local={row} compacto />,
+      },
+    ],
+    [relevamientos],
+  );
 
   return (
     <>
@@ -164,6 +224,7 @@ function Relevamiento() {
         titulo="RELEVAMIENTO Y CONTROL"
         subtitulo={`${relevamientos.length} relevamiento(s) cargados · ${pendientes.length} pendiente(s) de control`}
         botonVolver
+<<<<<<< HEAD
         acciones={
           puedeEditar(rol, 'relevar', permisos) && (
             <Link to="/campo/relevar" className="btn-primario">
@@ -171,6 +232,8 @@ function Relevamiento() {
             </Link>
           )
         }
+=======
+>>>>>>> origin/cande
       />
 
       {/* ================= PENDIENTES DE CONTROL ================= */}
@@ -181,46 +244,20 @@ function Relevamiento() {
       {pendientes.length === 0 ? (
         <Vacio titulo="Todo controlado">No hay relevamientos esperando el control administrativo.</Vacio>
       ) : (
-        <table className="tabla-datos tabla-bandeja">
-          <thead>
-            <tr>
-              <th>Local</th>
-              <th>Dirección</th>
-              <th>Clasificó</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pendientes.map((l) => {
-              const rel = relevamientos.find((r) => r.localId === l.id);
-              return (
-                <tr key={l.id}>
-                  <td>
-                    <Link to={`/locales/${l.id}`} className="link-local">
-                      {l.nombreLocal}
-                    </Link>
-                    <small className="celda-sub">{rel ? rel.usuario : 'sin relevamiento'}</small>
-                  </td>
-                  <td>{l.direccion}</td>
-                  <td>
-                    {rel ? (
-                      <Badge color={colorClasificacion(rel.clasificacion)}>{etiquetaClasificacion(rel.clasificacion)}</Badge>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td>
-                    <BadgeEstado codigo={l.estado} />
-                  </td>
-                  <td>
-                    <AccionesLocal local={l} compacto />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <Grilla
+          filas={pendientes}
+          columnas={columnasPendientes}
+          nombreArchivo="relevamientos-pendientes"
+          vacio="No hay relevamientos esperando control."
+          alto="auto"
+          botones={
+            puedeEditar(rol, 'relevar') && (
+              <Link to="/campo/relevar" className="btn-icono btn-icono-verde" title="Nuevo relevamiento">
+                <AddIcon fontSize="small" />
+              </Link>
+            )
+          }
+        />
       )}
 
       {/* ================= LISTADO COMPLETO ================= */}
@@ -230,7 +267,6 @@ function Relevamiento() {
         nombreArchivo="relevamientos"
         vacio="Todavía no hay relevamientos cargados."
         ordenInicial={[{ field: 'fechaHora', sort: 'desc' }]}
-        buscadores={[{ placeholder: 'Buscar por local, dirección o agente...', valor: buscar, onChange: setBuscar }]}
       />
     </>
   );

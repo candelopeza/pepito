@@ -14,6 +14,7 @@ import express from 'express';
 import cors from 'cors';
 import { identificarUsuario } from './middlewares/usuario.js';
 import rutasLocales from './rutas/locales.js';
+import rutasActuaciones from './rutas/actuaciones.js';
 import rutasRelevamientos from './rutas/relevamientos.js';
 import rutasNotificaciones from './rutas/notificaciones.js';
 import rutasDocumentacion from './rutas/documentacion.js';
@@ -39,6 +40,7 @@ app.get('/salud', (_req, res) => {
 
 /* --- rutas, un archivo por recurso --------------------------------------- */
 app.use('/locales', rutasLocales);
+app.use('/actuaciones', rutasActuaciones);
 app.use('/relevamientos', rutasRelevamientos);
 app.use('/notificaciones', rutasNotificaciones);
 app.use('/documentacion', rutasDocumentacion);

@@ -1,3 +1,17 @@
+-- ############################################################################
+-- ##  OBSOLETO - NO EJECUTAR ESTE ARCHIVO
+-- ############################################################################
+-- Pertenece al esquema que se habia inventado antes de conocer la base real
+-- (tablas `locales`, `actuaciones`, `relevamientos`). Ese esquema NO existe.
+--
+-- La base real es smt_grandes_generadores, con 2.220 locales y 2.441 tramites
+-- cargados por el area. Este script empieza con un DROP TABLE y, si por error
+-- se corriera contra una base con esos nombres, borraria datos de trabajo.
+--
+-- Lo que SI hay que correr es sql/03-tablas-faltantes.sql.
+-- Se conserva solo como referencia historica del diseno original.
+-- ############################################################################
+
 -- ============================================================================
 -- backend/sql/01-crear-tablas.sql  —  ESQUEMA DE LA BASE
 -- ----------------------------------------------------------------------------

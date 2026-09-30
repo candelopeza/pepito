@@ -117,6 +117,12 @@ export const api = {
   catalogoEdicion: (catalogo, id, item) => put(`/configuracion/${catalogo}/${id}`, item),
   catalogoBaja: (catalogo, id) => borrar(`/configuracion/${catalogo}/${id}`),
 
+  // --- accesos (qué ve y qué modifica cada rol) ----------------------------
+  permisos: () => get('/configuracion/permisos'),
+  guardarPermiso: (modulo, rol, nivel) => put(`/configuracion/permisos/${modulo}/${rol}`, { nivel }),
+  restablecerPermisosDeRol: (rol) => borrar(`/configuracion/permisos/rol/${rol}`),
+  habilitarRol: (rol, habilitado) => put(`/configuracion/permisos/rol/${rol}`, { habilitado }),
+
   // --- padrón: escritura ----------------------------------------------------
   localAlta: (datos) => post('/locales', datos),
   localEdicion: (id, datos) => put(`/locales/${id}`, datos),

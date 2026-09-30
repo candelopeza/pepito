@@ -58,13 +58,8 @@ const LOCAL_VACIO = {
 function Local() {
   const { rol } = useRol();
   const navegar = useNavigate();
-<<<<<<< HEAD
-  const { localesConEstado, rubros, guardarLocal, eliminarLocal, permisos } = useDatos();
+  const { localesConEstado, guardarLocal, eliminarLocal, permisos } = useDatos();
   const puedeEditarLocales = puedeEditar(rol, 'locales', permisos);
-=======
-  const { localesConEstado, guardarLocal, eliminarLocal } = useDatos();
-  const puedeEditarLocales = puedeEditar(rol, 'locales');
->>>>>>> origin/cande
 
   /* ---------- Lo que puede venir pedido desde el Inicio ----------
      Dos parámetros opcionales, y los dos son SOLO ESTADO INICIAL: si la URL

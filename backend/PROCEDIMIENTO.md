@@ -162,19 +162,14 @@ haría falta una tabla `secuencia` con `SELECT ... FOR UPDATE`.
 
 Necesitan columnas que se decidió no agregar, y están en `sql/04-columnas-opcionales.sql`:
 
-<<<<<<< HEAD
-### 2.9 sql/02-datos-iniciales.sql
+- **Constancia de impresión** de la cédula (`tramite.impresa_por`, `impresa_en`).
+  `POST /notificaciones/:id/impresion` responde **501** en vez de fingir que
+  guardó: si devolviera 200 sin persistir, el área reimprimiría cédulas creyendo
+  que nunca salieron.
+- **Fusión de duplicados**: funciona igual, pero deja el rastro como texto en
+  `local.observacion` (`FUSIONADO EN LOCAL 567 ...`) en lugar de una columna.
 
-Carga lo necesario para que el sistema funcione: parámetros, plantilla,
-secuencias (arrancan en 1284 y 96, los últimos números del sistema viejo),
-rubros, feriados 2026 y usuarios. **No carga locales de prueba**: el padrón real
-viene del Excel del área.
-
-### 2.10 .gitignore
-
-Se agregó `backend/.env` al `.gitignore` de la raíz. `node_modules` ya estaba.
-
-### 2.11 Accesos: rol administrador, permisos_modulos y tipos_usuario
+### Accesos: rol administrador, permisos_modulos y tipos_usuario
 
 Se agregó el rol `administrador` al ENUM de `usuarios`. Es el perfil de control
 total: en el front ve y modifica todos los módulos (menos el portal del
@@ -207,25 +202,10 @@ hasta que se implementen y tienen que exigir rol administrador en el middleware:
 `PUT /configuracion/permisos/:modulo/:rol`, `PUT /configuracion/permisos/rol/:rol`
 y `DELETE /configuracion/permisos/rol/:rol`.
 
-## 3. Cómo se probó
-
-Se arrancó el servidor sin base de datos y se le pegó a varias rutas:
-
-| Pedido | Respuesta | Qué demuestra |
-|--------|-----------|---------------|
-| `GET /salud` | 200 | el servidor levanta y Express responde |
-| `GET /locales` | 500 `ECONNREFUSED 127.0.0.1:3306` | la ruta y el import del dominio funcionan; falta la base |
-| `POST /locales` | 501 con el nombre de la función pendiente | el patrón de pendientes |
-| `GET /configuracion/otro` | 404 | la lista blanca de catálogos |
-| `GET /noexiste` | 404 | el manejador de rutas inexistentes |
-=======
-- **Constancia de impresión** de la cédula (`tramite.impresa_por`, `impresa_en`).
-  `POST /notificaciones/:id/impresion` responde **501** en vez de fingir que
-  guardó: si devolviera 200 sin persistir, el área reimprimiría cédulas creyendo
-  que nunca salieron.
-- **Fusión de duplicados**: funciona igual, pero deja el rastro como texto en
-  `local.observacion` (`FUSIONADO EN LOCAL 567 ...`) en lugar de una columna.
->>>>>>> origin/cande
+El front pide `GET /configuracion/permisos` junto con el resto de la carga
+inicial. Si la base todavía no tiene estas dos tablas, esa llamada falla y el
+front sigue andando con el reparto por defecto del código (ver
+`src/datos/DatosProvider.jsx`).
 
 ## 4. Cómo ponerlo en marcha
 

@@ -9,14 +9,10 @@
      eliminarDeCatalogo             ->  DELETE /configuracion/:catalogo/:id
      parametros                     ->  GET    /configuracion/parametros
      plantillaCedula                ->  GET    /configuracion/plantilla
-<<<<<<< HEAD
-     guardarPlantilla               ->  PUT    /configuracion/plantilla
      permisos                       ->  GET    /configuracion/permisos
      guardarPermiso                 ->  PUT    /configuracion/permisos/:modulo/:rol   (SOLO rol administrador)
      restablecerPermisosDeRol       ->  DELETE /configuracion/permisos/rol/:rol       (SOLO rol administrador)
      habilitarRol                   ->  PUT    /configuracion/permisos/rol/:rol       (SOLO rol administrador) { habilitado }
-=======
->>>>>>> origin/cande
 
    GUARDAR parámetros y plantilla NO está soportado: viven en el código
    (backend/parametros-sistema.js) y no en una tabla, así que se cambian
@@ -80,9 +76,23 @@ router.get('/plantilla', async (_req, res, next) => {
   }
 });
 
-<<<<<<< HEAD
-/* Accesos: qué ve y qué modifica cada rol, y qué roles están apagados.
-   Devuelve la misma forma que guarda el front:
+/* PUT /configuracion/plantilla  ->  no soportado, por el mismo motivo. */
+router.put('/plantilla', (_req, res) => {
+  res.status(405).json({
+    error:
+      'La plantilla de la cédula está en backend/parametros-sistema.js y se edita ahí. ' +
+      'Es el candidato más claro a mudarse a la base si el área quiere redactarla por su cuenta.',
+  });
+});
+
+/* ---------------------------------------------------------------------------
+   ACCESOS  (qué ve y qué modifica cada rol, y qué roles están apagados)
+   ---------------------------------------------------------------------------
+   También van ANTES que /:catalogo, por el mismo motivo que parámetros y
+   plantilla: "permisos" no es un catálogo.
+   --------------------------------------------------------------------------- */
+
+/* Devuelve la misma forma que guarda el front:
      { modulos: { [modulo]: { [rol]: 'no' | 'ver' | 'editar' } },
        rolesDeshabilitados: ['relevador', ...] }
    Solo las diferencias respecto del reparto por defecto de src/config/modulos.js. */
@@ -100,15 +110,17 @@ router.get('/permisos', async (_req, res, next) => {
   }
 });
 
-=======
-/* PUT /configuracion/plantilla  ->  no soportado, por el mismo motivo. */
-router.put('/plantilla', (_req, res) => {
-  res.status(405).json({
-    error:
-      'La plantilla de la cédula está en backend/parametros-sistema.js y se edita ahí. ' +
-      'Es el candidato más claro a mudarse a la base si el área quiere redactarla por su cuenta.',
-  });
-});
+/* Las de escritura todavía no están implementadas: responden 501 con el nombre
+   de la función que falta. Cuando se implementen tienen que exigir rol
+   administrador (ver PROCEDIMIENTO.md, "Accesos"). */
+const pendiente = (nombre) => (_req, res) =>
+  res.status(501).json({ error: `Pendiente de implementar en el backend: ${nombre}` });
+
+// '/permisos/rol/:rol' va ANTES que '/permisos/:modulo/:rol': si no, Express
+// tomaría "rol" como nombre de módulo.
+router.put('/permisos/rol/:rol', pendiente('habilitarRol'));
+router.delete('/permisos/rol/:rol', pendiente('restablecerPermisosDeRol'));
+router.put('/permisos/:modulo/:rol', pendiente('guardarPermiso'));
 
 /* ---------------------------------------------------------------------------
    CATÁLOGOS
@@ -208,7 +220,6 @@ function definicion(req, res) {
   return cat;
 }
 
->>>>>>> origin/cande
 router.get('/:catalogo', async (req, res, next) => {
   try {
     const cat = definicion(req, res);
@@ -230,18 +241,6 @@ router.post('/:catalogo', requiereRol('coordinacion', 'direccion'), async (req, 
     if (!cat) return;
     if (cat.soloLectura) return res.status(405).json({ error: `El catálogo ${req.params.catalogo} no se edita` });
 
-<<<<<<< HEAD
-router.put('/parametros', pendiente('guardarParametros'));
-// '/permisos/rol/:rol' va ANTES que '/permisos/:modulo/:rol': si no, Express
-// tomaría "rol" como nombre de módulo.
-router.put('/permisos/rol/:rol', pendiente('habilitarRol'));
-router.delete('/permisos/rol/:rol', pendiente('restablecerPermisosDeRol'));
-router.put('/permisos/:modulo/:rol', pendiente('guardarPermiso'));
-router.put('/plantilla', pendiente('guardarPlantilla'));
-router.post('/:catalogo', pendiente('guardarEnCatalogo (alta)'));
-router.put('/:catalogo/:id', pendiente('guardarEnCatalogo (edición)'));
-router.delete('/:catalogo/:id', pendiente('eliminarDeCatalogo'));
-=======
     const error = cat.valida?.(req.body ?? {});
     if (error) return res.status(400).json({ error });
 
@@ -303,6 +302,5 @@ router.delete('/:catalogo/:id', requiereRol('coordinacion', 'direccion'), async 
     next(e);
   }
 });
->>>>>>> origin/cande
 
 export default router;

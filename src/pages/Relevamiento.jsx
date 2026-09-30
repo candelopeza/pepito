@@ -51,12 +51,7 @@ const ROLES_METRICAS_CAMPO = ['coordinacion', 'direccion', 'administrador'];
 
 function Relevamiento() {
   const { rol } = useRol();
-<<<<<<< HEAD
   const { relevamientos, localesConEstado, localPorId, permisos } = useDatos();
-  const [buscar, setBuscar] = useState('');
-=======
-  const { relevamientos, localesConEstado, localPorId } = useDatos();
->>>>>>> origin/cande
 
   const veMetricasCampo = ROLES_METRICAS_CAMPO.includes(rol);
 
@@ -224,16 +219,6 @@ function Relevamiento() {
         titulo="RELEVAMIENTO Y CONTROL"
         subtitulo={`${relevamientos.length} relevamiento(s) cargados · ${pendientes.length} pendiente(s) de control`}
         botonVolver
-<<<<<<< HEAD
-        acciones={
-          puedeEditar(rol, 'relevar', permisos) && (
-            <Link to="/campo/relevar" className="btn-primario">
-              Nuevo relevamiento
-            </Link>
-          )
-        }
-=======
->>>>>>> origin/cande
       />
 
       {/* ================= PENDIENTES DE CONTROL ================= */}
@@ -251,7 +236,7 @@ function Relevamiento() {
           vacio="No hay relevamientos esperando control."
           alto="auto"
           botones={
-            puedeEditar(rol, 'relevar') && (
+            puedeEditar(rol, 'relevar', permisos) && (
               <Link to="/campo/relevar" className="btn-icono btn-icono-verde" title="Nuevo relevamiento">
                 <AddIcon fontSize="small" />
               </Link>

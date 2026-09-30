@@ -57,43 +57,9 @@ import { hoyISO } from '../dominio/fechas';
 import { deLocal } from '../dominio/actuaciones';
 import { useRol } from '../auth/rolContexto';
 
-<<<<<<< HEAD
-const CLAVE_ALMACEN = 'gg-datos-v3';
+/* Accesos sin nada guardado: rige el reparto por defecto de config/modulos.js. */
+const PERMISOS_VACIOS = { modulos: {}, rolesDeshabilitados: [] };
 
-function leerAlmacen() {
-  try {
-    const crudo = localStorage.getItem(CLAVE_ALMACEN);
-    if (!crudo) return null;
-    const datos = JSON.parse(crudo);
-    // Si cambia la forma de los datos, la semilla nueva gana: un store viejo
-    // con campos que ya no existen rompe pantallas de formas raras.
-    if (datos.version !== crearSemilla().version) return null;
-    // Agregados posteriores a la v3 que un almacén guardado antes no tiene.
-    // Se completan acá para no obligar a reiniciar la demo.
-    if (!datos.permisos || !datos.permisos.modulos) {
-      // Sin permisos guardados, o con la forma vieja (solo módulos): se lleva
-      // a la forma actual sin perder lo que hubiera.
-      datos.permisos = { modulos: datos.permisos ?? {}, rolesDeshabilitados: [] };
-    }
-    if (!datos.usuarios.some((u) => u.rol === 'administrador')) {
-      const admin = crearSemilla().usuarios.find((u) => u.rol === 'administrador');
-      if (admin) datos.usuarios = [...datos.usuarios, { ...admin, id: siguienteId(datos.usuarios) }];
-    }
-    return datos;
-  } catch {
-    return null;
-  }
-}
-
-/* Siguiente id de una lista. No reutiliza números dados de baja. */
-const siguienteId = (lista) => lista.reduce((max, x) => Math.max(max, Number(x.id) || 0), 0) + 1;
-
-/* Atajo para modificar un local puntual. Es pura, así que vive acá afuera. */
-const conLocal = (prev, localId, cambios) => ({
-  ...prev,
-  locales: prev.locales.map((l) => (l.id === localId ? { ...l, ...cambios } : l)),
-});
-=======
 /* La forma del store antes de que lleguen los datos. Existe para que nada
    explote si algo se renderiza antes de tiempo: todas las colecciones son
    arrays vacíos, no undefined. */
@@ -111,8 +77,8 @@ const BASE_VACIA = {
   parametros: {},
   plantillaCedula: '',
   secuencias: { cedula: 0, expediente: 0 },
+  permisos: PERMISOS_VACIOS,
 };
->>>>>>> origin/cande
 
 function DatosProvider({ children }) {
   const { usuario } = useRol();
@@ -132,7 +98,7 @@ function DatosProvider({ children }) {
      LA CARGA
      --------------------------------------------------------------------------
      Todos los pedidos salen en paralelo (Promise.all): tardan lo que tarda el
-     más lento, no la suma. Son nueve y el pesado es /locales.
+     más lento, no la suma. Son diez y el pesado es /locales.
      ========================================================================== */
   const cargarTodo = useCallback(async () => {
     const [
@@ -145,6 +111,7 @@ function DatosProvider({ children }) {
       parametros,
       plantilla,
       fusiones,
+      permisos,
     ] = await Promise.all([
       api.locales(),
       api.actuaciones(),
@@ -155,6 +122,10 @@ function DatosProvider({ children }) {
       api.parametros(),
       api.plantilla(),
       api.fusiones(),
+      // Si la base todavía no tiene las tablas de Accesos, la llamada falla y
+      // el sistema sigue con el reparto por defecto del código en vez de
+      // quedarse sin cargar.
+      api.permisos().catch(() => PERMISOS_VACIOS),
     ]);
 
     /* `secuencias` ya no es una tabla: el último número de cédula se deduce de
@@ -178,6 +149,7 @@ function DatosProvider({ children }) {
       rubros,
       feriados,
       fusiones,
+      permisos,
       auditoria: [],
       parametros,
       plantillaCedula: plantilla?.texto ?? '',
@@ -409,7 +381,6 @@ function DatosProvider({ children }) {
     [],
   );
 
-<<<<<<< HEAD
   /* ==========================================================================
      ACCESOS  (qué ve y qué modifica cada tipo de usuario)
      --------------------------------------------------------------------------
@@ -419,37 +390,20 @@ function DatosProvider({ children }) {
      Lo que no está guardado sale del código, así un módulo nuevo aparece con
      su reparto por defecto. La pantalla es Accesos → Tipos de usuario; la
      restricción real va en el backend (tablas permisos_modulos y tipos_usuario).
+
+     Las tres rutas de escritura responden 501 hasta que se implementen en
+     backend/rutas/configuracion.js: mientras tanto, el cartel de error lo dice.
      ========================================================================== */
   const guardarPermiso = useCallback(
-    (idModulo, rol, nivel) => {
-      despachar(`Accesos: ${rol} en ${idModulo} pasa a "${nivel}"`, (prev) => ({
-        ...prev,
-        permisos: {
-          ...prev.permisos,
-          modulos: {
-            ...(prev.permisos?.modulos ?? {}),
-            [idModulo]: { ...(prev.permisos?.modulos?.[idModulo] ?? {}), [rol]: nivel },
-          },
-        },
-      }));
-    },
-    [despachar],
+    (idModulo, rol, nivel) =>
+      ejecutar(`Accesos: ${rol} en ${idModulo} pasa a "${nivel}"`, () => api.guardarPermiso(idModulo, rol, nivel)),
+    [ejecutar],
   );
 
   /* Borra todo lo guardado para un rol: vuelve a lo que trae el código. */
   const restablecerPermisosDeRol = useCallback(
-    (rol) => {
-      despachar(`Accesos: ${rol} vuelve a los valores por defecto`, (prev) => {
-        const modulos = {};
-        Object.entries(prev.permisos?.modulos ?? {}).forEach(([idModulo, porRol]) => {
-          const resto = { ...porRol };
-          delete resto[rol];
-          if (Object.keys(resto).length) modulos[idModulo] = resto;
-        });
-        return { ...prev, permisos: { ...prev.permisos, modulos } };
-      });
-    },
-    [despachar],
+    (rol) => ejecutar(`Accesos: ${rol} vuelve a los valores por defecto`, () => api.restablecerPermisosDeRol(rol)),
+    [ejecutar],
   );
 
   /* Apaga o prende un tipo de usuario entero. Apagado, no ve ningún módulo
@@ -457,21 +411,11 @@ function DatosProvider({ children }) {
      administrador también se puede apagar, pero conserva Tipos de usuario
      (config/modulos.js, FIJOS): siempre hay una puerta para deshacerlo. */
   const habilitarRol = useCallback(
-    (rol, habilitado) => {
-      despachar(`Accesos: ${rol} ${habilitado ? 'habilitado' : 'deshabilitado'}`, (prev) => {
-        const actuales = prev.permisos?.rolesDeshabilitados ?? [];
-        const rolesDeshabilitados = habilitado ? actuales.filter((r) => r !== rol) : [...new Set([...actuales, rol])];
-        return { ...prev, permisos: { ...prev.permisos, rolesDeshabilitados } };
-      });
-    },
-    [despachar],
+    (rol, habilitado) =>
+      ejecutar(`Accesos: ${rol} ${habilitado ? 'habilitado' : 'deshabilitado'}`, () => api.habilitarRol(rol, habilitado)),
+    [ejecutar],
   );
 
-  const reiniciarDemo = useCallback(() => {
-    localStorage.removeItem(CLAVE_ALMACEN);
-    setBase(crearSemilla());
-  }, []);
-=======
   /* Ya no hay demo que reiniciar: los datos son los de la base del área. Se
      conserva la función para no romper la pantalla de Parámetros, y hace lo
      único sensato que puede hacer, que es volver a pedir los datos. */
@@ -479,7 +423,6 @@ function DatosProvider({ children }) {
     () => ejecutar('Datos actualizados desde el servidor', async () => null),
     [ejecutar],
   );
->>>>>>> origin/cande
 
   /* ==========================================================================
      DERIVADOS

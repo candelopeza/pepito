@@ -21,12 +21,8 @@
    ============================================================================ */
 
 import PageHeader from '../components/ui/PageHeader';
-<<<<<<< HEAD
-import { Vacio } from '../components/ui/Aviso';
-=======
 import Grilla from '../components/ui/Grilla';
-import Aviso, { Vacio } from '../components/ui/Aviso';
->>>>>>> origin/cande
+import { Vacio } from '../components/ui/Aviso';
 import { useDatos } from '../datos/datosContexto';
 import { fmtFecha, hoyISO } from '../dominio/fechas';
 

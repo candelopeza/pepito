@@ -45,8 +45,8 @@
      - "Agregué un módulo y no aparece en el menú": ¿le pusiste `grupo`?
         Si el grupo no es 'operativo' ni 'configuracion', no entra en ninguna
         de las dos secciones y no se dibuja en ningún lado.
-     - "Quiero una sección nueva en el menú": se agrega al array SECCIONES de
-        acá abajo Y se usa ese mismo id en el `grupo` de los módulos.
+     - "Quiero una sección nueva en el menú": se agrega a GRUPOS en
+        config/modulos.js Y se usa ese mismo id en el `grupo` de los módulos.
      - "Un ítem no lleva a nada": la `ruta` de config/modulos.js no coincide
         con el `path` de App.jsx.
      - "Quedan dos ítems resaltados a la vez": es el `end` del NavLink.
@@ -60,27 +60,25 @@ import { NavLink, useLocation } from 'react-router-dom';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { useRol } from '../auth/rolContexto';
-import { modulosPorRolYGrupo } from '../config/modulos';
+import { useDatos } from '../datos/datosContexto';
+import { GRUPOS, modulosPorRolYGrupo } from '../config/modulos';
 
-// Las secciones del menú, en el orden en que se muestran.
-// `id` tiene que coincidir con el campo `grupo` de config/modulos.js.
-const SECCIONES = [
-  { id: 'operativo', titulo: 'Oficina' },
-  { id: 'campo', titulo: 'Campo' },
-  { id: 'herramientas', titulo: 'Herramientas' },
-  { id: 'configuracion', titulo: 'Configuración' },
-  { id: 'portal', titulo: 'Portal del titular' },
-];
+// Las secciones del menú, en el orden en que se muestran. Viven en
+// config/modulos.js (GRUPOS) porque la pantalla de Tipos de usuario agrupa
+// los módulos con la misma lista.
+const SECCIONES = GRUPOS;
 
 function Sidebar({ onNavegar }) {
   // ===== A. QUÉ VE ESTE USUARIO =====
   const { rol } = useRol();
+  // Lo que el administrador ajustó desde Accesos → Tipos de usuario.
+  const { permisos } = useDatos();
   const { pathname } = useLocation();
 
   // Cada sección con sus módulos ya filtrados por rol. Las que quedaron
   // vacías se descartan acá, así abajo no hay que preguntarlo de nuevo.
   const secciones = SECCIONES
-    .map((s) => ({ ...s, modulos: modulosPorRolYGrupo(rol, s.id) }))
+    .map((s) => ({ ...s, modulos: modulosPorRolYGrupo(rol, s.id, permisos) }))
     .filter((s) => s.modulos.length > 0);
 
   // ===== B. QUÉ SECCIONES ESTÁN ABIERTAS =====

@@ -54,12 +54,29 @@
      Duplicados                 ·      ·      ·      SI     ·       ·
      Informe 9 de Julio         ·      ·      SI     SI     ·       ·
      Geocodificación pendiente  ·      ·      SI     SI     ·       ·
-     Config: usuarios           ·      ·      ·      ·      SI      ·
+     Accesos: tipos de usuario  ·      ·      ·      ·      ·       ·      (solo administrador)
+     Accesos: usuarios          ·      ·      ·      ·      SI      ·      (y administrador)
      Config: rubros             ·      ·      ·      SI     SI      ·
      Config: feriados           ·      ·      ·      SI     SI      ·
      Config: plantilla cédula   ·      ·      ·      SI     SI      ·
      Config: parámetros         ·      ·      ·      ·      SI      ·
      Portal del titular         ·      ·      ·      ·      ·       SI
+
+   EL ADMINISTRADOR DEL SISTEMA no figura en la tabla: TIENE TODO. Ve y
+   modifica cada módulo de los demás roles (menos el Portal del titular, que
+   es la vista del contribuyente) y además la sección Accesos. Es el perfil de
+   DITEC para controlar el sistema. Está resuelto en nivelPorDefecto(), no en
+   los arrays: así no hay que agregarlo módulo por módulo.
+
+   >>> LO QUE TRAE ESTE ARCHIVO ES EL REPARTO POR DEFECTO <<<
+   Desde Accesos → Tipos de usuario, el administrador puede habilitar o quitar
+   módulos a cada rol, y apagar un rol entero, sin programar. Eso se guarda en
+   el store como
+       permisos.modulos[idModulo][rol] = 'no' | 'ver' | 'editar'
+       permisos.rolesDeshabilitados    = ['relevador', ...]
+   y las ayudas de acá abajo lo miran primero: lo guardado gana, lo que no
+   está guardado sale de `roles` / `rolesEdicion`. Por eso un módulo nuevo
+   aparece con su reparto por defecto aunque nadie haya tocado Accesos.
 
    DOS DECISIONES QUE VALE LA PENA DISCUTIR:
      - Los PLAZOS (5 y 3 días hábiles) solo los toca Dirección. Es explícito en
@@ -180,6 +197,26 @@ export const MODULOS = [
     rolesEdicion: ['notificador', 'coordinacion'],
   },
 
+  /* ===================== ACCESOS ===================== */
+  {
+    id: 'accesos-roles',
+    titulo: 'Tipos de usuario',
+    descripcion: 'Qué ve y qué modifica cada tipo de usuario',
+    ruta: '/accesos/tipos-usuario',
+    grupo: 'accesos',
+    roles: ['administrador'],
+    rolesEdicion: ['administrador'],
+  },
+  {
+    id: 'accesos-usuarios',
+    titulo: 'Usuarios',
+    descripcion: 'Alta, baja y rol de los agentes',
+    ruta: '/accesos/usuarios',
+    grupo: 'accesos',
+    roles: ['administrador', 'direccion'],
+    rolesEdicion: ['administrador', 'direccion'],
+  },
+
   /* ===================== HERRAMIENTAS ===================== */
   {
     id: 'duplicados',
@@ -210,15 +247,6 @@ export const MODULOS = [
   },
 
   /* ===================== CONFIGURACIÓN ===================== */
-  {
-    id: 'config-usuarios',
-    titulo: 'Usuarios y roles',
-    descripcion: 'Alta, baja y rol de los agentes',
-    ruta: '/config/usuarios',
-    grupo: 'configuracion',
-    roles: ['direccion'],
-    rolesEdicion: ['direccion'],
-  },
   {
     id: 'config-rubros',
     titulo: 'Rubros',
@@ -281,6 +309,10 @@ export const MODULOS = [
    parámetros, y por eso el mismo destino puede aparecer con otro nombre según
    el rol: el notificador no entra a "Mis entregas" para consultar, entra para
    registrar el resultado de la entrega del día.
+
+   ACCESOS NO TIENE ACCIÓN RÁPIDA a propósito: usuarios y tipos de usuario se
+   administran desde el menú lateral, no son algo que se "inicia" todos los
+   días. El administrador ve en el Inicio las mismas acciones que los demás.
 
    NO ES UNA TABLA DE PERMISOS NUEVA. El acceso real lo sigue gobernando
    MODULOS a través de RutaProtegida: si alguien llegara acá con un rol que no
@@ -375,34 +407,106 @@ export const ACCIONES_RAPIDAS = [
 ];
 
 /* ============================================================================
-   AYUDAS  —  las usan Home, Sidebar y RutaProtegida. Para cambiar permisos no
-   hace falta tocarlas: alcanza con los arrays de arriba.
+   GRUPOS DEL MENÚ  —  las secciones del menú lateral, en el orden en que se
+   muestran. `id` es el campo `grupo` de cada módulo. Las usan Sidebar.jsx y la
+   pantalla de Tipos de usuario, así las dos agrupan igual.
+   ============================================================================ */
+export const GRUPOS = [
+  { id: 'operativo', titulo: 'Oficina' },
+  { id: 'campo', titulo: 'Campo' },
+  { id: 'accesos', titulo: 'Accesos' },
+  { id: 'herramientas', titulo: 'Herramientas' },
+  { id: 'configuracion', titulo: 'Configuración' },
+  { id: 'portal', titulo: 'Portal del titular' },
+];
+
+/* ============================================================================
+   NIVELES DE ACCESO Y AYUDAS
+   ----------------------------------------------------------------------------
+   Todas reciben `permisos` (el objeto del store, puede venir undefined): son
+   las diferencias que el administrador guardó desde Accesos. Si para un módulo
+   y un rol no hay nada guardado, vale lo que dicen `roles` / `rolesEdicion`.
+
+   Para cambiar el reparto POR DEFECTO se tocan los arrays de arriba. Para
+   cambiarlo EN USO, sin programar, se usa Accesos → Tipos de usuario.
    ============================================================================ */
 
-export function modulosPorRol(rol) {
-  return MODULOS.filter((m) => m.roles.includes(rol));
+export const NIVELES = ['no', 'ver', 'editar'];
+
+/* La forma de `permisos` en el store. Vacío = todo como lo trae el código. */
+export const PERMISOS_VACIOS = { modulos: {}, rolesDeshabilitados: [] };
+
+/* El rol de control total. Se puede deshabilitar como cualquier otro, pero
+   nunca pierde Tipos de usuario (ver FIJOS): así siempre hay una puerta para
+   deshacer cualquier cambio, incluso apagarlo a él mismo por error. */
+export const ROL_ADMINISTRADOR = 'administrador';
+
+/* El módulo que ningún ajuste puede quitarle a un rol, ni siquiera apagar el
+   rol entero. Por eso en nivelAcceso() se mira ANTES que rolHabilitado(). */
+const FIJOS = { [ROL_ADMINISTRADOR]: ['accesos-roles'] };
+
+export function esPermisoFijo(idModulo, rol) {
+  return (FIJOS[rol] || []).includes(idModulo);
 }
 
-export function modulosPorRolYGrupo(rol, grupo) {
-  return MODULOS.filter((m) => m.grupo === grupo && m.roles.includes(rol));
+/* Un rol deshabilitado desde Accesos no ve ningún módulo, tenga lo que tenga
+   guardado (salvo los FIJOS). Sus usuarios siguen existiendo: es un apagón del
+   tipo de usuario, no una baja de las personas. */
+export function rolHabilitado(rol, permisos) {
+  return !(permisos?.rolesDeshabilitados ?? []).includes(rol);
 }
 
-export function accionesRapidasPara(rol) {
-  return ACCIONES_RAPIDAS.filter((a) => a.roles.includes(rol));
+/* ¿Este módulo distingue entre ver y modificar? Tablero, mapa y reportes son
+   de consulta: no tienen `rolesEdicion` y no tiene sentido ofrecer la llave. */
+export function admiteEdicion(modulo) {
+  return Array.isArray(modulo.rolesEdicion);
 }
 
-export function puedeEditar(rol, idModulo) {
+/* Lo que trae el código para un módulo y un rol. */
+export function nivelPorDefecto(modulo, rol) {
+  // El administrador tiene todo, salvo el portal: esa es la vista del titular.
+  if (rol === ROL_ADMINISTRADOR) {
+    if (modulo.grupo === 'portal') return 'no';
+    return admiteEdicion(modulo) ? 'editar' : 'ver';
+  }
+  if (!modulo.roles.includes(rol)) return 'no';
+  return (modulo.rolesEdicion || []).includes(rol) ? 'editar' : 'ver';
+}
+
+/* Lo que rige: lo guardado desde Accesos, y si no hay nada, el código. */
+export function nivelAcceso(modulo, rol, permisos) {
+  if (esPermisoFijo(modulo.id, rol)) return 'editar';
+  if (!rolHabilitado(rol, permisos)) return 'no';
+  const guardado = permisos?.modulos?.[modulo.id]?.[rol];
+  return NIVELES.includes(guardado) ? guardado : nivelPorDefecto(modulo, rol);
+}
+
+export function modulosPorRol(rol, permisos) {
+  return MODULOS.filter((m) => nivelAcceso(m, rol, permisos) !== 'no');
+}
+
+export function modulosPorRolYGrupo(rol, grupo, permisos) {
+  return MODULOS.filter((m) => m.grupo === grupo && nivelAcceso(m, rol, permisos) !== 'no');
+}
+
+export function puedeEditar(rol, idModulo, permisos) {
   const modulo = MODULOS.find((m) => m.id === idModulo);
   if (!modulo) return false;
-  if (!modulo.roles.includes(rol)) return false;
-  return (modulo.rolesEdicion || []).includes(rol);
+  return nivelAcceso(modulo, rol, permisos) === 'editar';
 }
 
-export function puedeVerRuta(rol, ruta) {
+export function puedeVerRuta(rol, ruta, permisos) {
   if (ruta === '/') return true;
   const modulo = MODULOS.find((m) => m.ruta === ruta);
   // Ruta sin módulo declarado (por ejemplo la ficha de un local, que se abre
   // desde el padrón): la controla el módulo del que depende, no esta tabla.
   if (!modulo) return true;
-  return modulo.roles.includes(rol);
+  return nivelAcceso(modulo, rol, permisos) !== 'no';
+}
+
+/* Una acción rápida se ofrece solo si el rol la tiene declarada Y todavía
+   puede ver la pantalla de destino: si desde Accesos le quitaron el módulo, la
+   tarjeta del Inicio desaparece con él. */
+export function accionesRapidasPara(rol, permisos) {
+  return ACCIONES_RAPIDAS.filter((a) => a.roles.includes(rol) && puedeVerRuta(rol, a.ruta.split('?')[0], permisos));
 }

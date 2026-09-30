@@ -46,11 +46,11 @@ import { fmtFechaHora } from '../dominio/fechas';
 /* Quiénes ven las métricas del trabajo de campo (coordenada del dispositivo y
    modo de carga). Coordinación controla cómo se releva; Dirección mide la
    cobertura territorial. Al resto le sobran. */
-const ROLES_METRICAS_CAMPO = ['coordinacion', 'direccion'];
+const ROLES_METRICAS_CAMPO = ['coordinacion', 'direccion', 'administrador'];
 
 function Relevamiento() {
   const { rol } = useRol();
-  const { relevamientos, localesConEstado, localPorId } = useDatos();
+  const { relevamientos, localesConEstado, localPorId, permisos } = useDatos();
   const [buscar, setBuscar] = useState('');
 
   const veMetricasCampo = ROLES_METRICAS_CAMPO.includes(rol);
@@ -165,7 +165,7 @@ function Relevamiento() {
         subtitulo={`${relevamientos.length} relevamiento(s) cargados · ${pendientes.length} pendiente(s) de control`}
         botonVolver
         acciones={
-          puedeEditar(rol, 'relevar') && (
+          puedeEditar(rol, 'relevar', permisos) && (
             <Link to="/campo/relevar" className="btn-primario">
               Nuevo relevamiento
             </Link>

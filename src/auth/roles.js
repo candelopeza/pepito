@@ -15,6 +15,8 @@
      notificador     ->     notificador (igual)
      —               ->     titular     (nuevo: el portal del contribuyente)
      —               ->     sistema     (nuevo: los procesos automáticos)
+     —               ->     administrador (nuevo: acceso total; administra usuarios
+                                            y define qué ve cada tipo de usuario)
 
    La distinción entre coordinación y dirección importa: coordinación resuelve
    el día a día (confirma exenciones, otorga prórrogas), dirección tiene lectura
@@ -56,6 +58,11 @@ export const ROLES = {
     id: 'direccion',
     etiqueta: 'Dirección de Ambiente',
     descripcion: 'Lectura total, indicadores y administración de usuarios, plazos y catálogos.',
+  },
+  administrador: {
+    id: 'administrador',
+    etiqueta: 'Administrador del sistema',
+    descripcion: 'Acceso total. Ve y modifica todos los módulos, da de alta usuarios y define qué ve cada tipo de usuario.',
   },
   titular: {
     id: 'titular',

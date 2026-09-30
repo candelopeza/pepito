@@ -1642,6 +1642,48 @@
    Al imprimir (cédula, hoja de ruta, reportes) hay que sacar de la hoja la
    navbar, el menú y los botones: si no, salen en el papel.
    .solo-impresion marca el bloque que SÍ tiene que salir. */
+
+/* ========== 14.11 ACCESOS ==========
+   pages/accesos/TiposUsuario.jsx, pages/accesos/Usuarios.jsx y ui/hab/des.jsx (Interruptor) */
+
+/* La llave sí/no (ui/hab/des.jsx, componente Interruptor). El checkbox real queda invisible pero
+   sigue ahí: se opera con teclado y el lector de pantalla lo anuncia. */
+.interruptor { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; position: relative; }
+.interruptor input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.interruptor-pista {
+  position: relative; width: 40px; height: 22px; border-radius: 11px;
+  background: #cfd8dc; transition: background 0.2s; flex-shrink: 0;
+}
+.interruptor-perilla {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: white; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: left 0.2s;
+}
+.interruptor input:checked + .interruptor-pista { background: #1976d2; }
+.interruptor input:checked + .interruptor-pista .interruptor-perilla { left: 21px; }
+.interruptor input:focus-visible + .interruptor-pista { outline: 2px solid #90caf9; outline-offset: 2px; }
+.interruptor-texto { font-size: 13px; font-weight: 600; color: #546e7a; white-space: nowrap; }
+.interruptor input:checked ~ .interruptor-texto { color: #1976d2; }
+.interruptor-deshabilitado { cursor: default; opacity: 0.55; }
+
+/* La tabla de módulos por rol (ventana Permisos). La primera columna agrupa
+   por sección del menú. */
+.tabla-permisos { margin-bottom: 8px; }
+.tabla-permisos .celda-grupo {
+  width: 130px; vertical-align: top; font-size: 11px; font-weight: 700; color: #90a4ae;
+  text-transform: uppercase; letter-spacing: 0.5px; border-right: 1px solid #f0f0f0; background: #fafbfc;
+}
+.tabla-permisos .celda-modulo strong { display: flex; align-items: center; gap: 8px; color: #37474f; }
+.tabla-permisos .celda-modulo .texto-chico { display: block; margin-top: 2px; }
+.tabla-permisos .fila-apagada .celda-modulo strong,
+.tabla-permisos .fila-apagada .celda-modulo .texto-chico { color: #b0bec5; }
+
+/* Los íconos de la columna Acciones de las grillas de Accesos: editar en azul,
+   eliminar en rojo, la llave de permisos en gris oscuro. Van con el contenedor
+   adelante para ganarle a la clase propia del botón de MUI. */
+.grilla-contenedor .accion-grilla-editar { color: #1976d2; }
+.grilla-contenedor .accion-grilla-borrar { color: #c62828; }
+.grilla-contenedor .accion-grilla-llave { color: #37474f; }
+
 @media print {
   .navbar,
   .sidebar,

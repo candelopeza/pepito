@@ -21,7 +21,7 @@
    ============================================================================ */
 
 import PageHeader from '../components/ui/PageHeader';
-import Aviso, { Vacio } from '../components/ui/Aviso';
+import { Vacio } from '../components/ui/Aviso';
 import { useDatos } from '../datos/datosContexto';
 import { fmtFecha, hoyISO } from '../dominio/fechas';
 
@@ -36,7 +36,7 @@ function Metrica({ valor, etiqueta, color = 'azul', ayuda }) {
 }
 
 function Reportes() {
-  const { indicadores, secuencias } = useDatos();
+  const { indicadores } = useDatos();
   const i = indicadores();
 
   const mes = new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });

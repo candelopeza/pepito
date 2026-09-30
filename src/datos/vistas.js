@@ -181,7 +181,8 @@ export function ordenarBandejas(lista, modo = 'prioridad') {
 
 export function bandejas(locales, rol, modo = 'prioridad') {
   const propias = DEFINICION_BANDEJAS
-    .filter((b) => b.roles.includes(rol))
+    // El administrador ve todas las bandejas: tiene acceso total.
+    .filter((b) => rol === 'administrador' || b.roles.includes(rol))
     .map((b) => ({ ...b, locales: locales.filter((l) => b.estados.includes(l.estado)) }));
   return ordenarBandejas(propias, modo);
 }

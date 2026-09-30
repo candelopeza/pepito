@@ -31,9 +31,13 @@
 
 import { useRol } from '../auth/rolContexto';
 import { LISTA_ROLES } from '../auth/roles';
+import { useDatos } from '../datos/datosContexto';
+import { rolHabilitado } from '../config/modulos';
 
 function SelectorRol() {
   const { rol, setRol } = useRol();
+  // Para que en la prueba se vea cuál quedó apagado desde Accesos.
+  const { permisos } = useDatos();
 
   return (
     <div className="selector-rol">
@@ -53,6 +57,7 @@ function SelectorRol() {
         {LISTA_ROLES.map((r) => (
           <option key={r.id} value={r.id}>
             {r.etiqueta}
+            {rolHabilitado(r.id, permisos) ? '' : ' (deshabilitado)'}
           </option>
         ))}
       </select>

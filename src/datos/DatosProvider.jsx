@@ -52,6 +52,17 @@ function leerAlmacen() {
     // Si cambia la forma de los datos, la semilla nueva gana: un store viejo
     // con campos que ya no existen rompe pantallas de formas raras.
     if (datos.version !== crearSemilla().version) return null;
+    // Agregados posteriores a la v3 que un almacén guardado antes no tiene.
+    // Se completan acá para no obligar a reiniciar la demo.
+    if (!datos.permisos || !datos.permisos.modulos) {
+      // Sin permisos guardados, o con la forma vieja (solo módulos): se lleva
+      // a la forma actual sin perder lo que hubiera.
+      datos.permisos = { modulos: datos.permisos ?? {}, rolesDeshabilitados: [] };
+    }
+    if (!datos.usuarios.some((u) => u.rol === 'administrador')) {
+      const admin = crearSemilla().usuarios.find((u) => u.rol === 'administrador');
+      if (admin) datos.usuarios = [...datos.usuarios, { ...admin, id: siguienteId(datos.usuarios) }];
+    }
     return datos;
   } catch {
     return null;
@@ -727,6 +738,63 @@ function DatosProvider({ children }) {
     [despachar],
   );
 
+  /* ==========================================================================
+     ACCESOS  (qué ve y qué modifica cada tipo de usuario)
+     --------------------------------------------------------------------------
+     Solo se guardan las DIFERENCIAS respecto de config/modulos.js:
+       permisos.modulos[idModulo][rol] = 'no' | 'ver' | 'editar'
+       permisos.rolesDeshabilitados    = roles apagados enteros
+     Lo que no está guardado sale del código, así un módulo nuevo aparece con
+     su reparto por defecto. La pantalla es Accesos → Tipos de usuario; la
+     restricción real va en el backend (tablas permisos_modulos y tipos_usuario).
+     ========================================================================== */
+  const guardarPermiso = useCallback(
+    (idModulo, rol, nivel) => {
+      despachar(`Accesos: ${rol} en ${idModulo} pasa a "${nivel}"`, (prev) => ({
+        ...prev,
+        permisos: {
+          ...prev.permisos,
+          modulos: {
+            ...(prev.permisos?.modulos ?? {}),
+            [idModulo]: { ...(prev.permisos?.modulos?.[idModulo] ?? {}), [rol]: nivel },
+          },
+        },
+      }));
+    },
+    [despachar],
+  );
+
+  /* Borra todo lo guardado para un rol: vuelve a lo que trae el código. */
+  const restablecerPermisosDeRol = useCallback(
+    (rol) => {
+      despachar(`Accesos: ${rol} vuelve a los valores por defecto`, (prev) => {
+        const modulos = {};
+        Object.entries(prev.permisos?.modulos ?? {}).forEach(([idModulo, porRol]) => {
+          const resto = { ...porRol };
+          delete resto[rol];
+          if (Object.keys(resto).length) modulos[idModulo] = resto;
+        });
+        return { ...prev, permisos: { ...prev.permisos, modulos } };
+      });
+    },
+    [despachar],
+  );
+
+  /* Apaga o prende un tipo de usuario entero. Apagado, no ve ningún módulo
+     aunque tenga permisos guardados; sus usuarios siguen dados de alta. El
+     administrador también se puede apagar, pero conserva Tipos de usuario
+     (config/modulos.js, FIJOS): siempre hay una puerta para deshacerlo. */
+  const habilitarRol = useCallback(
+    (rol, habilitado) => {
+      despachar(`Accesos: ${rol} ${habilitado ? 'habilitado' : 'deshabilitado'}`, (prev) => {
+        const actuales = prev.permisos?.rolesDeshabilitados ?? [];
+        const rolesDeshabilitados = habilitado ? actuales.filter((r) => r !== rol) : [...new Set([...actuales, rol])];
+        return { ...prev, permisos: { ...prev.permisos, rolesDeshabilitados } };
+      });
+    },
+    [despachar],
+  );
+
   const reiniciarDemo = useCallback(() => {
     localStorage.removeItem(CLAVE_ALMACEN);
     setBase(crearSemilla());
@@ -785,6 +853,9 @@ function DatosProvider({ children }) {
       eliminarDeCatalogo,
       guardarParametros,
       guardarPlantilla,
+      guardarPermiso,
+      restablecerPermisosDeRol,
+      habilitarRol,
       reiniciarDemo,
     }),
     [
@@ -793,7 +864,8 @@ function DatosProvider({ children }) {
       crearRelevamiento, revisarRelevamiento, generarCedula, regenerarCedula, asignarNotificador,
       marcarImpresa, registrarEntrega, registrarDocumento, validarPresentacion, otorgarProrroga,
       registrarExpediente, reingresarAlCircuito, fusionarLocales, aplicarInforme9DJ,
-      guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla, reiniciarDemo,
+      guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla,
+      guardarPermiso, restablecerPermisosDeRol, habilitarRol, reiniciarDemo,
     ],
   );
 

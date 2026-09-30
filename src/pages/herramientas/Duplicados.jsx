@@ -26,7 +26,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
 import Badge, { BadgeEstado } from '../../components/ui/Badge';
-import Aviso, { Vacio } from '../../components/ui/Aviso';
+import { Vacio } from '../../components/ui/Aviso';
 import Confirmar from '../../components/ui/Confirmar';
 import { useDatos } from '../../datos/datosContexto';
 import { buscarDuplicados } from '../../dominio/duplicados';

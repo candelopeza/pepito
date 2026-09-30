@@ -42,6 +42,7 @@ function Detalle({ a, usuarios }) {
     const vencido = a.fechaVencimiento && plazoVencido(a.fechaVencimiento);
     return (
       <>
+        {/* Cada dato va con el componente Dato: la etiqueta arriba y el valor debajo, no a la par. */}
         <Dato etiqueta="Cédula">{a.numeroCedula}</Dato>
         <Dato etiqueta="Instancia">{a.instancia === 1 ? 'Primera notificación' : 'Segunda notificación'}</Dato>
         <Dato etiqueta="Plazo">{a.plazoDias} días hábiles</Dato>

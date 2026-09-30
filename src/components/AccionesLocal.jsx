@@ -119,7 +119,7 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
      levantar el bloqueo (y eso, coordinación). */
   const opciones = [];
   if (local.bloqueado) {
-    if (rol === 'coordinacion') opciones.push({ id: 'desbloquear', etiqueta: 'Levantar bloqueo' });
+    if (['coordinacion', 'administrador'].includes(rol)) opciones.push({ id: 'desbloquear', etiqueta: 'Levantar bloqueo' });
   } else {
     opciones.push(...disponibles);
   }

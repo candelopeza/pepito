@@ -70,8 +70,11 @@ import Duplicados from './pages/herramientas/Duplicados';
 import Informe9DJ from './pages/herramientas/Informe9DJ';
 import Geocodificacion from './pages/herramientas/Geocodificacion';
 
+// --- Accesos (control de usuarios y de lo que ve cada tipo de usuario) ---
+import TiposUsuario from './pages/accesos/TiposUsuario';
+import Usuarios from './pages/accesos/Usuarios';
+
 // --- Configuración ---
-import Usuarios from './pages/config/Usuarios';
 import Rubros from './pages/config/Rubros';
 import Feriados from './pages/config/Feriados';
 import Plantilla from './pages/config/Plantilla';
@@ -117,12 +120,15 @@ function App() {
               <Route path="campo/entregas" element={<RutaProtegida ruta="/campo/entregas"><Entregas /></RutaProtegida>} />
 
               {/* ---- Herramientas ---- */}
+              {/* ---- Accesos ---- */}
+              <Route path="accesos/tipos-usuario" element={<RutaProtegida ruta="/accesos/tipos-usuario"><TiposUsuario /></RutaProtegida>} />
+              <Route path="accesos/usuarios" element={<RutaProtegida ruta="/accesos/usuarios"><Usuarios /></RutaProtegida>} />
+
               <Route path="herramientas/duplicados" element={<RutaProtegida ruta="/herramientas/duplicados"><Duplicados /></RutaProtegida>} />
               <Route path="herramientas/informe-9dj" element={<RutaProtegida ruta="/herramientas/informe-9dj"><Informe9DJ /></RutaProtegida>} />
               <Route path="herramientas/geocodificacion" element={<RutaProtegida ruta="/herramientas/geocodificacion"><Geocodificacion /></RutaProtegida>} />
 
               {/* ---- Configuración (tablas maestras y parámetros) ---- */}
-              <Route path="config/usuarios" element={<RutaProtegida ruta="/config/usuarios"><Usuarios /></RutaProtegida>} />
               <Route path="config/rubros" element={<RutaProtegida ruta="/config/rubros"><Rubros /></RutaProtegida>} />
               <Route path="config/feriados" element={<RutaProtegida ruta="/config/feriados"><Feriados /></RutaProtegida>} />
               <Route path="config/plantilla" element={<RutaProtegida ruta="/config/plantilla"><Plantilla /></RutaProtegida>} />

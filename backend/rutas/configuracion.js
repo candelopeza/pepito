@@ -11,6 +11,10 @@
      guardarParametros              ->  PUT    /configuracion/parametros     (SOLO rol direccion)
      plantillaCedula                ->  GET    /configuracion/plantilla
      guardarPlantilla               ->  PUT    /configuracion/plantilla
+     permisos                       ->  GET    /configuracion/permisos
+     guardarPermiso                 ->  PUT    /configuracion/permisos/:modulo/:rol   (SOLO rol administrador)
+     restablecerPermisosDeRol       ->  DELETE /configuracion/permisos/rol/:rol       (SOLO rol administrador)
+     habilitarRol                   ->  PUT    /configuracion/permisos/rol/:rol       (SOLO rol administrador) { habilitado }
 
    `:catalogo` solo puede ser uno de CATALOGOS. Nunca se arma el nombre de la
    tabla con lo que manda el cliente sin pasar por esa lista.
@@ -52,6 +56,25 @@ router.get('/plantilla', async (_req, res, next) => {
   }
 });
 
+/* Accesos: qué ve y qué modifica cada rol, y qué roles están apagados.
+   Devuelve la misma forma que guarda el front:
+     { modulos: { [modulo]: { [rol]: 'no' | 'ver' | 'editar' } },
+       rolesDeshabilitados: ['relevador', ...] }
+   Solo las diferencias respecto del reparto por defecto de src/config/modulos.js. */
+router.get('/permisos', async (_req, res, next) => {
+  try {
+    const filas = await consultar('SELECT modulo, rol, nivel FROM permisos_modulos');
+    const modulos = {};
+    filas.forEach((f) => {
+      modulos[f.modulo] = { ...(modulos[f.modulo] ?? {}), [f.rol]: f.nivel };
+    });
+    const apagados = await consultar('SELECT rol FROM tipos_usuario WHERE habilitado = 0');
+    res.json({ modulos, rolesDeshabilitados: apagados.map((t) => t.rol) });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get('/:catalogo', async (req, res, next) => {
   try {
     const tabla = tablaDeCatalogo(req, res);
@@ -66,6 +89,11 @@ const pendiente = (reemplaza) => (_req, res) =>
   res.status(501).json({ error: `Pendiente de implementar. Reemplaza a ${reemplaza} de DatosProvider.jsx` });
 
 router.put('/parametros', pendiente('guardarParametros'));
+// '/permisos/rol/:rol' va ANTES que '/permisos/:modulo/:rol': si no, Express
+// tomaría "rol" como nombre de módulo.
+router.put('/permisos/rol/:rol', pendiente('habilitarRol'));
+router.delete('/permisos/rol/:rol', pendiente('restablecerPermisosDeRol'));
+router.put('/permisos/:modulo/:rol', pendiente('guardarPermiso'));
 router.put('/plantilla', pendiente('guardarPlantilla'));
 router.post('/:catalogo', pendiente('guardarEnCatalogo (alta)'));
 router.put('/:catalogo/:id', pendiente('guardarEnCatalogo (edición)'));

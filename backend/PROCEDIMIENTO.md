@@ -159,6 +159,39 @@ viene del Excel del área.
 
 Se agregó `backend/.env` al `.gitignore` de la raíz. `node_modules` ya estaba.
 
+### 2.11 Accesos: rol administrador, permisos_modulos y tipos_usuario
+
+Se agregó el rol `administrador` al ENUM de `usuarios`. Es el perfil de control
+total: en el front ve y modifica todos los módulos (menos el portal del
+titular), ejecuta cualquier acto del circuito y administra Accesos. Está
+resuelto en `nivelPorDefecto()` de `src/config/modulos.js`, no en los arrays
+de cada módulo.
+
+Dos tablas nuevas:
+
+- `permisos_modulos (modulo, rol, nivel)`: solo las diferencias respecto del
+  reparto por defecto del código. Si un módulo y un rol no tienen fila, rige lo
+  que dice `src/config/modulos.js`. `nivel` es `no`, `ver` o `editar`.
+- `tipos_usuario (rol, habilitado)`: la llave "Habilita" de cada tipo de
+  usuario. Un rol apagado no ve ningún módulo; sus usuarios siguen dados de
+  alta. El administrador también se puede apagar, pero conserva siempre el
+  módulo Tipos de usuario (`FIJOS` en `src/config/modulos.js`) para poder
+  revertirlo. El backend tiene que respetar la misma excepción.
+
+Los roles en sí no se crean ni se borran desde la pantalla: el circuito
+(`src/dominio/reglas.js`) depende de sus ids.
+
+En el front la pantalla es **Accesos → Tipos de usuario** (tabla de roles con
+la llave de habilitado y un botón Permisos que abre las llaves por módulo) y
+**Accesos → Usuarios** (alta, baja y rol de cada agente, con la llave de activo
+en la misma tabla y un buscador).
+
+Rutas en `rutas/configuracion.js`: `GET /configuracion/permisos` ya funciona y
+devuelve `{ modulos, rolesDeshabilitados }`. Las de escritura responden 501
+hasta que se implementen y tienen que exigir rol administrador en el middleware:
+`PUT /configuracion/permisos/:modulo/:rol`, `PUT /configuracion/permisos/rol/:rol`
+y `DELETE /configuracion/permisos/rol/:rol`.
+
 ## 3. Cómo se probó
 
 Se arrancó el servidor sin base de datos y se le pegó a varias rutas:

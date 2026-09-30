@@ -39,7 +39,7 @@ function Entregas() {
 
   const [entregando, setEntregando] = useState(null);
   const [viendo, setViendo] = useState(null);
-  const [verTodas, setVerTodas] = useState(rol === 'coordinacion');
+  const [verTodas, setVerTodas] = useState(['coordinacion', 'administrador'].includes(rol));
 
   // Quién soy en la tabla de usuarios: la asignación se guarda por id.
   const yo = usuarios.find((u) => u.nombre === usuario.nombre);
@@ -67,7 +67,7 @@ function Entregas() {
         subtitulo={`${ruta.length} cédula(s) para entregar ordenado por proximidad`}
         botonVolver
         acciones={
-          rol === 'coordinacion' && (
+          ['coordinacion', 'administrador'].includes(rol) && (
             <button type="button" className="btn-secundario" onClick={() => setVerTodas((v) => !v)}>
               {verTodas ? 'Ver solo las mías' : 'Ver las de todos'}
             </button>
@@ -75,7 +75,7 @@ function Entregas() {
         }
       />
 
-      {sinAsignar.length > 0 && rol === 'coordinacion' && (
+      {sinAsignar.length > 0 && ['coordinacion', 'administrador'].includes(rol) && (
         <Aviso
      tipo="alerta" titulo={`${sinAsignar.length} cédula(s) emitidas sin notificador asignado`}
         accion={<Link to="/tablero">Expedientes para generar</Link>}

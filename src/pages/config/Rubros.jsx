@@ -17,7 +17,6 @@
    ============================================================================ */
 
 import PageHeader from '../../components/ui/PageHeader';
-import Aviso from '../../components/ui/Aviso';
 import CrudCatalogo from '../../components/CrudCatalogo';
 import { useDatos } from '../../datos/datosContexto';
 

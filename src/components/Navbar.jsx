@@ -90,7 +90,7 @@ function Navbar({ onAlternarMenu }) {
         <div className="navbar-usuario">
           <span className="navbar-usuario-nombre">
             {usuario.nombre}
-            <small className="navbar-usuario-rol">{datosRol.etiqueta}</small>
+
           </span>
           <AccountCircleIcon className="navbar-usuario-icono" />
         </div>

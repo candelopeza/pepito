@@ -29,9 +29,7 @@
 
 import { useState } from 'react';
 import Campo, { CampoSelect, CampoTexto } from './ui/Campo';
-import Aviso from './ui/Aviso';
 import { useDatos } from '../datos/datosContexto';
-import { faltantesRegistrales } from '../dominio/reglas';
 
 /* 11 dígitos, con o sin guiones. No valida el dígito verificador: eso lo tiene
    que hacer el backend contra la constancia de inscripción fiscal, no una
@@ -79,7 +77,6 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
     });
   }
 
-  const faltan = faltantesRegistrales(datos);
 
   return (
     <form className="formulario formulario-modal" onSubmit={enviar} noValidate autoComplete="off">

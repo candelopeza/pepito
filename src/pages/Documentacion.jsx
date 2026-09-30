@@ -44,8 +44,8 @@ const PASOS = ['Seleccionar local', 'Situación del proceso', 'Documento'];
 
 function Documentacion() {
   const { rol } = useRol();
-  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, usuarios, registrarDocumento } = useDatos();
-  const puedeCargar = puedeEditar(rol, 'documentacion');
+  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, usuarios, registrarDocumento, permisos } = useDatos();
+  const puedeCargar = puedeEditar(rol, 'documentacion', permisos);
 
   const [buscar, setBuscar] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');

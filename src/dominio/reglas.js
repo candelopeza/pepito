@@ -276,7 +276,9 @@ export const ACCIONES = [
 
 export function accionesDisponibles(codigoEstado, rol, local) {
   return ACCIONES.filter((a) => {
-    if (!a.roles.includes(rol)) return false;
+    // El administrador del sistema puede ejecutar cualquier acto: es el perfil
+    // de control total. Los demás, solo los que tienen declarados.
+    if (rol !== 'administrador' && !a.roles.includes(rol)) return false;
     if (local?.bloqueado && a.id !== 'bloquear') return false;
     if (a.estados.includes('*')) return codigoEstado !== 'EXENTO_CONFIRMADO';
     return a.estados.includes(codigoEstado);

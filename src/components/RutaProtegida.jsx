@@ -35,16 +35,19 @@
 
 import { Navigate } from 'react-router-dom';
 import { useRol } from '../auth/rolContexto';
+import { useDatos } from '../datos/datosContexto';
 import { puedeVerRuta } from '../config/modulos';
 
 function RutaProtegida({ ruta, children }) {
   const { rol } = useRol();
+  // Lo que el administrador ajustó desde Accesos → Tipos de usuario.
+  const { permisos } = useDatos();
 
   // ===== Caso 1: no le corresponde -> al Inicio =====
   // `replace` reemplaza la entrada en el historial en vez de agregar una.
   // Sin eso, el botón Atrás del navegador lo devuelve a la ruta prohibida y
   // vuelve a rebotar: el usuario queda trabado sin poder retroceder.
-  if (!puedeVerRuta(rol, ruta)) {
+  if (!puedeVerRuta(rol, ruta, permisos)) {
     return <Navigate to="/" replace />;
   }
 

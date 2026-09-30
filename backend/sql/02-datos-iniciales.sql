@@ -65,7 +65,7 @@ INSERT INTO feriados (fecha, motivo, alcance) VALUES
   ('2026-12-08', 'Inmaculada Concepción', 'nacional'),
   ('2026-12-25', 'Navidad', 'nacional');
 
--- Usuarios (sección 7.1). Identidad institucional; alta y baja desde Configuración → Usuarios.
+-- Usuarios (sección 7.1). Identidad institucional; alta y baja desde Accesos → Usuarios.
 INSERT INTO usuarios (nombre, email, rol, activo) VALUES
   ('Mariano Agustín',       'magustin@smt.gob.ar', 'coordinacion',   1),
   ('Candelaria Peza',       'cpeza@smt.gob.ar',    'administrativo', 1),
@@ -73,4 +73,10 @@ INSERT INTO usuarios (nombre, email, rol, activo) VALUES
   ('Lucía Sosa',            'lsosa@smt.gob.ar',    'notificador',    1),
   ('Raúl Ibáñez',           'ribanez@smt.gob.ar',  'notificador',    1),
   ('Dirección de Ambiente', 'ambiente@smt.gob.ar', 'direccion',      1),
+  ('Administración DITEC',  'ditec@smt.gob.ar',    'administrador',  1),
   ('Sistema',               'sistema@smt.gob.ar',  'sistema',        1);
+
+-- Tipos de usuario: todos habilitados al arrancar.
+INSERT INTO tipos_usuario (rol, habilitado) VALUES
+  ('relevador', 1), ('notificador', 1), ('administrativo', 1), ('coordinacion', 1),
+  ('direccion', 1), ('administrador', 1), ('titular', 1);

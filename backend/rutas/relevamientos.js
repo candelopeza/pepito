@@ -25,7 +25,7 @@ import { enTransaccion } from '../conexion-bd.js';
 import { insertarTramite, localPorId, tramitesPorTipo } from '../consultas.js';
 import { ID_ESTADO, ID_TTRAMITE } from '../mapeo.js';
 import { requiereRol } from '../middlewares/usuario.js';
-import { geocodificar } from '../../src/dominio/geo.js';
+import { geocodificar } from '../geocodificador.js';
 import { hoyISO } from '../../src/dominio/fechas.js';
 
 const router = Router();
@@ -80,7 +80,7 @@ router.post('/', requiereRol('relevador', 'coordinacion'), async (req, res, next
     // Un gran generador entra a revisión de datos; uno menor queda a la espera
     // de que coordinación confirme la exención.
     const idEstadoLocal = esGran ? ID_ESTADO.REVISION_DATOS : ID_ESTADO.EXENTO_PENDIENTE;
-    const geo = geocodificar(datos.direccionRelevada);
+    const geo = await geocodificar(datos.direccionRelevada);
     const hoy = hoyISO();
 
     const idLocal = await enTransaccion(async (cx) => {

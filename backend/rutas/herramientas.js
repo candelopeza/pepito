@@ -18,17 +18,12 @@
 
 import { Router } from 'express';
 import { consultar, ejecutar, enTransaccion } from '../conexion-bd.js';
-import {
-  cicloActual,
-  insertarTramite,
-  localPorId,
-  parametros,
-  recortarObservacion,
-} from '../consultas.js';
-import { ID_ESTADO, ID_TDOC, ID_TTRAMITE } from '../mapeo.js';
+import { localPorId, recortarObservacion } from '../consultas.js';
+
 import { requiereRol, firmante } from '../middlewares/usuario.js';
-import { geocodificar } from '../../src/dominio/geo.js';
+import { geocodificar } from '../geocodificador.js';
 import { hoyISO } from '../../src/dominio/fechas.js';
+import { LIMITE_ES_OFICIAL, dentroDelMunicipio } from '../limite-municipal.js';
 
 const router = Router();
 
@@ -139,19 +134,37 @@ router.post('/fusiones', requiereRol('coordinacion', 'direccion'), async (req, r
    Es el proceso diario de la sección 9.1, disparado a mano desde Herramientas.
    Solo toca los locales SIN coordenada: los que ya la tienen no se recalculan,
    porque una dirección corregida a mano vale más que lo que devuelve el
-   geocodificador. */
+   geocodificador.
+
+   >>> VA POR TANDAS <<<
+   El geocodificador acepta una consulta por segundo, así que resolver los 253
+   pendientes tarda más de cuatro minutos y el navegador cortaría el pedido
+   antes. Cada llamada procesa un lote y devuelve cuántos quedan: la pantalla
+   puede repetir hasta terminar, y el trabajo hecho queda guardado aunque se
+   corte en el medio.
+
+   >>> LA COORDENADA QUE CAE FUERA DEL EJIDO NO SE GUARDA <<<
+   Se guarda el motivo para que el local aparezca en la vista de revisión con la
+   explicación a la vista (sección 9.2). No se completa con un valor aproximado
+   ni con la coordenada del relevamiento. */
+const LOTE_GEOCODIFICACION = 25;
+
 router.post('/geocodificar', requiereRol('administrativo', 'coordinacion', 'direccion'), async (req, res, next) => {
   try {
+    const tamanio = Math.min(Number(req.body?.lote) || LOTE_GEOCODIFICACION, 100);
+
     const pendientes = await consultar(
       `SELECT id_local, direccion_local FROM local
-        WHERE habilita = 1 AND (latitud_local IS NULL OR longitud_local IS NULL)`,
+        WHERE habilita = 1 AND (latitud_local IS NULL OR longitud_local IS NULL OR latitud_local = 0)
+        ORDER BY id_local
+        LIMIT ${tamanio}`,
     );
 
     let resueltos = 0;
     const sinResolver = [];
 
     for (const local of pendientes) {
-      const geo = geocodificar(local.direccionLocal ?? '');
+      const geo = await geocodificar(local.direccionLocal ?? '');
       if (geo.ok) {
         await ejecutar('UPDATE local SET latitud_local = ?, longitud_local = ? WHERE id_local = ?', [
           geo.latitud,
@@ -164,91 +177,178 @@ router.post('/geocodificar', requiereRol('administrativo', 'coordinacion', 'dire
       }
     }
 
-    res.json({ revisados: pendientes.length, resueltos, sinResolver });
+    const [fila] = await consultar(
+      `SELECT COUNT(*) AS total FROM local
+        WHERE habilita = 1 AND (latitud_local IS NULL OR longitud_local IS NULL OR latitud_local = 0)`,
+    );
+
+    res.json({
+      revisados: pendientes.length,
+      resueltos,
+      sinResolver,
+      quedanPendientes: Number(fila?.total) || 0,
+      limiteOficial: LIMITE_ES_OFICIAL,
+    });
   } catch (e) {
     next(e);
   }
 });
 
-/* POST /herramientas/informe-9dj  ->  carga del informe de la prestataria.
+/* GET /herramientas/coordenadas-fuera  ->  las ubicaciones sospechosas.
 
-   El pliego pide CARGA MANUAL ASISTIDA (sección 9.3): el sistema propone los
-   cambios y un agente confirma. Acá llegan las filas YA CONFIRMADAS, así que
-   se aplican sin volver a preguntar.
+   Locales cuya coordenada guardada NO cae dentro del ejido municipal. El pliego
+   pide descartar la que caiga fuera "en lugar de guardarla", pero estas ya
+   estaban guardadas cuando llegaron de la importación: borrarlas sin mirar
+   sería perder la única ubicación que tienen algunos.
 
-   El contrato informado por la empresa entra con origen INFORME_9DJ, que es lo
-   que lo distingue del presentado por el titular: tienen distinto valor
-   probatorio (sección 4.6) y el front los muestra con estados distintos. */
-router.post('/informe-9dj', requiereRol('administrativo', 'coordinacion', 'direccion'), async (req, res, next) => {
+   Se listan para que la oficina las revise. Mientras el límite sea el polígono
+   provisorio, además, una coordenada de afuera puede ser un error del polígono:
+   por eso se informa `limiteOficial`. */
+router.get('/coordenadas-fuera', async (_req, res, next) => {
   try {
-    const filas = Array.isArray(req.body?.filas) ? req.body.filas : null;
-    if (!filas?.length) return res.status(400).json({ error: 'No llegó ninguna fila del informe' });
+    const todos = await consultar(
+      `SELECT l.id_local, l.nombre_local, l.direccion_local, l.latitud_local, l.longitud_local, r.nombre_rubro
+         FROM local l
+         LEFT JOIN rubro r ON r.id_rubro = l.id_rubro
+        WHERE l.habilita = 1 AND l.latitud_local IS NOT NULL AND l.longitud_local IS NOT NULL`,
+    );
 
-    const params = await parametros();
-    const hoy = hoyISO();
-    const creados = [];
-    const actualizados = [];
+    const fuera = todos
+      .filter((l) => !dentroDelMunicipio(Number(l.latitudLocal), Number(l.longitudLocal)))
+      .map((l) => ({
+        id: l.idLocal,
+        nombreLocal: l.nombreLocal,
+        direccion: l.direccionLocal,
+        rubro: l.nombreRubro,
+        latitud: Number(l.latitudLocal),
+        longitud: Number(l.longitudLocal),
+      }));
 
-    for (const fila of filas) {
-      let idLocal = Number(fila.localId) || null;
+    res.json({ total: fuera.length, limiteOficial: LIMITE_ES_OFICIAL, locales: fuera });
+  } catch (e) {
+    next(e);
+  }
+});
 
-      if (!idLocal) {
-        // Alta desde el informe. Lleva prefijo CON en el id original, igual
-        // que en el sistema viejo, para saber de dónde salió la ficha.
-        const geo = geocodificar(fila.direccion ?? '');
-        const resultado = await ejecutar(
-          `INSERT INTO local
-             (cuit, id_original, id_rubro, id_estado, razon_social, nombre_local, direccion_local,
-              latitud_local, longitud_local, observacion, bloqueado, habilita)
-           VALUES (?, NULL, 1, ?, ?, ?, ?, ?, ?, 'Creado desde el informe de la prestataria.', 0, 1)`,
-          [
-            fila.cuit ?? null,
-            ID_ESTADO.REVISION_DATOS,
-            fila.razonSocial ?? null,
-            fila.razonSocial ?? 'SIN NOMBRE',
-            fila.direccion ?? '',
-            geo.ok ? geo.latitud : null,
-            geo.ok ? geo.longitud : null,
-          ],
-        );
-        idLocal = resultado.insertId;
-        await ejecutar('UPDATE local SET id_original = ? WHERE id_local = ?', [
-          `CON-${String(idLocal).padStart(4, '0')}`,
-          idLocal,
-        ]);
-        creados.push(idLocal);
-      } else {
-        actualizados.push(idLocal);
-      }
+/* El informe de la prestataria ya no entra por acá: tiene su módulo propio
+   con revisión fila por fila en backend/rutas/informe-9dj.js. */
 
-      const ciclo = await cicloActual(idLocal);
-      await enTransaccion(async (cx) => {
-        const idTramite = await insertarTramite(cx, {
-          idLocal,
-          idEstado: ID_ESTADO.DOC_VIGENTE,
-          idTtramite: ID_TTRAMITE.PRESENTACION_DOCUMENTACION,
-          idUsuario: req.usuario?.id ?? null,
-          nroCiclo: ciclo,
-          fechaInicio: hoy,
-          fechaVencimiento: fila.vencimiento ?? null,
-          observaciones: 'Informado por la empresa 9 de Julio.',
-        });
-        await cx.execute(
-          `INSERT INTO documentacion
-             (id_tramite, id_tdocumentacion, numero, origen, fecha_emision, fecha_vencimiento, habilita)
-           VALUES (?, ?, ?, 'INFORME_9DJ', ?, ?, 1)`,
-          [idTramite, ID_TDOC.CONTRATO, fila.numeroContrato ?? null, hoy, fila.vencimiento ?? null],
-        );
+/* ============================================================================
+   RECÁLCULO DE COORDENADAS  —  carga manual asistida
+   ----------------------------------------------------------------------------
+   Para los locales cuya ubicación guardada no se corresponde con su dirección.
+   En el padrón real los hay a doce kilómetros de donde dicen estar.
+
+   >>> EL SISTEMA PROPONE, UNA PERSONA CONFIRMA <<<
+   Es el mismo criterio que el pliego pide para el informe de la prestataria
+   (sección 9.3): "que el sistema muestre una previsualización de los cambios
+   que produciría para que un agente confirme antes de aplicar".
+
+   Acá pesa todavía más: una coordenada es la ubicación oficial de un
+   establecimiento, alimenta el mapa y el ruteo de los notificadores. Pisar 68
+   de una sin que nadie las mire sería cambiar el mismo tipo de dato que se
+   quiere arreglar, nada más que en sentido contrario.
+
+   Por eso son DOS endpoints: uno propone sin tocar nada, el otro guarda
+   exactamente lo que el agente aprobó.
+   ============================================================================ */
+
+/* Cuántos locales se geocodifican por llamada. El geocodificador acepta una
+   consulta por segundo, así que un lote de 20 tarda unos 22 segundos: entra
+   cómodo en un pedido HTTP y da sensación de avance. */
+const LOTE_PROPUESTAS = 20;
+
+/* Distancia en kilómetros entre dos puntos (fórmula del semiverseno).
+   Es el dato que le dice al agente cuánto se va a mover el local: una
+   corrección de 50 metros es un ajuste, una de 12 km es otro domicilio. */
+function distanciaKm(latA, lngA, latB, lngB) {
+  const R = 6371;
+  const rad = Math.PI / 180;
+  const dLat = (latB - latA) * rad;
+  const dLng = (lngB - lngA) * rad;
+  const a =
+    Math.sin(dLat / 2) ** 2 + Math.cos(latA * rad) * Math.cos(latB * rad) * Math.sin(dLng / 2) ** 2;
+  return Number((2 * R * Math.asin(Math.sqrt(a))).toFixed(2));
+}
+
+/* POST /herramientas/coordenadas/propuestas   { ids: [1, 2, 3] }
+
+   Geocodifica las direcciones de esos locales y devuelve qué coordenada
+   pondría en cada uno. NO GUARDA NADA. */
+router.post('/coordenadas/propuestas', requiereRol('administrativo', 'coordinacion', 'direccion'), async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+    if (!ids.length) return res.status(400).json({ error: 'Hay que indicar qué locales revisar' });
+
+    const lote = ids.slice(0, LOTE_PROPUESTAS);
+    const marcadores = lote.map(() => '?').join(',');
+    const locales = await consultar(
+      `SELECT id_local, nombre_local, direccion_local, latitud_local, longitud_local
+         FROM local WHERE habilita = 1 AND id_local IN (${marcadores})`,
+      lote,
+    );
+
+    const propuestas = [];
+    for (const l of locales) {
+      const geo = await geocodificar(l.direccionLocal ?? '');
+      const actual =
+        l.latitudLocal !== null && l.longitudLocal !== null
+          ? { latitud: Number(l.latitudLocal), longitud: Number(l.longitudLocal) }
+          : null;
+
+      propuestas.push({
+        id: l.idLocal,
+        nombreLocal: l.nombreLocal,
+        direccion: l.direccionLocal,
+        actual,
+        propuesta: geo.ok ? { latitud: geo.latitud, longitud: geo.longitud } : null,
+        motivo: geo.ok ? null : geo.motivo,
+        distanciaKm: geo.ok && actual ? distanciaKm(actual.latitud, actual.longitud, geo.latitud, geo.longitud) : null,
       });
     }
 
-    res.json({
-      aplicadas: filas.length,
-      creados,
-      actualizados,
-      // Se devuelve para que la pantalla pueda mostrar con qué regla se calculó.
-      modoBisiesto: params.modoBisiesto,
-    });
+    res.json({ propuestas, procesados: lote.length, quedan: Math.max(ids.length - lote.length, 0) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* POST /herramientas/coordenadas/aplicar   { cambios: [{ id, latitud, longitud }] }
+
+   Guarda solo lo que el agente aprobó. Vuelve a validar cada coordenada contra
+   el ejido: lo que llega del navegador no se guarda sin revisar, aunque lo haya
+   propuesto este mismo sistema un minuto antes. */
+router.post('/coordenadas/aplicar', requiereRol('administrativo', 'coordinacion', 'direccion'), async (req, res, next) => {
+  try {
+    const cambios = Array.isArray(req.body?.cambios) ? req.body.cambios : [];
+    if (!cambios.length) return res.status(400).json({ error: 'No llegó ningún cambio para aplicar' });
+
+    const aplicados = [];
+    const rechazados = [];
+
+    for (const c of cambios) {
+      const id = Number(c.id);
+      const lat = Number(c.latitud);
+      const lng = Number(c.longitud);
+
+      if (!id || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        rechazados.push({ id: c.id, motivo: 'Coordenada mal formada.' });
+        continue;
+      }
+      if (!dentroDelMunicipio(lat, lng)) {
+        rechazados.push({ id, motivo: 'La coordenada cae fuera del ejido municipal.' });
+        continue;
+      }
+
+      const resultado = await ejecutar(
+        'UPDATE local SET latitud_local = ?, longitud_local = ? WHERE id_local = ? AND habilita = 1',
+        [lat, lng, id],
+      );
+      if (resultado.affectedRows) aplicados.push(id);
+      else rechazados.push({ id, motivo: 'No existe ese local o está dado de baja.' });
+    }
+
+    res.json({ aplicados: aplicados.length, rechazados, ids: aplicados });
   } catch (e) {
     next(e);
   }

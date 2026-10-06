@@ -112,6 +112,7 @@ export const api = {
   tiposUsuario: () => get('/configuracion/tipos-usuario'),
   parametros: () => get('/configuracion/parametros'),
   plantilla: () => get('/configuracion/plantilla'),
+  limiteMunicipal: () => get('/configuracion/limite-municipal'),
 
   catalogoAlta: (catalogo, item) => post(`/configuracion/${catalogo}`, item),
   catalogoEdicion: (catalogo, id, item) => put(`/configuracion/${catalogo}/${id}`, item),
@@ -148,6 +149,18 @@ export const api = {
   // --- herramientas ---------------------------------------------------------
   fusiones: () => get('/herramientas/fusiones'),
   fusionar: (idPrincipal, idDuplicado) => post('/herramientas/fusiones', { idPrincipal, idDuplicado }),
-  geocodificar: () => post('/herramientas/geocodificar'),
-  informe9DJ: (filas) => post('/herramientas/informe-9dj', { filas }),
+  geocodificar: (lote) => post('/herramientas/geocodificar', { lote }),
+  coordenadasFuera: () => get('/herramientas/coordenadas-fuera'),
+  proponerCoordenadas: (ids) => post('/herramientas/coordenadas/propuestas', { ids }),
+  aplicarCoordenadas: (cambios) => post('/herramientas/coordenadas/aplicar', { cambios }),
+
+  // --- informe de la prestataria (modelo de foto) ----------------------------
+  informe9djCargas: () => get('/informe-9dj/cargas'),
+  informe9djCarga: (id) => get(`/informe-9dj/cargas/${id}`),
+  informe9djSubir: (datos) => post('/informe-9dj/cargas', datos),
+  informe9djDecidir: (idCarga, idFila, decision, idLocal) =>
+    put(`/informe-9dj/cargas/${idCarga}/filas/${idFila}`, { decision, idLocal }),
+  informe9djAplicar: (id, datos) => post(`/informe-9dj/cargas/${id}/aplicar`, datos),
+  informe9djDescartar: (id) => post(`/informe-9dj/cargas/${id}/descartar`),
+  informe9djAnular: (id, motivo) => post(`/informe-9dj/cargas/${id}/anular`, { motivo }),
 };

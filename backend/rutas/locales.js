@@ -27,7 +27,7 @@ import {
 } from '../consultas.js';
 import { estadoDeLocal, ID_ESTADO } from '../mapeo.js';
 import { requiereRol } from '../middlewares/usuario.js';
-import { geocodificar } from '../../src/dominio/geo.js';
+import { geocodificar } from '../geocodificador.js';
 
 const router = Router();
 
@@ -88,7 +88,7 @@ router.post('/', requiereRol('administrativo', 'coordinacion', 'direccion'), asy
       return res.status(400).json({ error: 'El nombre del local y la dirección son obligatorios' });
     }
 
-    const geo = geocodificar(datos.direccion);
+    const geo = await geocodificar(datos.direccion);
     const idRubro = await idDeRubro(datos.rubro);
 
     const idLocal = await enTransaccion(async (cx) => {
@@ -153,7 +153,7 @@ router.put('/:id', requiereRol('administrativo', 'coordinacion', 'direccion'), a
     if (datos.rubro !== undefined) asignar('id_rubro', await idDeRubro(datos.rubro));
 
     if (datos.direccion !== undefined && datos.direccion !== actual.direccion) {
-      const geo = geocodificar(datos.direccion);
+      const geo = await geocodificar(datos.direccion);
       asignar('direccion_local', datos.direccion);
       asignar('latitud_local', geo.ok ? geo.latitud : null);
       asignar('longitud_local', geo.ok ? geo.longitud : null);

@@ -180,14 +180,6 @@ const TIPO_DOCUMENTO = {
   [ID_TDOC.DDJJ_RECICLAJE]: 'DDJJ_RECICLAJE',
 };
 
-/* Documento vigente -> el código de estado que le corresponde al local.
-   El contrato informado por la prestataria tiene su propio código porque tiene
-   distinto valor probatorio (sección 4.6 del pliego). */
-const ESTADO_POR_DOCUMENTO = {
-  CONTRATO: 'CONTRATO_VIGENTE',
-  DDJJ: 'DDJJ_VIGENTE',
-  DDJJ_RECICLAJE: 'DDJJ_RECICLAJE',
-};
 
 /* ---------------------------------------------------------------------------
    3. AYUDANTES DE FECHA
@@ -397,6 +389,22 @@ function estaVigente(fechaVencimiento, hoy) {
   return Boolean(fechaVencimiento) && hoy < fechaVencimiento;
 }
 
+/* >>> LOS CONTRATOS DEL INFORME 9 DE JULIO NO SE RIGEN POR FECHA <<<
+   El informe de la prestataria es una FOTO de su padrón de contratos (sección
+   9.3 del pliego): lo que el área sabe de esos locales es que FIGURAN en el
+   último informe, no cuándo vence cada contrato (el archivo muchas veces ni lo
+   trae; los 260 cargados de la base histórica vienen sin fecha).
+
+   Por eso un documento con origen INFORME_9DJ está vigente mientras la última
+   foto lo sostenga —su trámite sigue en VIGENTE— y deja de estarlo cuando un
+   informe posterior lo retira y el módulo lo pasa a VENCIDA. Eso no es deducir:
+   es leer lo que el módulo del informe registró. Para el resto de la
+   documentación la vigencia sigue siendo la fecha, como siempre. */
+function documentoVigente(d, hoy) {
+  if (d.origen === 'INFORME_9DJ') return d.idEstado === ID_ESTADO.DOC_VIGENTE;
+  return estaVigente(d.fechaVencimiento, hoy);
+}
+
 /* Un plazo está vencido a partir del día SIGUIENTE al vencimiento: el día del
    vencimiento el interesado todavía puede presentar. */
 function plazoVencido(fechaVencimiento, hoy) {
@@ -431,13 +439,13 @@ export function estadoDeLocal(local, tramites = [], hoy = hoyISO()) {
         // Una presentación del portal sin aprobar NO cuenta: no puede suspender
         // un plazo por sí sola (sección 6.3).
         d.idEstado !== ID_ESTADO.DOC_PENDIENTE_REVISION &&
-        estaVigente(d.fechaVencimiento, hoy),
+        documentoVigente(d, hoy),
     );
 
   if (vigente('CONTRATO')) {
     const contrato = [...documentos]
       .reverse()
-      .find((d) => d.tipo === 'CONTRATO' && estaVigente(d.fechaVencimiento, hoy));
+      .find((d) => d.tipo === 'CONTRATO' && documentoVigente(d, hoy));
     return contrato?.origen === 'INFORME_9DJ' ? 'CONTRATO_9DJ' : 'CONTRATO_VIGENTE';
   }
   if (vigente('DDJJ_RECICLAJE')) return 'DDJJ_RECICLAJE';
@@ -459,8 +467,14 @@ export function estadoDeLocal(local, tramites = [], hoy = hoyISO()) {
     const posterior = !ultimo || (ultimoDoc.fecha ?? '') > (ultimo.fecha ?? '') ||
       ((ultimoDoc.fecha ?? '') === (ultimo.fecha ?? '') && ultimoDoc.id > ultimo.id);
     // Solo reingresa si el documento TENÍA una vigencia que ya se cumplió. Los
-    // 670 registros históricos sin fecha no disparan nada.
-    if (posterior && ultimoDoc.fechaVencimiento) return 'NOTIF1_PENDIENTE';
+    // 670 registros históricos sin fecha no disparan nada. El contrato del
+    // informe 9DJ reingresa por su propio motivo: fue retirado de la foto
+    // (VENCIDA sin fecha, lo marca el módulo del informe), no venció solo.
+    const perdido =
+      ultimoDoc.origen === 'INFORME_9DJ'
+        ? ultimoDoc.idEstado === ID_ESTADO.DOC_VENCIDA
+        : Boolean(ultimoDoc.fechaVencimiento);
+    if (posterior && perdido) return 'NOTIF1_PENDIENTE';
   }
 
   if (ultimo?.tipo === 'PRORROGA') {

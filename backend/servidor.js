@@ -21,6 +21,7 @@ import rutasDocumentacion from './rutas/documentacion.js';
 import rutasProrrogasExpedientes from './rutas/prorrogas-expedientes.js';
 import rutasConfiguracion from './rutas/configuracion.js';
 import rutasHerramientas from './rutas/herramientas.js';
+import rutasInforme9DJ from './rutas/informe-9dj.js';
 
 const app = express();
 const PUERTO = Number(process.env.PUERTO) || 3000;
@@ -28,8 +29,9 @@ const PUERTO = Number(process.env.PUERTO) || 3000;
 /* --- middlewares generales ------------------------------------------------ */
 // El front (Vite) corre en otro puerto: sin esto el navegador bloquea los fetch.
 app.use(cors({ origin: process.env.ORIGEN_FRONT || true }));
-// Lee el JSON que manda el front en el body de los POST/PUT.
-app.use(express.json({ limit: '2mb' }));
+// Lee el JSON que manda el front en el body de los POST/PUT. El límite es
+// holgado porque el informe de la prestataria viaja como archivo en base64.
+app.use(express.json({ limit: '15mb' }));
 // Quién está pidiendo y con qué rol. Provisorio hasta CiDiTuc (ver middlewares/usuario.js).
 app.use(identificarUsuario);
 
@@ -47,6 +49,7 @@ app.use('/documentacion', rutasDocumentacion);
 app.use('/', rutasProrrogasExpedientes); // /locales/:id/prorrogas y /locales/:id/expedientes
 app.use('/configuracion', rutasConfiguracion);
 app.use('/herramientas', rutasHerramientas);
+app.use('/informe-9dj', rutasInforme9DJ);
 
 /* --- lo que no matcheó ninguna ruta --------------------------------------- */
 app.use((req, res) => {

@@ -16,10 +16,16 @@
    entrega hacia ahí. Preferimos el hueco visible.
 
    VALIDACIÓN TERRITORIAL: toda coordenada obtenida se valida contra el
-   polígono del ejido municipal y la que cae afuera se DESCARTA, no se guarda.
+   polígono del ejido municipal (backend/limite-municipal.js) y la que cae
+   afuera NO se guarda.
    [NO PORTAR] El recuadro que usa el sistema viejo (lat -28,0 a -26,0 / lng
    -66,5 a -64,0) abarca toda la provincia y deja pasar locales de otros
    departamentos: sirve como filtro previo, no como validación.
+
+   ESTA PANTALLA TIENE DOS PARTES:
+     arriba  los locales SIN ubicación, para corregirles la dirección
+     abajo   los que TIENEN una ubicación que no se corresponde con su
+             dirección (RevisionCoordenadas), para recalcularla
    ============================================================================ */
 
 import { useMemo, useState } from 'react';
@@ -30,6 +36,7 @@ import Badge from '../../components/ui/Badge';
 import Aviso, { Vacio } from '../../components/ui/Aviso';
 import Modal from '../../components/ui/Modal';
 import FormLocal from '../../components/FormLocal';
+import RevisionCoordenadas from '../../components/RevisionCoordenadas';
 import { useDatos } from '../../datos/datosContexto';
 import { LIMITE_MUNICIPAL } from '../../dominio/geo';
 
@@ -127,6 +134,8 @@ function Geocodificacion() {
       )}
 
       {/* ---------- El límite contra el que se valida ---------- */}
+
+      <RevisionCoordenadas />
 
       {editando && (
         <Modal abierto etiqueta="PADRÓN" titulo={`Corregir la dirección de ${editando.nombreLocal}`} ancho="ancho" onCerrar={() => setEditando(null)}>

@@ -31,6 +31,8 @@
      opciones     solo CampoSelect: [{ id, etiqueta }] o array de textos
    ============================================================================ */
 
+import { useState } from 'react';
+
 function Envoltura({ id, etiqueta, error, ayuda, children, ancho }) {
   return (
     <div className="form-grupo" style={ancho ? { gridColumn: `span ${ancho}` } : undefined}>
@@ -117,6 +119,125 @@ export function Dato({ etiqueta, children, ancho }) {
       <span className="dato-etiqueta">{etiqueta}</span>
       <span className="dato-valor">{children ?? '—'}</span>
     </div>
+  );
+}
+
+/* Achica la foto en el navegador antes de mandarla: la de un celular pesa
+   3-8 MB y por la red móvil, o guardada en la cola sin conexión, eso es
+   demasiado. A 1600 px de lado y JPEG al 80 % queda en unos 300 KB y se sigue
+   viendo bien el frente del local. */
+function achicarImagen(archivo, maximo = 1600, calidad = 0.8) {
+  return new Promise((resolver, rechazar) => {
+    const url = URL.createObjectURL(archivo);
+    const img = new Image();
+    img.onload = () => {
+      const escala = Math.min(1, maximo / Math.max(img.width, img.height));
+      const lienzo = document.createElement('canvas');
+      lienzo.width = Math.round(img.width * escala);
+      lienzo.height = Math.round(img.height * escala);
+      lienzo.getContext('2d').drawImage(img, 0, 0, lienzo.width, lienzo.height);
+      URL.revokeObjectURL(url);
+      resolver(lienzo.toDataURL('image/jpeg', calidad));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      rechazar(new Error('No se pudo leer la imagen'));
+    };
+    img.src = url;
+  });
+}
+
+/* Foto desde la cámara o la galería del celular. `valor` es la imagen ya
+   achicada (data URL); onChange recibe (imagen, nombreDelArchivo). Se usa en
+   el formulario de entrega de cédulas (sección 6.2). */
+export function CampoFoto({ id, etiqueta, valor, onChange, error, ayuda, ancho }) {
+  const [preparando, setPreparando] = useState(false);
+
+  async function elegir(e) {
+    const archivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!archivo) return;
+    setPreparando(true);
+    try {
+      onChange(await achicarImagen(archivo), archivo.name);
+    } catch {
+      onChange('', '');
+    } finally {
+      setPreparando(false);
+    }
+  }
+
+  return (
+    <Envoltura id={id} etiqueta={etiqueta} error={error} ayuda={preparando ? 'Preparando la foto…' : ayuda} ancho={ancho}>
+      <input id={id} type="file" accept="image/*" className={error ? 'con-error' : ''} onChange={elegir} />
+      {valor && (
+        <span className="campo-foto-previa">
+          <img src={valor} alt="Foto cargada" />
+          <button type="button" className="btn-tabla" onClick={() => onChange('', '')}>
+            Quitar
+          </button>
+        </span>
+      )}
+    </Envoltura>
+  );
+}
+
+/* Un documento respaldatorio: PDF o imagen (DDJJ, contrato). Las imágenes se
+   achican igual que las fotos; los PDF van tal cual, hasta 5 MB. onChange
+   recibe (archivoEnBase64, nombre). Lo usa el formulario de documentación. */
+const MAXIMO_PDF = 5 * 1024 * 1024;
+
+function leerComoBase64(archivo) {
+  return new Promise((resolver, rechazar) => {
+    const lector = new FileReader();
+    lector.onload = () => resolver(String(lector.result));
+    lector.onerror = () => rechazar(new Error('No se pudo leer el archivo'));
+    lector.readAsDataURL(archivo);
+  });
+}
+
+export function CampoArchivo({ id, etiqueta, valor, nombre, onChange, error, ayuda, ancho }) {
+  const [problema, setProblema] = useState(null);
+  const [preparando, setPreparando] = useState(false);
+
+  async function elegir(e) {
+    const archivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!archivo) return;
+    setProblema(null);
+    if (archivo.type === 'application/pdf' && archivo.size > MAXIMO_PDF) {
+      setProblema('El PDF pesa más de 5 MB. Probá escanearlo en menor calidad.');
+      return;
+    }
+    setPreparando(true);
+    try {
+      const contenido = archivo.type.startsWith('image/') ? await achicarImagen(archivo) : await leerComoBase64(archivo);
+      onChange(contenido, archivo.name);
+    } catch {
+      setProblema('No se pudo leer el archivo.');
+    } finally {
+      setPreparando(false);
+    }
+  }
+
+  return (
+    <Envoltura
+      id={id}
+      etiqueta={etiqueta}
+      error={problema ?? error}
+      ayuda={preparando ? 'Preparando el archivo…' : ayuda}
+      ancho={ancho}
+    >
+      <input id={id} type="file" accept="application/pdf,image/*" className={error ? 'con-error' : ''} onChange={elegir} />
+      {valor && (
+        <span className="campo-foto-previa">
+          <span>{nombre || 'Archivo adjunto'}</span>
+          <button type="button" className="btn-tabla" onClick={() => onChange('', '')}>
+            Quitar
+          </button>
+        </span>
+      )}
+    </Envoltura>
   );
 }
 

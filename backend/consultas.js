@@ -14,13 +14,22 @@
    2. El JOIN con `estado` y `tipo_tramite`. Las rutas devuelven el nombre del
       estado además del id, porque el front muestra texto y no números.
 
-   LA ÚNICA TABLA QUE ESTE SISTEMA AGREGÓ A LA BASE ES `feriado`. Todo lo demás
-   sale de las diez tablas del área o se resuelve en el backend.
+   LA ÚNICA TABLA OBLIGATORIA QUE ESTE SISTEMA AGREGÓ A LA BASE ES `feriado`.
+   Las demás (auditoria, parametro, archivo, permisos) son OPCIONALES: se usan
+   si el script correspondiente de sql/ se corrió (ver backend/capacidades.js).
    ============================================================================ */
 
-import { consultar } from './conexion-bd.js';
+import { consultar, consultarEn } from './conexion-bd.js';
 import { PARAMETROS, PLANTILLA_CEDULA } from './parametros-sistema.js';
 import { aActuacionFront, aLocalFront, estadoDeLocal, ID_TTRAMITE, SERIE_CEDULA } from './mapeo.js';
+import { tiene } from './capacidades.js';
+import { archivosPorTramite } from './archivos.js';
+
+/* >>> EL PARÁMETRO `cx` QUE APARECE EN VARIAS FUNCIONES <<<
+   Es opcional. Sin él, la consulta va al pool como siempre. Con él, corre
+   dentro de la transacción abierta, y ve lo que esa transacción escribió y
+   todavía no confirmó. backend/actos.js lo usa para medir el estado del local
+   antes y después de cada acto, dentro de la misma transacción. */
 
 /* ---------------------------------------------------------------------------
    LOCALES
@@ -34,14 +43,78 @@ const SQL_LOCAL = `
     LEFT JOIN rubro r ON r.id_rubro = l.id_rubro AND r.habilita = 1
    WHERE l.habilita = 1`;
 
-export async function locales() {
-  const filas = await consultar(`${SQL_LOCAL} ORDER BY l.id_local`);
-  return filas.map(aLocalFront);
+export async function locales(cx = null) {
+  const filas = await consultarEn(cx, `${SQL_LOCAL} ORDER BY l.id_local`);
+  return agregarDatosDeBloqueo(filas.map(aLocalFront), cx);
 }
 
-export async function localPorId(idLocal) {
-  const [fila] = await consultar(`${SQL_LOCAL} AND l.id_local = ?`, [idLocal]);
-  return fila ? aLocalFront(fila) : null;
+export async function localPorId(idLocal, cx = null) {
+  const [fila] = await consultarEn(cx, `${SQL_LOCAL} AND l.id_local = ?`, [idLocal]);
+  if (!fila) return null;
+  const [local] = await agregarDatosDeBloqueo([aLocalFront(fila)], cx);
+  return local;
+}
+
+/* EL ESTADO CONGELADO DE LOS LOCALES BLOQUEADOS.
+
+   Un local bloqueado tiene que quedarse en el estado que tenía al bloquearlo
+   (sección 3.4). Ese estado no está en ninguna columna del local: lo anota la
+   auditoría en el momento del bloqueo, así que se lee de ahí. De paso se trae
+   CUÁNDO se bloqueó, que la ficha muestra y la tabla `local` no guarda.
+
+   Sin la tabla `auditoria` no hay de dónde sacarlo y los locales quedan como
+   antes: con el estado de local.id_estado. Son pocos locales (los bloqueados),
+   así que son dos consultas chicas. */
+async function agregarDatosDeBloqueo(lista, cx = null) {
+  const bloqueados = lista.filter((l) => l.bloqueado).map((l) => l.id);
+  if (!bloqueados.length || !tiene('auditoria')) return lista;
+
+  const marcas = bloqueados.map(() => '?').join(',');
+  const [ultimos, bloqueos] = await Promise.all([
+    consultarEn(
+      cx,
+      `SELECT a.id_local, a.estado_nuevo
+         FROM auditoria a
+         JOIN (SELECT id_local, MAX(id_auditoria) AS ultimo
+                 FROM auditoria WHERE id_local IN (${marcas}) GROUP BY id_local) u
+           ON u.ultimo = a.id_auditoria`,
+      bloqueados,
+    ),
+    consultarEn(
+      cx,
+      `SELECT id_local, MAX(momento) AS momento
+         FROM auditoria
+        WHERE accion = 'bloquear' AND id_local IN (${marcas})
+        GROUP BY id_local`,
+      bloqueados,
+    ),
+  ]);
+
+  const congelado = new Map(ultimos.map((f) => [f.idLocal, f.estadoNuevo]));
+  const desde = new Map(bloqueos.map((f) => [f.idLocal, f.momento ? String(f.momento).replace(' ', 'T') : null]));
+  return lista.map((l) =>
+    l.bloqueado ? { ...l, estadoCongelado: congelado.get(l.id) ?? null, bloqueadoEn: desde.get(l.id) ?? null } : l,
+  );
+}
+
+/* El rubro de un formulario puede llegar de dos formas: el id del catálogo
+   (rubroId: 4) o el nombre ('GASTRONOMIA'). Las dos valen. Si no se encuentra,
+   se usa SIN INFORMAR (id 1) en vez de fallar: el padrón no se frena porque
+   falte una fila de catálogo. El local queda en datos incompletos y la
+   oficina lo completa. */
+export async function idDeRubro({ rubroId, rubro } = {}, cx = null) {
+  const id = Number(rubroId);
+  if (Number.isInteger(id) && id > 0) {
+    const [fila] = await consultarEn(cx, 'SELECT id_rubro FROM rubro WHERE id_rubro = ? AND habilita = 1', [id]);
+    if (fila) return fila.idRubro;
+  }
+  if (rubro) {
+    const [fila] = await consultarEn(cx, 'SELECT id_rubro FROM rubro WHERE nombre_rubro = ? AND habilita = 1', [
+      String(rubro).trim().toUpperCase(),
+    ]);
+    if (fila) return fila.idRubro;
+  }
+  return 1;
 }
 
 /* Busca un local aunque esté dado de baja. Lo necesita la fusión de duplicados,
@@ -75,13 +148,13 @@ const SQL_TRAMITE = `
 /* Los datos del documento cuelgan de la tabla `documentacion`, que está aparte
    del trámite. Se traen todos juntos y se indexan por id_tramite: así el
    traductor los encuentra sin hacer una consulta por trámite. */
-async function documentosPorTramite(idLocal = null) {
+async function documentosPorTramite(idLocal = null, cx = null) {
   const sql = idLocal
     ? `SELECT d.* FROM documentacion d
          JOIN tramite t ON t.id_tramite = d.id_tramite
         WHERE t.id_local = ? AND t.habilita = 1`
     : 'SELECT d.* FROM documentacion d';
-  const filas = await consultar(sql, idLocal ? [idLocal] : []);
+  const filas = await consultarEn(cx, sql, idLocal ? [idLocal] : []);
   return new Map(filas.map((d) => [d.idTramite, d]));
 }
 
@@ -90,12 +163,43 @@ async function documentosPorTramite(idLocal = null) {
    por fecha y, ante empate, por id (que es secuencial). */
 const ORDEN_CRONOLOGICO = 'ORDER BY t.fecha_inicio, t.id_tramite';
 
-export async function tramitesDeLocal(idLocal) {
-  const [filas, docs] = await Promise.all([
-    consultar(`${SQL_TRAMITE} AND t.id_local = ? ${ORDEN_CRONOLOGICO}`, [idLocal]),
-    documentosPorTramite(idLocal),
-  ]);
-  return filas.map((f) => aActuacionFront(f, docs));
+/* Los archivos guardados (tabla opcional `archivo`, ver backend/archivos.js)
+   se cuelgan de su actuación: en una notificación, la foto de la entrega como
+   `evidencia`; en una DDJJ o un contrato, el documento respaldatorio como
+   `archivo`. Siempre el último, con su id para pedirlo. Sin la tabla quedan
+   en null como antes. */
+const TIPOS_CON_ARCHIVO = ['NOTIFICACION', 'DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO'];
+
+async function conEvidencias(actuaciones, cx = null, todas = false) {
+  if (!tiene('archivos')) return actuaciones;
+  const ids = actuaciones.filter((a) => TIPOS_CON_ARCHIVO.includes(a.tipo)).map((a) => a.id);
+  if (!ids.length) return actuaciones;
+  const porTramite = await archivosPorTramite(todas ? null : ids, cx);
+  return actuaciones.map((a) => {
+    const lista = porTramite.get(a.id);
+    if (!lista?.length) return a;
+    const ultimo = lista[lista.length - 1];
+    return a.tipo === 'NOTIFICACION' ? { ...a, evidencia: ultimo, evidencias: lista } : { ...a, archivo: ultimo };
+  });
+}
+
+export async function tramitesDeLocal(idLocal, cx = null) {
+  /* Van una detrás de la otra a propósito: dentro de una transacción comparten
+     la misma conexión, que igual las ejecuta de a una. */
+  const filas = await consultarEn(cx, `${SQL_TRAMITE} AND t.id_local = ? ${ORDEN_CRONOLOGICO}`, [idLocal]);
+  const docs = await documentosPorTramite(idLocal, cx);
+  return conEvidencias(filas.map((f) => aActuacionFront(f, docs)), cx);
+}
+
+/* Todo lo que hace falta para decidir un acto sobre un local: el local, sus
+   trámites y el estado que resulta de los dos. Lo usan backend/actos.js y las
+   rutas que necesitan el estado antes de responder. `local` es null si no
+   existe o está dado de baja. */
+export async function situacionDeLocal(idLocal, cx = null) {
+  const local = await localPorId(idLocal, cx);
+  if (!local) return { local: null, actuaciones: [], estado: null };
+  const actuaciones = await tramitesDeLocal(idLocal, cx);
+  return { local, actuaciones, estado: estadoDeLocal(local, actuaciones) };
 }
 
 /* Todos los trámites del sistema, agrupados por local. Se usa para el listado
@@ -106,8 +210,7 @@ export async function tramitesPorLocal() {
     documentosPorTramite(),
   ]);
   const mapa = new Map();
-  for (const fila of filas) {
-    const actuacion = aActuacionFront(fila, docs);
+  for (const actuacion of await conEvidencias(filas.map((f) => aActuacionFront(f, docs)), null, true)) {
     if (!mapa.has(actuacion.localId)) mapa.set(actuacion.localId, []);
     mapa.get(actuacion.localId).push(actuacion);
   }
@@ -122,14 +225,15 @@ export async function tramitesPorTipo(idsTipo) {
     consultar(`${SQL_TRAMITE} AND t.id_ttramite IN (${marcadores}) ORDER BY t.fecha_inicio DESC, t.id_tramite DESC`, idsTipo),
     documentosPorTramite(),
   ]);
-  return filas.map((f) => aActuacionFront(f, docs));
+  return conEvidencias(filas.map((f) => aActuacionFront(f, docs)), null, true);
 }
 
-export async function tramitePorId(idTramite) {
-  const [fila] = await consultar(`${SQL_TRAMITE} AND t.id_tramite = ?`, [idTramite]);
+export async function tramitePorId(idTramite, cx = null) {
+  const [fila] = await consultarEn(cx, `${SQL_TRAMITE} AND t.id_tramite = ?`, [idTramite]);
   if (!fila) return null;
-  const docs = await documentosPorTramite(fila.idLocal);
-  return aActuacionFront(fila, docs);
+  const docs = await documentosPorTramite(fila.idLocal, cx);
+  const [actuacion] = await conEvidencias([aActuacionFront(fila, docs)], cx);
+  return actuacion;
 }
 
 /* ---------------------------------------------------------------------------
@@ -155,16 +259,39 @@ export async function localesConEstado() {
                  un asueto municipal puede salir con dos días de aviso
    --------------------------------------------------------------------------- */
 
-/* Se mantiene como función async aunque hoy no consulte nada: el día que los
-   parámetros pasen a una tabla, cambia solo el cuerpo de esta función y
-   ninguna de las rutas que la llaman se entera. */
-export async function parametros() {
-  return { ...PARAMETROS, plantillaCedula: PLANTILLA_CEDULA };
+/* Los valores de backend/parametros-sistema.js, pisados por lo que la
+   Dirección haya guardado desde la pantalla de Parámetros.
+
+   Lo guardado vive en la tabla opcional `parametro` (sql/06-tabla-parametros.sql),
+   una fila por clave con el valor en JSON. Si la tabla no existe, o una clave
+   no está guardada, vale lo del archivo: el sistema arranca con los valores de
+   siempre y la tabla solo guarda lo que se cambió.
+
+   Ninguna ruta se enteró del cambio: todas llegan a los parámetros por acá. */
+export const CLAVES_PARAMETRO = [...Object.keys(PARAMETROS), 'plantillaCedula', 'etiquetasEstado'];
+
+export async function parametros(cx = null) {
+  // etiquetasEstado: los nombres de estado que cambió el área (sección 3.1).
+  const base = { ...PARAMETROS, plantillaCedula: PLANTILLA_CEDULA, etiquetasEstado: {} };
+  if (!tiene('parametros')) return base;
+
+  const filas = await consultarEn(cx, 'SELECT clave, valor FROM parametro');
+  for (const { clave, valor } of filas) {
+    if (!CLAVES_PARAMETRO.includes(clave)) continue;
+    try {
+      base[clave] = JSON.parse(valor);
+    } catch {
+      // Un valor que no es JSON válido (alguien lo editó a mano en HeidiSQL y
+      // le faltaron las comillas) no puede voltear todos los cálculos de plazo:
+      // se ignora y vale el del archivo.
+    }
+  }
+  return base;
 }
 
 /* El dominio espera [{ fecha, motivo, alcance }] (ver src/dominio/fechas.js). */
-export async function feriados() {
-  const filas = await consultar('SELECT * FROM feriado WHERE habilita = 1 ORDER BY fecha_feriado');
+export async function feriados(cx = null) {
+  const filas = await consultarEn(cx, 'SELECT * FROM feriado WHERE habilita = 1 ORDER BY fecha_feriado');
   return filas.map((f) => ({
     id: f.idFeriado,
     fecha: String(f.fechaFeriado).slice(0, 10),
@@ -272,8 +399,9 @@ export function recortarObservacion(texto, limite = 150) {
 
 /* El ciclo actual de un local: el mayor nro_ciclo de sus trámites, o 1 si no
    tiene ninguno todavía. */
-export async function cicloActual(idLocal) {
-  const [fila] = await consultar(
+export async function cicloActual(idLocal, cx = null) {
+  const [fila] = await consultarEn(
+    cx,
     'SELECT COALESCE(MAX(nro_ciclo), 1) AS ciclo FROM tramite WHERE id_local = ? AND habilita = 1',
     [idLocal],
   );
@@ -282,8 +410,9 @@ export async function cicloActual(idLocal) {
 
 /* ¿Cuántas prórrogas lleva el local en este ciclo? Lo necesita el tope de
    parametros-sistema.js (maxProrrogasPorLocal). */
-export async function prorrogasDelCiclo(idLocal, ciclo) {
-  const [fila] = await consultar(
+export async function prorrogasDelCiclo(idLocal, ciclo, cx = null) {
+  const [fila] = await consultarEn(
+    cx,
     'SELECT COUNT(*) AS total FROM tramite WHERE id_local = ? AND id_ttramite = ? AND nro_ciclo = ? AND habilita = 1',
     [idLocal, ID_TTRAMITE.PRORROGA, ciclo],
   );

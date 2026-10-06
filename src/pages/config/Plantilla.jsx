@@ -50,7 +50,9 @@ const EJEMPLO = {
 };
 
 function Plantilla() {
-  const { plantillaCedula, guardarPlantilla } = useDatos();
+  const { plantillaCedula, guardarPlantilla, capacidades } = useDatos();
+  // Se guarda si la base tiene la tabla opcional `parametro` (backend/sql/06).
+  const sePuedeGuardar = Boolean(capacidades?.parametros);
   const [texto, setTexto] = useState(plantillaCedula);
   const [guardado, setGuardado] = useState(false);
 
@@ -92,9 +94,10 @@ function Plantilla() {
             <button
               type="button"
               className="btn-primario"
-              onClick={() => {
-                guardarPlantilla(texto);
-                setGuardado(true);
+              disabled={!sePuedeGuardar}
+              onClick={async () => {
+                // "Guardada." solo si el servidor la guardó.
+                setGuardado(Boolean(await guardarPlantilla(texto)));
               }}
             >
               Guardar plantilla
@@ -103,6 +106,7 @@ function Plantilla() {
               Descartar cambios
             </button>
             {guardado && <span className="texto-ok">Guardada.</span>}
+            {!sePuedeGuardar && <span className="texto-gris">Esta base todavía no permite cambiarla desde acá.</span>}
           </div>
         </div>
 

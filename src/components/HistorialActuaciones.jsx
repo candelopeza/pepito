@@ -21,48 +21,88 @@
    vigencia y expediente de trámite.
    ============================================================================ */
 
+import { useState } from 'react';
 import Badge from './ui/Badge';
 import { Vacio } from './ui/Aviso';
+import { Dato } from './ui/Campo';
+import { useDatos } from '../datos/datosContexto';
+import ArchivoGuardado from './ArchivoGuardado';
+import VistaCedula from './VistaCedula';
 import { ETIQUETA_DOCUMENTO, TIPOS_ACTUACION, resultadoEntrega } from '../dominio/actuaciones';
 import { fmtFecha, plazoVencido } from '../dominio/fechas';
 import { estaVigente } from '../dominio/vigencias';
 
 /* El detalle propio de cada tipo. Es un switch a propósito: son seis actos
-   administrativos distintos y cada uno tiene que mostrar lo suyo. */
-function Detalle({ a, usuarios }) {
+   administrativos distintos y cada uno tiene que mostrar lo suyo.
+
+   Cada dato se muestra con el mismo componente `Dato` que usa "Datos del
+   padrón" en la ficha: etiqueta chica arriba, valor abajo, en grilla. Antes
+   era texto corrido separado por espacios y no se distinguía qué era cada
+   cosa; ahora el historial se lee igual que el resto de la ficha. */
+function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
   if (a.tipo === 'NOTIFICACION') {
     const res = resultadoEntrega(a.resultado);
     const notificador = usuarios.find((u) => u.id === a.notificadorId);
+    const vencido = a.fechaVencimiento && plazoVencido(a.fechaVencimiento);
     return (
       <>
-        <div className="hist-linea">
-          <span>Cédula {a.numeroCedula}</span>
-          <span>{a.instancia === 1 ? 'Primera' : 'Segunda'} notificación</span>
-          <span>Plazo: {a.plazoDias} días hábiles</span>
-        </div>
-        <div className="hist-linea">
-          <span>Notificador: {notificador?.nombre ?? 'sin asignar'}</span>
-          {a.impresaEn ? <span>Impresa por {a.impresaPor}</span> : <span className="hist-pendiente">Sin imprimir</span>}
-        </div>
-        {a.resultado ? (
-          <div className="hist-linea">
-            <Badge color={res?.color ?? 'gris'}>{res?.etiqueta ?? a.resultado}</Badge>
-            {a.fechaEntrega && <span>Entregada el {fmtFecha(a.fechaEntrega)}</span>}
-            {a.fechaVencimiento && (
-              <span className={plazoVencido(a.fechaVencimiento) ? 'hist-vencido' : ''}>
-                Vence el {fmtFecha(a.fechaVencimiento)}
-                {plazoVencido(a.fechaVencimiento) ? ' (vencido)' : ''}
-              </span>
-            )}
-          </div>
-        ) : (
-          <div className="hist-linea">
-            <Badge color="azul">Pendiente de entrega</Badge>
-            {/* Que quede claro en el historial, no solo en el estado. */}
-            <span>El plazo todavía no corre.</span>
-          </div>
+        {/* Cada dato va con el componente Dato: la etiqueta arriba y el valor debajo, no a la par. */}
+        <Dato etiqueta="Cédula">
+          {a.numeroCedula ?? <span className="hist-pendiente">Pendiente de emisión</span>}
+          {/* Toda cédula emitida se puede abrir desde la ficha (sección 9.6). */}
+          {a.numeroCedula && onVerCedula && (
+            <>
+              {' '}
+              <button type="button" className="btn-tabla" onClick={() => onVerCedula(a)}>
+                Ver
+              </button>
+            </>
+          )}
+        </Dato>
+        <Dato etiqueta="Instancia">{a.instancia === 1 ? 'Primera notificación' : 'Segunda notificación'}</Dato>
+        <Dato etiqueta="Plazo">{a.plazoDias} días hábiles</Dato>
+        <Dato etiqueta="Notificador">{notificador?.nombre ?? 'sin asignar'}</Dato>
+        {/* Solo si la base guarda la constancia (backend/sql/04): si no, no se sabe. */}
+        {conImpresion && a.numeroCedula && (
+          <Dato etiqueta="Impresión">
+            {a.impresaEn ? `Impresa por ${a.impresaPor}` : <span className="hist-pendiente">Sin imprimir</span>}
+          </Dato>
         )}
-        {a.evidencia && <div className="hist-linea">Evidencia: {a.evidencia}</div>}
+        <Dato etiqueta="Resultado de entrega">
+          {a.resultado ? (
+            <Badge color={res?.color ?? 'gris'}>{res?.etiqueta ?? a.resultado}</Badge>
+          ) : (
+            <Badge color="azul">Pendiente de entrega</Badge>
+          )}
+        </Dato>
+        {a.resultado ? (
+          <>
+            <Dato etiqueta="Fecha de entrega">{a.fechaEntrega ? fmtFecha(a.fechaEntrega) : '—'}</Dato>
+            <Dato etiqueta="Vencimiento del plazo">
+              {a.fechaVencimiento ? (
+                <span className={vencido ? 'hist-vencido' : ''}>
+                  {fmtFecha(a.fechaVencimiento)}
+                  {vencido ? ' (vencido)' : ''}
+                </span>
+              ) : (
+                '—'
+              )}
+            </Dato>
+          </>
+        ) : (
+          /* Que quede claro en el historial, no solo en el estado. */
+          <Dato etiqueta="Vencimiento del plazo">El plazo todavía no corre.</Dato>
+        )}
+        {a.evidencia && (
+          <Dato etiqueta="Evidencia" ancho={2}>
+            {/* Una foto guardada llega como { id, nombre }. Un texto viejo, tal cual. */}
+            {typeof a.evidencia === 'object' ? (
+              <ArchivoGuardado archivo={a.evidencia} etiqueta="Ver foto" />
+            ) : (
+              a.evidencia
+            )}
+          </Dato>
+        )}
       </>
     );
   }
@@ -71,69 +111,83 @@ function Detalle({ a, usuarios }) {
     const vigente = estaVigente(a.fechaVencimiento);
     return (
       <>
-        <div className="hist-linea">
-          <span>{ETIQUETA_DOCUMENTO[a.tipo]} N° {a.numero}</span>
+        <Dato etiqueta="Documento">
+          {ETIQUETA_DOCUMENTO[a.tipo]} N° {a.numero}
+        </Dato>
+        <Dato etiqueta="Vigencia">
           <Badge color={a.validado === false ? 'amarillo' : vigente ? 'verde' : 'gris'}>
             {a.validado === false ? 'Pendiente de validación' : vigente ? 'Vigente' : 'Vencida'}
           </Badge>
-        </div>
-        <div className="hist-linea">
-          <span>Emitida el {fmtFecha(a.fechaEmision)}</span>
-          <span>Vence el {fmtFecha(a.fechaVencimiento)}</span>
-        </div>
-        <div className="hist-linea">
-          {/* El dato que el sistema viejo no guardaba (sección 4.5). */}
-          <span>
-            Expediente de trámite:{' '}
-            {a.expedienteTramite ?? (a.origen === 'INFORME_9DJ' ? 'no aplica (informe de la prestataria)' : 'NO REGISTRADO')}
-          </span>
-        </div>
+        </Dato>
+        <Dato etiqueta="Fecha de emisión">{fmtFecha(a.fechaEmision)}</Dato>
+        <Dato etiqueta="Fecha de vencimiento">{fmtFecha(a.fechaVencimiento)}</Dato>
+        {/* El dato que el sistema viejo no guardaba (sección 4.5). */}
+        <Dato etiqueta="Expediente de trámite">
+          {a.expedienteTramite ??
+            (a.origen === 'INFORME_9DJ' ? 'no aplica (informe de la prestataria)' : 'NO REGISTRADO')}
+        </Dato>
         {a.origen === 'INFORME_9DJ' && (
-          <div className="hist-linea">
+          <Dato etiqueta="Origen">
             <Badge color="azul">Informado por 9 de Julio</Badge>
-            <span>Su vigencia solo se modifica por esa misma vía.</span>
-          </div>
+            <span className="hist-nota">Su vigencia solo se modifica por esa misma vía.</span>
+          </Dato>
         )}
-        {a.archivo && <div className="hist-linea">Archivo: {a.archivo}</div>}
+        {a.archivo && (
+          <Dato etiqueta="Documento respaldatorio">
+            {/* Guardado en el servidor llega como { id, nombre }; un nombre escrito a mano, tal cual. */}
+            {typeof a.archivo === 'object' ? (
+              <ArchivoGuardado archivo={a.archivo} etiqueta="Ver documento" />
+            ) : (
+              a.archivo
+            )}
+          </Dato>
+        )}
       </>
     );
   }
 
   if (a.tipo === 'PRORROGA') {
+    const vigente = estaVigente(a.fechaVencimiento);
     return (
       <>
-        <div className="hist-linea">
-          <span>{a.diasOtorgados} días corridos</span>
-          <Badge color={estaVigente(a.fechaVencimiento) ? 'amarillo' : 'gris'}>
-            {estaVigente(a.fechaVencimiento) ? 'Vigente' : 'Vencida'}
-          </Badge>
-          <span>Vence el {fmtFecha(a.fechaVencimiento)}</span>
-        </div>
-        {a.motivo && <div className="hist-linea">Motivo: {a.motivo}</div>}
+        <Dato etiqueta="Plazo concedido">{a.diasOtorgados} días corridos</Dato>
+        <Dato etiqueta="Estado">
+          <Badge color={vigente ? 'amarillo' : 'gris'}>{vigente ? 'Vigente' : 'Vencida'}</Badge>
+        </Dato>
+        <Dato etiqueta="Vence el">{fmtFecha(a.fechaVencimiento)}</Dato>
+        {a.motivo && (
+          <Dato etiqueta="Motivo" ancho={2}>
+            {a.motivo}
+          </Dato>
+        )}
       </>
     );
   }
 
   if (a.tipo === 'EXPEDIENTE') {
-    return (
-      <div className="hist-linea">
-        <span>Expediente de multa N° {a.numeroExpediente}</span>
-      </div>
-    );
+    return <Dato etiqueta="Expediente de multa">N° {a.numeroExpediente}</Dato>;
   }
 
   if (a.tipo === 'REINGRESO') {
     return (
-      <div className="hist-linea">
-        <span>Coordinación reingresó el local al circuito. La intimación arranca de cero.</span>
-      </div>
+      <Dato etiqueta="Reingreso al circuito" ancho={2}>
+        Coordinación reingresó el local al circuito. La intimación arranca de cero.
+      </Dato>
     );
   }
 
   return null;
 }
 
-function HistorialActuaciones({ actuaciones, usuarios = [] }) {
+/* PROPS
+     actuaciones, usuarios
+     local        (opcional) el local: con él, cada cédula emitida tiene su
+                  botón "Ver" (la cédula tal como se imprime)
+     cedulaSoloLectura  (opcional) se ve la cédula pero no se imprime: el portal */
+function HistorialActuaciones({ actuaciones, usuarios = [], local = null, cedulaSoloLectura = false }) {
+  const { capacidades } = useDatos();
+  const conImpresion = Boolean(capacidades?.impresion);
+  const [viendo, setViendo] = useState(null);
   if (!actuaciones.length) {
     return <Vacio titulo="Sin actuaciones">Este local todavía no tiene ningún acto administrativo registrado.</Vacio>;
   }
@@ -142,24 +196,39 @@ function HistorialActuaciones({ actuaciones, usuarios = [] }) {
   const orden = [...actuaciones].reverse();
 
   return (
-    <ol className="historial">
-      {orden.map((a) => {
-        const tipo = TIPOS_ACTUACION[a.tipo] ?? { etiqueta: a.tipo, color: 'gris' };
-        return (
-          <li key={a.id} className={`historial-fila historial-${tipo.color}`}>
-            <div className="hist-cabecera">
-              <Badge color={tipo.color}>{tipo.etiqueta}</Badge>
-              <span className="hist-fecha">{fmtFecha(a.fecha)}</span>
-              <span className="hist-usuario">{a.usuario}</span>
-            </div>
-            <div className="hist-cuerpo">
-              <Detalle a={a} usuarios={usuarios} />
-              {a.observaciones && <div className="hist-linea hist-obs">{a.observaciones}</div>}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+    <>
+      <ol className="historial">
+        {orden.map((a) => {
+          const tipo = TIPOS_ACTUACION[a.tipo] ?? { etiqueta: a.tipo, color: 'gris' };
+          return (
+            <li key={a.id} className={`historial-fila historial-${tipo.color}`}>
+              <div className="hist-cabecera">
+                <Badge color={tipo.color}>{tipo.etiqueta}</Badge>
+                <span className="hist-fecha">{fmtFecha(a.fecha)}</span>
+                <span className="hist-usuario">{a.usuario}</span>
+              </div>
+              <div className="hist-cuerpo">
+                <Detalle a={a} usuarios={usuarios} conImpresion={conImpresion} onVerCedula={local ? setViendo : null} />
+                {a.observaciones && (
+                  <Dato etiqueta="Observaciones" ancho={2}>
+                    <span className="hist-obs">{a.observaciones}</span>
+                  </Dato>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {local && (
+        <VistaCedula
+          abierto={Boolean(viendo)}
+          cedula={viendo}
+          local={local}
+          soloLectura={cedulaSoloLectura}
+          onCerrar={() => setViendo(null)}
+        />
+      )}
+    </>
   );
 }
 

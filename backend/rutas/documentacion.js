@@ -14,6 +14,14 @@
    `documentacion` son los datos del papel: tipo, número, emisión y vencimiento.
    Por eso las dos se escriben juntas, en una transacción.
 
+   LA FECHA DEL TRÁMITE ES LA DE LA PRESENTACIÓN, NO LA DE EMISIÓN DEL PAPEL.
+   La fecha de emisión vive en `documentacion.fecha_emision`. El trámite lleva
+   el día en que se registró, porque con eso se decide qué pasó último en el
+   local (sección 4.4). Antes llevaba la de emisión, y una DDJJ emitida antes
+   de la segunda cédula pero presentada después quedaba "antes" en el
+   historial: al vencer, el local saltaba a expediente en vez de volver a
+   primera notificación.
+
    UNA CARGA DEL PORTAL NO SUSPENDE UN PLAZO POR SÍ SOLA (sección 6.3). Entra
    con estado PENDIENTE DE REVISION y no cuenta como documentación vigente
    hasta que un agente la aprueba. Si esto se rompe, cualquiera detiene una
@@ -21,22 +29,23 @@
 
    EL NÚMERO DE EXPEDIENTE DE TRÁMITE no es el expediente de multa: uno acredita
    cumplimiento y el otro inicia una sanción. Se guarda en
-   `tramite.numero_referencia` y no comparte campo con el otro.
+   `tramite.numero_referencia` de un trámite de presentación, y el de multa en
+   el mismo campo de un trámite de expediente: el tipo de trámite los separa.
+
+   EL ORIGEN "INFORME 9 DE JULIO" NO SE ACEPTA ACÁ. Ese contrato solo entra por
+   Herramientas → Informe 9 de Julio (sección 4.6): tiene otro valor
+   probatorio y su vigencia solo se modifica por esa vía.
    ============================================================================ */
 
 import { Router } from 'express';
-import { consultar, enTransaccion } from '../conexion-bd.js';
-import {
-  cicloActual,
-  insertarTramite,
-  localPorId,
-  parametros,
-  tramitePorId,
-  tramitesPorTipo,
-} from '../consultas.js';
+import { consultar, consultarEn } from '../conexion-bd.js';
+import { insertarTramite, parametros, recortarObservacion, tramitePorId, tramitesPorTipo } from '../consultas.js';
 import { ID_ESTADO, ID_TDOC, ID_TTRAMITE } from '../mapeo.js';
 import { requiereRol, firmante } from '../middlewares/usuario.js';
-import { hoyISO } from '../../src/dominio/fechas.js';
+import { ErrorActo, ejecutarActo } from '../actos.js';
+import { archivosDisponibles, guardarImagen, leerDocumento } from '../archivos.js';
+import { fmtFecha, hoyISO } from '../../src/dominio/fechas.js';
+import { ETIQUETA_DOCUMENTO } from '../../src/dominio/actuaciones.js';
 import { vencimientoDocumento } from '../../src/dominio/vigencias.js';
 
 const router = Router();
@@ -47,6 +56,8 @@ const TDOC_POR_TIPO = {
   CONTRATO: ID_TDOC.CONTRATO,
   DDJJ_RECICLAJE: ID_TDOC.DDJJ_RECICLAJE,
 };
+
+const esFechaISO = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
 
 /* GET /documentacion/pendientes  ->  la bandeja de validación del portal. */
 router.get('/pendientes', async (_req, res, next) => {
@@ -69,9 +80,14 @@ router.get('/', async (_req, res, next) => {
 
 /* POST /documentacion  ->  registra una DDJJ, una DDJJ de reciclaje o un contrato.
 
-   `validado` decide con qué estado entra:
-     - lo carga un agente (validado distinto de false) -> VIGENTE, cuenta ya
-     - lo sube el titular por el portal               -> PENDIENTE DE REVISION
+   Con qué estado entra:
+     - lo carga un agente de la oficina -> VIGENTE, cuenta ya
+     - lo sube el titular por el portal -> PENDIENTE DE REVISION
+
+   Quién puede: el titular (siempre queda pendiente) o un rol que tenga el acto
+   "Registrar documentación" de src/dominio/reglas.js (administrativo,
+   coordinación). Antes alcanzaba con estar identificado: un relevador podía
+   cargar una DDJJ vigente y sacar un local del circuito.
 
    EL VENCIMIENTO SE CALCULA ACÁ Y SE GUARDA. La DDJJ vence al año exacto; el
    contrato trae su propia fecha. No se recalcula nunca al consultar: si mañana
@@ -84,15 +100,26 @@ router.post('/', async (req, res, next) => {
     const datos = req.body ?? {};
     const idLocal = Number(datos.localId);
     const idTdoc = TDOC_POR_TIPO[datos.tipo];
+    const hoy = hoyISO();
 
     if (!idTdoc) {
       return res.status(400).json({ error: `Tipo inválido. Valores posibles: ${Object.keys(TDOC_POR_TIPO).join(', ')}` });
     }
-    const local = await localPorId(idLocal);
-    if (!local) return res.status(404).json({ error: 'Local no encontrado' });
-    if (!datos.fechaEmision) return res.status(400).json({ error: 'Falta la fecha de emisión del documento' });
-    if (datos.tipo === 'CONTRATO' && !datos.fechaVencimiento) {
-      return res.status(400).json({ error: 'El contrato tiene que traer su fecha de vencimiento' });
+    if (!String(datos.numero ?? '').trim()) return res.status(400).json({ error: 'Falta el número del documento' });
+    if (!esFechaISO(datos.fechaEmision)) return res.status(400).json({ error: 'Falta la fecha de emisión del documento, o no es válida' });
+    if (datos.fechaEmision > hoy) return res.status(400).json({ error: 'La fecha de emisión no puede ser futura' });
+    if (datos.tipo === 'CONTRATO') {
+      if (!esFechaISO(datos.fechaVencimiento)) {
+        return res.status(400).json({ error: 'El contrato tiene que traer su fecha de vencimiento' });
+      }
+      if (datos.fechaVencimiento <= datos.fechaEmision) {
+        return res.status(400).json({ error: 'El vencimiento del contrato tiene que ser posterior a su emisión' });
+      }
+    }
+    if (!String(datos.expedienteTramite ?? '').trim()) {
+      return res.status(400).json({
+        error: 'Falta el número de expediente del trámite: sin él no se puede reconstruir qué respalda la presentación',
+      });
     }
     // El origen INFORME_9DJ lo pone únicamente el módulo del informe: es lo
     // que da fe de que ese contrato salió de una carga concreta y auditable.
@@ -102,42 +129,89 @@ router.post('/', async (req, res, next) => {
       });
     }
 
+    const esTitular = req.usuario.rol === 'titular';
+
+    /* EL DOCUMENTO RESPALDATORIO (sección 6.3: "adjuntando el documento"). Se
+       guarda si la base tiene la tabla `archivo` (sql/08). Con la tabla, el
+       titular no puede presentar sin adjuntarlo: la oficina tiene que poder
+       ver qué está aprobando. La oficina sí puede registrar un papel que
+       todavía no escaneó. */
+    let adjunto = null;
+    if (archivosDisponibles()) {
+      if (typeof datos.adjunto === 'string' && datos.adjunto.startsWith('data:')) {
+        adjunto = leerDocumento(datos.adjunto);
+        if (adjunto.error) return res.status(400).json({ error: adjunto.error });
+      } else if (esTitular) {
+        return res.status(400).json({ error: 'Adjuntá el documento: la oficina tiene que poder verlo para aprobarlo' });
+      }
+    }
     // El titular sube por el portal: queda pendiente. Un agente lo carga: vale.
-    const validado = datos.validado !== false && req.usuario.rol !== 'titular';
+    const validado = datos.validado !== false && !esTitular;
     const params = await parametros();
     const vencimiento = vencimientoDocumento(datos, params.modoBisiesto);
-    const ciclo = await cicloActual(idLocal);
-    const idEstado = validado ? ID_ESTADO.DOC_VIGENTE : ID_ESTADO.DOC_PENDIENTE_REVISION;
+    const etiqueta = ETIQUETA_DOCUMENTO[datos.tipo] ?? datos.tipo;
+    const numero = String(datos.numero).trim();
 
-    const idTramite = await enTransaccion(async (cx) => {
-      const id = await insertarTramite(cx, {
-        idLocal,
-        idEstado,
-        idTtramite: ID_TTRAMITE.PRESENTACION_DOCUMENTACION,
-        idUsuario: req.usuario?.id ?? null,
-        nroCiclo: ciclo,
-        numeroReferencia: datos.expedienteTramite ?? null,
-        fechaInicio: datos.fechaEmision || hoyISO(),
-        fechaVencimiento: vencimiento || null,
-        observaciones: datos.observaciones ?? '',
-      });
+    const { idTramite } = await ejecutarActo(req, {
+      idLocal,
+      accion: esTitular ? null : 'registrar-documentacion',
+      nombre: 'presentacion-portal',
+      controlar: async ({ estado }, cx) => {
+        if (esTitular && estado === 'EXENTO_CONFIRMADO') {
+          return new ErrorActo(409, 'El local está exento: no tiene que presentar documentación.');
+        }
+        /* EL NÚMERO NO SE REPITE (sección 5.4: numeraciones con significado
+           legal, sin reutilización). Una DDJJ es de un solo local: su número
+           no puede estar en otro. Un contrato con la prestataria puede cubrir
+           varios locales del mismo titular, así que se controla dentro del
+           local. Las presentaciones rechazadas (dadas de baja) no cuentan:
+           el titular puede volver a presentar la misma. Se lee dentro de la
+           transacción y en fila, así dos cargas simultáneas no pasan las dos. */
+        const [repetido] = await consultarEn(
+          cx,
+          `SELECT t.id_local FROM documentacion d
+             JOIN tramite t ON t.id_tramite = d.id_tramite
+            WHERE d.id_tdocumentacion = ? AND d.numero = ? AND d.habilita = 1 AND t.habilita = 1
+              ${datos.tipo === 'CONTRATO' ? 'AND t.id_local = ?' : ''}
+            LIMIT 1`,
+          datos.tipo === 'CONTRATO' ? [idTdoc, numero, idLocal] : [idTdoc, numero],
+        );
+        if (repetido) {
+          return new ErrorActo(
+            409,
+            Number(repetido.idLocal) === idLocal
+              ? `${etiqueta} N° ${numero} ya está registrada en este local.`
+              : `${etiqueta} N° ${numero} ya está registrada en el local N° ${repetido.idLocal}. Revisá el número.`,
+          );
+        }
+        return null;
+      },
+      motivo: `${etiqueta} N° ${numero} ${validado ? 'registrada' : 'presentada, pendiente de validación'}${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''}`,
+      trabajo: async (cx, { actuaciones }) => {
+        const ciclo = Math.max(1, ...actuaciones.map((a) => Number(a.ciclo) || 1));
+        const id = await insertarTramite(cx, {
+          idLocal,
+          idEstado: validado ? ID_ESTADO.DOC_VIGENTE : ID_ESTADO.DOC_PENDIENTE_REVISION,
+          idTtramite: ID_TTRAMITE.PRESENTACION_DOCUMENTACION,
+          idUsuario: req.usuario?.id ?? null,
+          nroCiclo: ciclo,
+          numeroReferencia: String(datos.expedienteTramite).trim(),
+          fechaInicio: hoy,
+          fechaVencimiento: vencimiento || null,
+          observaciones: datos.observaciones ?? '',
+        });
 
-      await cx.execute(
-        `INSERT INTO documentacion
-           (id_tramite, id_tdocumentacion, numero, origen, fecha_emision, fecha_vencimiento, habilita)
-         VALUES (?, ?, ?, ?, ?, ?, 1)`,
-        [
-          id,
-          idTdoc,
-          datos.numero ?? null,
-          datos.origen ?? 'PRESENTADO_TITULAR',
-          datos.fechaEmision,
-          vencimiento || null,
-        ],
-      );
-
-
-      return id;
+        await cx.execute(
+          `INSERT INTO documentacion
+             (id_tramite, id_tdocumentacion, numero, origen, fecha_emision, fecha_vencimiento, habilita)
+           VALUES (?, ?, ?, 'PRESENTADO_TITULAR', ?, ?, 1)`,
+          [id, idTdoc, numero, datos.fechaEmision, vencimiento || null],
+        );
+        if (adjunto) {
+          await guardarImagen(cx, req, { idTramite: id, imagen: adjunto, tipoArchivo: 'documento', nombreOriginal: datos.adjuntoNombre });
+        }
+        return { idTramite: id };
+      },
     });
 
     res.status(201).json(await tramitePorId(idTramite));
@@ -151,15 +225,14 @@ router.post('/', async (req, res, next) => {
    Aprobada pasa a VIGENTE y recién ahí saca al local del circuito.
    Rechazada se da de baja lógica: la presentación queda registrada, pero no
    cuenta. No se borra, porque haber presentado algo y que se lo rechacen es
-   parte del expediente. */
-router.post('/:id/validacion', requiereRol('administrativo', 'coordinacion', 'direccion'), async (req, res, next) => {
+   parte del expediente. Una presentación ya validada no se vuelve a validar. */
+router.post('/:id/validacion', requiereRol('administrativo', 'coordinacion'), async (req, res, next) => {
   try {
     const tramite = await tramitePorId(Number(req.params.id));
     if (!tramite) return res.status(404).json({ error: 'No existe esa presentación' });
     if (!['DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO'].includes(tramite.tipo)) {
       return res.status(400).json({ error: 'La actuación indicada no es una presentación de documentación' });
     }
-
     /* >>> LOS CONTRATOS DEL INFORME 9DJ NO SE TOCAN DESDE ACÁ <<<
        Lo que dijo la foto de la prestataria solo lo cambia la foto siguiente o
        la anulación de esa carga, desde el módulo del informe. Aprobarlo o
@@ -173,25 +246,46 @@ router.post('/:id/validacion', requiereRol('administrativo', 'coordinacion', 'di
       });
     }
 
-    const aprobar = req.body?.aprobar !== false;
-    const observaciones = (req.body?.observaciones ?? '').trim();
+    if (tramite.validado !== false) {
+      return res.status(409).json({ error: 'Esa presentación ya fue validada' });
+    }
 
-    await enTransaccion(async (cx) => {
-      if (aprobar) {
-        const nota = `${tramite.observaciones ? `${tramite.observaciones} · ` : ''}Aprobada por ${firmante(req)}.${observaciones ? ` ${observaciones}` : ''}`;
-        await cx.execute('UPDATE tramite SET id_estado = ?, fecha_cierre = NOW(), observaciones = ? WHERE id_tramite = ?', [
-          ID_ESTADO.DOC_VIGENTE,
-          nota,
-          tramite.id,
-        ]);
-      } else {
-        const nota = `${tramite.observaciones ? `${tramite.observaciones} · ` : ''}Rechazada por ${firmante(req)}.${observaciones ? ` ${observaciones}` : ''}`;
-        await cx.execute('UPDATE tramite SET habilita = 0, fecha_cierre = NOW(), observaciones = ? WHERE id_tramite = ?', [
-          nota,
-          tramite.id,
-        ]);
-        await cx.execute('UPDATE documentacion SET habilita = 0 WHERE id_tramite = ?', [tramite.id]);
-      }
+    const aprobar = req.body?.aprobar !== false;
+    const observaciones = String(req.body?.observaciones ?? '').trim();
+    // Un rechazo sin motivo deja al titular sin saber qué corregir y al
+    // historial sin la razón del acto (el motivo se ve en el portal).
+    if (!aprobar && !observaciones) {
+      return res.status(400).json({ error: 'Para rechazar, escribí el motivo: el titular tiene que saber qué corregir' });
+    }
+    const etiqueta = ETIQUETA_DOCUMENTO[tramite.tipo] ?? tramite.tipo;
+
+    await ejecutarActo(req, {
+      idLocal: tramite.localId,
+      nombre: aprobar ? 'aprobar-presentacion' : 'rechazar-presentacion',
+      motivo: `${etiqueta} N° ${tramite.numero ?? '—'} ${aprobar ? 'aprobada' : 'rechazada'}${observaciones ? `: ${observaciones}` : ''}`,
+      forzarRegistro: !aprobar,
+      trabajo: async (cx) => {
+        if (aprobar) {
+          const nota = recortarObservacion(
+            `${tramite.observaciones ? `${tramite.observaciones} · ` : ''}Aprobada por ${firmante(req)}.${observaciones ? ` ${observaciones}` : ''}`,
+          );
+          await cx.execute('UPDATE tramite SET id_estado = ?, fecha_cierre = NOW(), observaciones = ? WHERE id_tramite = ?', [
+            ID_ESTADO.DOC_VIGENTE,
+            nota,
+            tramite.id,
+          ]);
+        } else {
+          const nota = recortarObservacion(
+            `${tramite.observaciones ? `${tramite.observaciones} · ` : ''}Rechazada por ${firmante(req)}.${observaciones ? ` ${observaciones}` : ''}`,
+          );
+          await cx.execute('UPDATE tramite SET habilita = 0, fecha_cierre = NOW(), observaciones = ? WHERE id_tramite = ?', [
+            nota,
+            tramite.id,
+          ]);
+          await cx.execute('UPDATE documentacion SET habilita = 0 WHERE id_tramite = ?', [tramite.id]);
+        }
+        return { idTramite: tramite.id };
+      },
     });
 
     res.json(aprobar ? await tramitePorId(tramite.id) : { ok: true, rechazada: tramite.id });

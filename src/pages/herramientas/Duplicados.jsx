@@ -27,10 +27,10 @@ import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
 import Grilla from '../../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../../components/ui/Badge';
-import Aviso, { Vacio } from '../../components/ui/Aviso';
+import { Vacio } from '../../components/ui/Aviso';
 import Confirmar from '../../components/ui/Confirmar';
 import { useDatos } from '../../datos/datosContexto';
-import { buscarDuplicados } from '../../dominio/duplicados';
+import { buscarDuplicados, ordenarPorJerarquia } from '../../dominio/duplicados';
 import { fmtFechaHora } from '../../dominio/fechas';
 
 const COLOR_NIVEL = { alta: 'rojo', media: 'naranja', baja: 'amarillo' };
@@ -78,13 +78,11 @@ function Duplicados() {
 
   const pares = useMemo(() => buscarDuplicados(localesConEstado), [localesConEstado]);
 
-  /* Cuál de los dos se conserva. Por defecto el que tiene más historial: es el
-     que probablemente esté referenciado en expedientes ya iniciados. */
+  /* Cuál de los dos se conserva: el de mayor jerarquía legal (sección 9.4),
+     que es el que referencian los actos ya notificados o iniciados. Si
+     empatan, el de más historial. Ver ordenarPorJerarquia en el dominio. */
   const decidir = (par) => {
-    const [principal, duplicado] =
-      par.principal.cantidadActuaciones >= par.duplicado.cantidadActuaciones
-        ? [par.principal, par.duplicado]
-        : [par.duplicado, par.principal];
+    const [principal, duplicado] = ordenarPorJerarquia(par.principal, par.duplicado);
     return invertido ? [duplicado, principal] : [principal, duplicado];
   };
 

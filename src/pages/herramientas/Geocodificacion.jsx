@@ -33,12 +33,11 @@ import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
 import Grilla from '../../components/ui/Grilla';
 import Badge from '../../components/ui/Badge';
-import Aviso, { Vacio } from '../../components/ui/Aviso';
+import { Vacio } from '../../components/ui/Aviso';
 import Modal from '../../components/ui/Modal';
 import FormLocal from '../../components/FormLocal';
 import RevisionCoordenadas from '../../components/RevisionCoordenadas';
 import { useDatos } from '../../datos/datosContexto';
-import { LIMITE_MUNICIPAL } from '../../dominio/geo';
 
 function Geocodificacion() {
   const { localesConEstado, guardarLocal, geocodificarPendientes } = useDatos();

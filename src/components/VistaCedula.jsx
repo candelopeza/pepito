@@ -22,38 +22,32 @@
 
 import Modal from './ui/Modal';
 import { useDatos } from '../datos/datosContexto';
-import { fmtFecha, fmtFechaHora } from '../dominio/fechas';
+import { useRol } from '../auth/rolContexto';
+import { fmtFechaHora } from '../dominio/fechas';
+import { textoDeCedula } from '../dominio/textoCedula';
 
-/* Reemplaza {variable} por su valor. Si falta un dato deja el hueco marcado,
-   así se ve en la vista previa antes de imprimir: un campo vacío en una cédula
-   es un acto impugnable. */
-function completar(plantilla, valores) {
-  return plantilla.replace(/\{(\w+)\}/g, (_, clave) => {
-    const v = valores[clave];
-    return v === undefined || v === null || v === '' ? `«falta ${clave}»` : String(v);
-  });
-}
-
-function VistaCedula({ abierto, cedula, local, onCerrar }) {
-  const { plantillaCedula, marcarImpresa } = useDatos();
+/* soloLectura: se puede ver pero no imprimir (el titular, desde su portal:
+   imprimirla marcaría como impresa una cédula que la oficina todavía no
+   imprimió). */
+function VistaCedula({ abierto, cedula, local, onCerrar, soloLectura = false }) {
+  const { plantillaCedula, marcarImpresa, capacidades } = useDatos();
+  const { rol, usuario } = useRol();
+  // Sin las columnas de sql/04 se imprime igual, pero no queda constancia.
+  const registraImpresion = Boolean(capacidades?.impresion);
   if (!abierto || !cedula) return null;
 
-  const texto = completar(plantillaCedula, {
-    numeroCedula: cedula.numeroCedula,
-    instanciaTexto: cedula.instancia === 1 ? 'PRIMERA INTIMACIÓN' : 'SEGUNDA INTIMACIÓN',
-    nombreLocal: local?.nombreLocal,
-    razonSocial: local?.razonSocial,
-    cuit: local?.cuit,
-    direccion: local?.direccion,
-    rubro: local?.rubro,
-    plazoDias: cedula.plazoDias,
-    fechaEmision: fmtFecha(cedula.fecha),
-  });
+  /* Quién imprime: la oficina, y el agente de campo la cédula que le
+     asignaron. Imprimir deja constancia de quién y cuándo: Dirección (lectura
+     total) o un relevador que solo la mira no tienen que figurar ahí. */
+  const imprime =
+    !soloLectura &&
+    (['administrativo', 'coordinacion', 'administrador', 'notificador'].includes(rol) ||
+      (rol === 'relevador' && Boolean(usuario?.id) && cedula.notificadorId === usuario.id));
 
-  const faltantes = (texto.match(/«falta \w+»/g) ?? []).length;
+  const { texto, faltantes } = textoDeCedula(plantillaCedula, cedula, local);
 
   function imprimir() {
-    marcarImpresa(cedula.id);
+    if (registraImpresion) marcarImpresa(cedula.id);
     window.print();
   }
 
@@ -75,21 +69,25 @@ function VistaCedula({ abierto, cedula, local, onCerrar }) {
           imprimir salga solo esto y no la app entera. */}
       <pre className="cedula-papel solo-impresion">{texto}</pre>
 
-      <div className="bloque-info">
-        <strong>Constancia de impresión</strong>
-        {cedula.impresaEn ? (
-          <span>
-            Impresa por {cedula.impresaPor} el {fmtFechaHora(cedula.impresaEn)}.
-          </span>
-        ) : (
-          <span>Todavía no se imprimió.</span>
-        )}
-      </div>
+      {registraImpresion && (
+        <div className="bloque-info">
+          <strong>Constancia de impresión</strong>
+          {cedula.impresaEn ? (
+            <span>
+              Impresa por {cedula.impresaPor} el {fmtFechaHora(cedula.impresaEn)}.
+            </span>
+          ) : (
+            <span>Todavía no se imprimió.</span>
+          )}
+        </div>
+      )}
 
       <div className="form-acciones">
-        <button type="button" className="btn-primario" onClick={imprimir}>
-          {cedula.impresaEn ? 'Imprimir de nuevo' : 'Imprimir y registrar'}
-        </button>
+        {imprime && (
+          <button type="button" className="btn-primario" onClick={imprimir}>
+            {!registraImpresion ? 'Imprimir' : cedula.impresaEn ? 'Imprimir de nuevo' : 'Imprimir y registrar'}
+          </button>
+        )}
         <button type="button" className="btn-secundario" onClick={onCerrar}>
           Cerrar
         </button>

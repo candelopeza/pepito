@@ -26,7 +26,7 @@
    de la carga, nunca una corrección manual suelta, porque ahí se pierde la
    trazabilidad de qué informe dijo qué.
 
-   Necesita las tablas de backend/sql/05-tablas-informe-9dj.sql. Si no están,
+   Necesita las tablas de backend/sql/09-tablas-informe-9dj.sql. Si no están,
    cada endpoint responde 503 diciendo qué correr.
    ============================================================================ */
 
@@ -715,7 +715,7 @@ router.use((err, _req, res, next) => {
   if (err?.errno === 1146 && /informe_9dj/.test(err.message ?? '')) {
     return res.status(503).json({
       error:
-        'Faltan las tablas del módulo Informe 9 de Julio. Correr backend/sql/05-tablas-informe-9dj.sql desde HeidiSQL y volver a intentar.',
+        'Faltan las tablas del módulo Informe 9 de Julio. Correr backend/sql/09-tablas-informe-9dj.sql desde HeidiSQL y volver a intentar.',
     });
   }
   next(err);

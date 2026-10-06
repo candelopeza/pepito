@@ -53,6 +53,10 @@ import { fmtFecha } from '../dominio/fechas';
    bloquea el almacenamiento, se cae al orden por prioridad y no pasa nada. */
 const CLAVE_ORDEN = 'gg-tablero-orden';
 
+/* Las tablas van sin colores (pedido del área, 2026-10-01): la leyenda de
+   colores ya no describe nada de la pantalla. Queda apagada, no borrada. */
+const MOSTRAR_LEYENDA_COLORES = false;
+
 function ordenGuardado() {
   try {
     const guardado = localStorage.getItem(CLAVE_ORDEN);
@@ -90,7 +94,7 @@ const COLUMNAS_BANDEJA = [
     field: 'estado',
     headerName: 'Estado',
     width: 210,
-    renderCell: ({ row }) => <BadgeEstado codigo={row.estado} />,
+    renderCell: ({ row }) => <BadgeEstado codigo={row.estado} sinColor />,
   },
   {
     field: 'plazo',
@@ -114,7 +118,8 @@ const COLUMNAS_BANDEJA = [
     width: 260,
     sortable: false,
     filterable: false,
-    renderCell: ({ row }) => <AccionesLocal local={row} compacto />,
+    // conPadron: también "Editar datos" y "Dar de baja", sin salir del tablero.
+    renderCell: ({ row }) => <AccionesLocal local={row} compacto conPadron />,
   },
 ];
 
@@ -158,12 +163,17 @@ function Bandeja({ bandeja }) {
 }
 
 function Tablero() {
-  const { rol } = useRol();
-  const { bandejasPara, documentosPorVencer, presentacionesPendientes, localesConEstado } = useDatos();
+  const { rol, usuario } = useRol();
+  const { bandejasPara, documentosPorVencer, presentacionesPendientes, localesConEstado, usuarios } = useDatos();
+  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.nombre === usuario.nombre);
+  // Dirección mira, no actúa: para ella el tablero es la situación del área.
+  const soloLectura = rol === 'direccion';
 
   const [orden, setOrden] = useState(ordenGuardado);
 
-  const bandejas = bandejasPara(rol, orden);
+  // Igual que el Inicio: cada bandeja trae solo lo que este usuario puede
+  // resolver, así los dos cuentan lo mismo y no hay filas sin botones.
+  const bandejas = bandejasPara(rol, orden, { soloTrabajo: true, idUsuario: yo?.id ?? null });
   const docsVencen = documentosPorVencer(30);
   const pendientesValidar = presentacionesPendientes();
   const sinImprimir = localesConEstado.filter((l) => l.estado.endsWith('_GENERADA'));
@@ -185,29 +195,33 @@ function Tablero() {
         etiqueta="TABLERO"
         titulo="BANDEJAS DE TRABAJO"
         subtitulo={
-          total === 0
-            ? 'No hay nada pendiente en tus bandejas.'
-            : `${total} local(es) esperando una acción tuya.`
+          soloLectura
+            ? `Situación del área: ${total} caso(s) en las bandejas.`
+            : total === 0
+              ? 'No hay nada pendiente en tus bandejas.'
+              : `${total} local(es) esperando una acción tuya.`
         }
         botonVolver
       />
-      <div className="leyenda">
-        <span>
-          <Badge color="naranja">Naranja</Badge> hay que hacer algo
-        </span>
-        <span>
-          <Badge color="azul">Azul</Badge> acto iniciado, el plazo no corre
-        </span>
-        <span>
-          <Badge color="verde">Verde</Badge> cumple o quedó fuera del circuito
-        </span>
-        <span>
-          <Badge color="amarillo">Amarillo</Badge> en espera (revisión o prórroga)
-        </span>
-        <span>
-          <Badge color="rojo">Rojo</Badge> detenido o sancionatorio
-        </span>
-      </div>
+      {MOSTRAR_LEYENDA_COLORES && (
+        <div className="leyenda">
+          <span>
+            <Badge color="naranja">Naranja</Badge> hay que hacer algo
+          </span>
+          <span>
+            <Badge color="azul">Azul</Badge> acto iniciado, el plazo no corre
+          </span>
+          <span>
+            <Badge color="verde">Verde</Badge> cumple o quedó fuera del circuito
+          </span>
+          <span>
+            <Badge color="amarillo">Amarillo</Badge> en espera (revisión o prórroga)
+          </span>
+          <span>
+            <Badge color="rojo">Rojo</Badge> detenido o sancionatorio
+          </span>
+        </div>
+      )}
 
       {/* ---------- Avisos que no son bandejas ---------- */}
       {pendientesValidar.length > 0 && (

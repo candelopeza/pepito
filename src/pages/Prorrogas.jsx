@@ -23,6 +23,10 @@ import { useMemo } from 'react';
    PENDIENTE con el área legal (Anexo B.2): si hay un tope de días y una
    cantidad máxima de prórrogas por local. Está resuelto con dos parámetros de
    Configuración, hoy en 30 días y 1 prórroga.
+
+   LOS PEDIDOS DEL PORTAL (2026-10-02): si el titular pidió la prórroga desde
+   su portal, el local aparece primero en "pueden recibir una prórroga", con
+   lo que pidió. Al otorgarla, el formulario arranca con esos días y motivo.
    ============================================================================ */
 
 import { Link } from 'react-router-dom';
@@ -32,11 +36,14 @@ import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import AccionesLocal from '../components/AccionesLocal';
 import { useDatos } from '../datos/datosContexto';
-import { diasEntre, fmtFecha, hoyISO } from '../dominio/fechas';
+import { useRol } from '../auth/rolContexto';
+import { puedeVerRuta } from '../config/modulos';
+import { diasEntre, fmtFecha, fmtFechaHora, hoyISO } from '../dominio/fechas';
 import { estaVigente } from '../dominio/vigencias';
 
 function Prorrogas() {
-  const { actuaciones, localesConEstado, localPorId } = useDatos();
+  const { actuaciones, localesConEstado, localPorId, permisos } = useDatos();
+  const { rol } = useRol();
 
   const otorgadas = actuaciones
     .filter((a) => a.tipo === 'PRORROGA')
@@ -46,9 +53,11 @@ function Prorrogas() {
   const vigentes = otorgadas.filter((p) => p.vigente);
 
   // Los que la regla habilita. No se calcula acá: se pregunta por el estado.
-  const habilitados = localesConEstado.filter((l) =>
-    ['NOTIF2_ENTREGADA', 'NOTIF2_SIN_FIRMA', 'NOTIF2_FIJADA', 'GENERAR_EXPEDIENTE'].includes(l.estado),
-  );
+  // Primero los que lo pidieron por el portal: son los que esperan respuesta.
+  const habilitados = localesConEstado
+    .filter((l) => ['NOTIF2_ENTREGADA', 'NOTIF2_SIN_FIRMA', 'NOTIF2_FIJADA', 'GENERAR_EXPEDIENTE'].includes(l.estado))
+    .sort((a, b) => Number(Boolean(b.solicitudProrroga)) - Number(Boolean(a.solicitudProrroga)));
+  const pedidos = habilitados.filter((l) => l.solicitudProrroga);
 
   /* Las prórrogas ya otorgadas. Cada fila es una PRÓRROGA y trae su local
      adentro (row.local), que es lo que arma la pantalla antes de dibujar. */
@@ -100,7 +109,7 @@ function Prorrogas() {
         valueGetter: (_v, row) => row.local?.estado ?? '',
         /* La consecuencia, a la vista: el que venció sin presentar ya figura
            para generar expediente. */
-        renderCell: ({ row }) => <BadgeEstado codigo={row.local?.estado} />,
+        renderCell: ({ row }) => <BadgeEstado codigo={row.local?.estado} sinColor />,
       },
       { field: 'motivo', headerName: 'Motivo', flex: 1, minWidth: 200 },
       { field: 'usuario', headerName: 'Otorgó', width: 150 },
@@ -127,7 +136,25 @@ function Prorrogas() {
         field: 'estado',
         headerName: 'Estado',
         width: 210,
-        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} />,
+        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} sinColor />,
+      },
+      {
+        field: 'pedido',
+        headerName: 'Pedido del titular',
+        flex: 1,
+        minWidth: 200,
+        valueGetter: (_v, row) => row.solicitudProrroga?.motivo ?? '',
+        renderCell: ({ row }) =>
+          row.solicitudProrroga ? (
+            <span className="celda-apilada">
+              {row.solicitudProrroga.dias ? `${row.solicitudProrroga.dias} día(s)` : 'Sin días indicados'}
+              <small className="celda-sub" title={row.solicitudProrroga.motivo}>
+                {fmtFechaHora(row.solicitudProrroga.momento)} · {row.solicitudProrroga.motivo}
+              </small>
+            </span>
+          ) : (
+            <span className="texto-gris">—</span>
+          ),
       },
       {
         field: 'acciones',
@@ -155,8 +182,12 @@ function Prorrogas() {
       <Aviso
         tipo="alerta"
         titulo="Si vence sin presentación, el local pasa solo a generación de expediente"
-        accion={<Link to="/tablero">Expedientes para generar</Link>}
+        accion={puedeVerRuta(rol, '/expedientes', permisos) && <Link to="/expedientes">Expedientes para generar</Link>}
       />
+
+      {pedidos.length > 0 && (
+        <Aviso tipo="info" titulo={`${pedidos.length} pedido(s) de prórroga del portal esperando respuesta`} />
+      )}
 
       {/* ================= OTORGADAS ================= */}
       {/* Vigentes y vencidas en UNA tabla, de la más reciente a la más vieja.

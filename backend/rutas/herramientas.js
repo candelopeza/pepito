@@ -7,23 +7,26 @@
      fusionarLocales           ->  POST /herramientas/fusiones   { idPrincipal, idDuplicado }
      geocodificarPendientes    ->  POST /herramientas/geocodificar
      aplicarInforme9DJ         ->  POST /herramientas/informe-9dj  { filas: [...] }
+     recalcularEstados         ->  POST /herramientas/recalcular-estados
 
    La DETECCIÓN de duplicados sigue corriendo en el front (src/dominio/
    duplicados.js) sobre la lista de locales: es solo lectura y no necesita
    base. Lo que está acá es la fusión, que sí escribe.
 
-   NO HAY endpoint de auditoría: no existe una tabla de auditoría. El historial
-   de un local es su lista de trámites, que ya trae GET /locales/:id.
+   EL HISTORIAL DE CAMBIOS DE ESTADO vive en backend/auditoria.js. Fusiones e
+   informe escriben ahí lo que cambian, en la misma transacción.
    ============================================================================ */
 
 import { Router } from 'express';
 import { consultar, ejecutar, enTransaccion } from '../conexion-bd.js';
-import { localPorId, recortarObservacion } from '../consultas.js';
-
+import { enFila, localPorId, recortarObservacion, situacionDeLocal } from '../consultas.js';
+import { ID_ESTADO } from '../mapeo.js';
 import { requiereRol, firmante } from '../middlewares/usuario.js';
-import { geocodificar } from '../geocodificador.js';
-import { hoyISO } from '../../src/dominio/fechas.js';
+import { geocodificadorConfigurado, geocodificarDireccion } from '../geocodificador.js';
 import { LIMITE_ES_OFICIAL, dentroDelMunicipio } from '../limite-municipal.js';
+import { ErrorActo } from '../actos.js';
+import { ponerAlDia, registrarCambio, registrarPasoDelTiempo } from '../auditoria.js';
+import { hoyISO } from '../../src/dominio/fechas.js';
 
 const router = Router();
 
@@ -34,8 +37,11 @@ const router = Router();
    Lo correcto sería una columna `local.id_fusionado_en`, que se decidió no
    agregar por ahora. Mientras tanto la marca va en la observación: el dato
    queda visible para cualquiera que abra la ficha, que es lo que más importa.
-   Si algún día se agrega la columna, esto se migra con un UPDATE. */
+   Si algún día se agrega la columna, esto se migra con un UPDATE. Con la
+   auditoría, además, la fusión queda anotada en los dos locales. */
 const MARCA_FUSION = 'FUSIONADO EN LOCAL';
+
+const esFechaISO = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
 
 /* GET /herramientas/fusiones  ->  el registro de duplicados unificados.
    Son los locales dados de baja que llevan la marca en su observación. */
@@ -85,7 +91,7 @@ function aFusion(f) {
    cargada dos veces. El duplicado queda con habilita = 0 y con una marca en su
    observación que dice en qué local se unificó, que es lo que permite después
    rastrear una actuación histórica hecha sobre el id viejo. */
-router.post('/fusiones', requiereRol('coordinacion', 'direccion'), async (req, res, next) => {
+router.post('/fusiones', requiereRol('coordinacion'), async (req, res, next) => {
   try {
     const idPrincipal = Number(req.body?.idPrincipal);
     const idDuplicado = Number(req.body?.idDuplicado);
@@ -94,34 +100,57 @@ router.post('/fusiones', requiereRol('coordinacion', 'direccion'), async (req, r
       return res.status(400).json({ error: 'Hacen falta dos locales distintos para fusionar' });
     }
 
-    const [principal, duplicado] = await Promise.all([localPorId(idPrincipal), localPorId(idDuplicado)]);
-    if (!principal) return res.status(404).json({ error: `No existe el local ${idPrincipal}` });
-    if (!duplicado) return res.status(404).json({ error: `No existe el local ${idDuplicado}` });
+    await enFila(() =>
+      enTransaccion(async (cx) => {
+        const [principal, duplicado] = [await situacionDeLocal(idPrincipal, cx), await situacionDeLocal(idDuplicado, cx)];
+        if (!principal.local) throw new ErrorActo(404, `No existe el local ${idPrincipal}`);
+        if (!duplicado.local) throw new ErrorActo(404, `No existe el local ${idDuplicado}`);
 
-    await enTransaccion(async (cx) => {
-      // Los datos que el principal no tenga se completan con los del duplicado:
-      // la fusión no debería perder información. COALESCE con NULLIF trata la
-      // cadena vacía como ausencia, que es como están cargados muchos campos.
-      await cx.execute(
-        `UPDATE local p
-            JOIN local d ON d.id_local = ?
-            SET p.cuit             = COALESCE(NULLIF(p.cuit, ''), d.cuit),
-                p.razon_social     = COALESCE(NULLIF(p.razon_social, ''), d.razon_social),
-                p.email_local      = COALESCE(NULLIF(p.email_local, ''), d.email_local),
-                p.telefono_local   = COALESCE(NULLIF(p.telefono_local, ''), d.telefono_local),
-                p.domicilio_fiscal = COALESCE(NULLIF(p.domicilio_fiscal, ''), d.domicilio_fiscal),
-                p.latitud_local    = COALESCE(p.latitud_local, d.latitud_local),
-                p.longitud_local   = COALESCE(p.longitud_local, d.longitud_local)
-          WHERE p.id_local = ?`,
-        [idDuplicado, idPrincipal],
-      );
+        await ponerAlDia(cx, idPrincipal, principal.estado);
+        await ponerAlDia(cx, idDuplicado, duplicado.estado);
 
-      await cx.execute('UPDATE tramite SET id_local = ? WHERE id_local = ?', [idPrincipal, idDuplicado]);
-      const marca = recortarObservacion(
-        `${MARCA_FUSION} ${idPrincipal} (${firmante(req)}, ${hoyISO()}). ${duplicado.observaciones ?? ''}`.trim(),
-      );
-      await cx.execute('UPDATE local SET habilita = 0, observacion = ? WHERE id_local = ?', [marca, idDuplicado]);
-    });
+        // Los datos que el principal no tenga se completan con los del duplicado:
+        // la fusión no debería perder información. COALESCE con NULLIF trata la
+        // cadena vacía como ausencia, que es como están cargados muchos campos.
+        await cx.execute(
+          `UPDATE local p
+              JOIN local d ON d.id_local = ?
+              SET p.cuit             = COALESCE(NULLIF(p.cuit, ''), d.cuit),
+                  p.razon_social     = COALESCE(NULLIF(p.razon_social, ''), d.razon_social),
+                  p.email_local      = COALESCE(NULLIF(p.email_local, ''), d.email_local),
+                  p.telefono_local   = COALESCE(NULLIF(p.telefono_local, ''), d.telefono_local),
+                  p.domicilio_fiscal = COALESCE(NULLIF(p.domicilio_fiscal, ''), d.domicilio_fiscal),
+                  p.latitud_local    = COALESCE(p.latitud_local, d.latitud_local),
+                  p.longitud_local   = COALESCE(p.longitud_local, d.longitud_local)
+            WHERE p.id_local = ?`,
+          [idDuplicado, idPrincipal],
+        );
+
+        await cx.execute('UPDATE tramite SET id_local = ? WHERE id_local = ?', [idPrincipal, idDuplicado]);
+        const marca = recortarObservacion(
+          `${MARCA_FUSION} ${idPrincipal} (${firmante(req)}, ${hoyISO()}). ${duplicado.local.observaciones ?? ''}`.trim(),
+        );
+        await cx.execute('UPDATE local SET habilita = 0, observacion = ? WHERE id_local = ?', [marca, idDuplicado]);
+
+        const despues = await situacionDeLocal(idPrincipal, cx);
+        await registrarCambio(cx, req, {
+          idLocal: idPrincipal,
+          anterior: principal.estado,
+          nuevo: despues.estado,
+          motivo: `Fusión de duplicados: absorbió el local N° ${idDuplicado} (${duplicado.local.nombreLocal}) y sus trámites`,
+          accion: 'fusion',
+          forzar: true,
+        });
+        await registrarCambio(cx, req, {
+          idLocal: idDuplicado,
+          anterior: duplicado.estado,
+          nuevo: 'BAJA',
+          motivo: `Fusión de duplicados: unificado en el local N° ${idPrincipal}`,
+          accion: 'fusion',
+          forzar: true,
+        });
+      }),
+    );
 
     res.json(await localPorId(idPrincipal));
   } catch (e) {
@@ -136,35 +165,24 @@ router.post('/fusiones', requiereRol('coordinacion', 'direccion'), async (req, r
    porque una dirección corregida a mano vale más que lo que devuelve el
    geocodificador.
 
-   >>> VA POR TANDAS <<<
-   El geocodificador acepta una consulta por segundo, así que resolver los 253
-   pendientes tarda más de cuatro minutos y el navegador cortaría el pedido
-   antes. Cada llamada procesa un lote y devuelve cuántos quedan: la pantalla
-   puede repetir hasta terminar, y el trabajo hecho queda guardado aunque se
-   corte en el medio.
-
-   >>> LA COORDENADA QUE CAE FUERA DEL EJIDO NO SE GUARDA <<<
-   Se guarda el motivo para que el local aparezca en la vista de revisión con la
-   explicación a la vista (sección 9.2). No se completa con un valor aproximado
-   ni con la coordenada del relevamiento. */
-const LOTE_GEOCODIFICACION = 25;
-
-router.post('/geocodificar', requiereRol('administrativo', 'coordinacion', 'direccion'), async (req, res, next) => {
+   Si no hay geocodificador configurado (ver backend/geocodificador.js), no
+   recorre nada y lo dice: antes "resolvía" casi todo con puntos inventados. */
+router.post('/geocodificar', requiereRol('administrativo', 'coordinacion'), async (req, res, next) => {
   try {
-    const tamanio = Math.min(Number(req.body?.lote) || LOTE_GEOCODIFICACION, 100);
-
     const pendientes = await consultar(
       `SELECT id_local, direccion_local FROM local
-        WHERE habilita = 1 AND (latitud_local IS NULL OR longitud_local IS NULL OR latitud_local = 0)
-        ORDER BY id_local
-        LIMIT ${tamanio}`,
+        WHERE habilita = 1 AND (latitud_local IS NULL OR longitud_local IS NULL)`,
     );
+
+    if (!geocodificadorConfigurado()) {
+      return res.json({ revisados: pendientes.length, resueltos: 0, sinResolver: [], configurado: false });
+    }
 
     let resueltos = 0;
     const sinResolver = [];
 
     for (const local of pendientes) {
-      const geo = await geocodificar(local.direccionLocal ?? '');
+      const geo = await geocodificarDireccion(local.direccionLocal ?? '');
       if (geo.ok) {
         await ejecutar('UPDATE local SET latitud_local = ?, longitud_local = ? WHERE id_local = ?', [
           geo.latitud,
@@ -177,18 +195,24 @@ router.post('/geocodificar', requiereRol('administrativo', 'coordinacion', 'dire
       }
     }
 
-    const [fila] = await consultar(
-      `SELECT COUNT(*) AS total FROM local
-        WHERE habilita = 1 AND (latitud_local IS NULL OR longitud_local IS NULL OR latitud_local = 0)`,
-    );
+    res.json({ revisados: pendientes.length, resueltos, sinResolver, configurado: true });
+  } catch (e) {
+    next(e);
+  }
+});
 
-    res.json({
-      revisados: pendientes.length,
-      resueltos,
-      sinResolver,
-      quedanPendientes: Number(fila?.total) || 0,
-      limiteOficial: LIMITE_ES_OFICIAL,
-    });
+/* El informe de la prestataria ya no entra por aca: tiene su modulo propio
+   con revision fila por fila en backend/rutas/informe-9dj.js. */
+
+/* POST /herramientas/recalcular-estados  ->  corre ahora la recorrida diaria.
+
+   Es la misma tarea que corre sola todas las noches (backend/tareas-programadas.js):
+   anota en la auditoría, como "Sistema", los locales que cambiaron de estado
+   por el paso del tiempo. Sirve para no esperar a la noche después de correr
+   sql/05-tabla-auditoria.sql por primera vez. */
+router.post('/recalcular-estados', requiereRol('coordinacion', 'direccion'), async (_req, res, next) => {
+  try {
+    res.json(await registrarPasoDelTiempo());
   } catch (e) {
     next(e);
   }
@@ -290,7 +314,7 @@ router.post('/coordenadas/propuestas', requiereRol('administrativo', 'coordinaci
 
     const propuestas = [];
     for (const l of locales) {
-      const geo = await geocodificar(l.direccionLocal ?? '');
+      const geo = await geocodificarDireccion(l.direccionLocal ?? '');
       const actual =
         l.latitudLocal !== null && l.longitudLocal !== null
           ? { latitud: Number(l.latitudLocal), longitud: Number(l.longitudLocal) }

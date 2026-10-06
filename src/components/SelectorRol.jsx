@@ -31,9 +31,18 @@
 
 import { useRol } from '../auth/rolContexto';
 import { LISTA_ROLES } from '../auth/roles';
+import { useDatos } from '../datos/datosContexto';
+import { rolHabilitado } from '../config/modulos';
 
 function SelectorRol() {
-  const { rol, setRol } = useRol();
+  const { rol, setRol, agente, elegirAgente } = useRol();
+  // Para que en la prueba se vea cuál quedó apagado desde Accesos.
+  const { permisos, usuarios } = useDatos();
+
+  /* "Firmar como": los agentes de la base que tienen este rol. Elegir uno hace
+     que el backend lo reconozca por su legajo y que los actos queden a su
+     nombre en la auditoría (con el usuario de prueba quedan sin autor). */
+  const candidatos = usuarios.filter((u) => u.rol === rol && u.activo !== false);
 
   return (
     <div className="selector-rol">
@@ -53,9 +62,27 @@ function SelectorRol() {
         {LISTA_ROLES.map((r) => (
           <option key={r.id} value={r.id}>
             {r.etiqueta}
+            {rolHabilitado(r.id, permisos) ? '' : ' (deshabilitado)'}
           </option>
         ))}
       </select>
+
+      {candidatos.length > 0 && (
+        <select
+          className="selector-rol-select"
+          value={agente?.id ?? ''}
+          onChange={(e) => elegirAgente(candidatos.find((u) => String(u.id) === e.target.value) ?? null)}
+          aria-label="Firmar como (provisorio)"
+          title="Firmar como un agente cargado en la base"
+        >
+          <option value="">Usuario de prueba</option>
+          {candidatos.map((u) => (
+            <option key={u.id} value={u.id}>
+              Legajo {u.nombre}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }

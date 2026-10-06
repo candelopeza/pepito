@@ -14,16 +14,33 @@
    un local cuyo estado no se corresponda con sus actuaciones.
    ============================================================================ */
 
-import { diasEntre, hoyISO } from '../dominio/fechas.js';
+import { diasEntre, hoyISO, sumarDias } from '../dominio/fechas.js';
 import { colorEstado, etiquetaEstado, grupoEstado } from '../dominio/estados.js';
-import { documentacionVigente, plazoEnCurso, resolverEstado } from '../dominio/reglas.js';
+import { ACCIONES, accionesDisponibles, documentacionVigente, plazoEnCurso, resolverEstado } from '../dominio/reglas.js';
 import { deLocal } from '../dominio/actuaciones.js';
 
 /* Enriquece cada local con todo lo derivado. Es lo que consumen las grillas.
    Ojo: devuelve objetos NUEVOS, no toca los del store. */
 export function conEstado(base, refISO = hoyISO()) {
   const ctx = { hoy: refISO };
+
+  /* Las actuaciones de cada local, agrupadas UNA vez. Antes cada cálculo de
+     abajo recorría las 2.400 actuaciones del padrón por cada uno de los 2.200
+     locales (varias veces). Con el grupo armado, cada local mira solo las
+     suyas. El resultado es el mismo: las funciones del dominio filtran por
+     local igual. */
+  const porLocal = new Map();
+  for (const a of base.actuaciones) {
+    if (!porLocal.has(a.localId)) porLocal.set(a.localId, []);
+    porLocal.get(a.localId).push(a);
+  }
+
+  // Lo que el titular pidió por el portal y coordinación todavía no resolvió
+  // (ver backend: GET /locales/solicitudes-prorroga).
+  const solicitudes = new Map((base.solicitudesProrroga ?? []).map((s) => [s.localId, s]));
+
   return base.locales.map((l) => {
+    const propias = porLocal.get(l.id) ?? [];
     /* EL ESTADO LO MANDA EL BACKEND. Cada local viene de GET /locales con su
        `estado` ya resuelto a partir de lo que hay GUARDADO en la base
        (local.id_estado y el último trámite del circuito, ver backend/mapeo.js).
@@ -37,8 +54,12 @@ export function conEstado(base, refISO = hoyISO()) {
        por el área, y su estado es el resultado de ese trabajo. Recalcularlo
        acá podría mostrar en pantalla algo distinto de lo que el área registró
        a mano, y en ese caso la pantalla estaría mintiendo sobre el expediente. */
-    const codigo = l.estado ?? resolverEstado(l, base.actuaciones, ctx);
-    const plazo = plazoEnCurso(l, base.actuaciones, refISO);
+    const codigo = l.estado ?? resolverEstado(l, propias, ctx);
+    const plazo = plazoEnCurso(l, propias, refISO);
+    const ordenadas = deLocal(propias, l.id);
+    // La cédula en curso: la última emitida (con número). De ahí sale a quién
+    // está asignada, para las bandejas del notificador y de coordinación.
+    const cedulas = ordenadas.filter((a) => a.tipo === 'NOTIFICACION' && a.numeroCedula);
     return {
       ...l,
       estado: codigo,
@@ -47,9 +68,11 @@ export function conEstado(base, refISO = hoyISO()) {
       estadoGrupo: grupoEstado(codigo),
       plazo,
       diasRestantes: plazo ? diasEntre(refISO, plazo.vencimiento) : null,
-      vigente: documentacionVigente(base.actuaciones, l.id, refISO),
-      cantidadActuaciones: deLocal(base.actuaciones, l.id).length,
+      vigente: documentacionVigente(propias, l.id, refISO),
+      cantidadActuaciones: ordenadas.length,
       sinGeo: l.latitud === null || l.longitud === null,
+      cedulaEnCurso: cedulas.length ? cedulas[cedulas.length - 1] : null,
+      solicitudProrroga: solicitudes.get(l.id) ?? null,
     };
   });
 }
@@ -118,9 +141,10 @@ export const DEFINICION_BANDEJAS = [
     descripcion: 'Cédulas emitidas pendientes de entrega. El plazo todavía no corre.',
     estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA'],
     ruta: '/notificaciones',
-    rutaPorRol: { notificador: '/campo/entregas' },
+    rutaPorRol: { notificador: '/campo/entregas', relevador: '/campo/entregas' },
     color: 'azul',
-    roles: ['administrativo', 'coordinacion', 'notificador', 'direccion'],
+    // El relevador las ve solo si le asignaron cédulas (esTrabajoDe).
+    roles: ['administrativo', 'coordinacion', 'notificador', 'relevador', 'direccion'],
   },
   {
     id: 'datos-incompletos',
@@ -143,9 +167,10 @@ export const DEFINICION_BANDEJAS = [
     descripcion: 'La cédula consta como no entregada: sin notificación fehaciente no hay avance.',
     estados: ['NOTIF1_NO_ENTREGADA', 'NOTIF2_NO_ENTREGADA'],
     ruta: '/notificaciones',
-    rutaPorRol: { notificador: '/campo/entregas' },
+    rutaPorRol: { notificador: '/campo/entregas', relevador: '/campo/entregas' },
     color: 'rojo',
-    roles: ['administrativo', 'coordinacion', 'notificador', 'direccion'],
+    // El relevador las ve solo si le asignaron cédulas (esTrabajoDe).
+    roles: ['administrativo', 'coordinacion', 'notificador', 'relevador', 'direccion'],
   },
   {
     id: 'expedientes-generar',
@@ -166,6 +191,48 @@ export const DEFINICION_BANDEJAS = [
     ruta: '/prorrogas',
     color: 'amarillo',
     roles: ['administrativo', 'coordinacion', 'direccion'],
+    // Informativa: nadie tiene que hacer nada hasta que venza. Se muestra
+    // entera aunque se pida "solo lo que me toca" (ver bandejas()).
+    informativa: true,
+  },
+
+  /* >>> LAS TRES QUE SIGUEN SE AGREGARON PARA COORDINACIÓN (2026-10-02) <<<
+     No dependen solo del estado: llevan `condicion`, una pregunta extra sobre
+     el local que bandejas() aplica además de `estados`. */
+  {
+    id: 'sin-notificador',
+    prioridad: 3.5,
+    titulo: 'Cédulas sin notificador',
+    descripcion: 'Emitidas y sin agente asignado: no van a salir a la calle hasta que se asignen.',
+    estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA', 'NOTIF1_NO_ENTREGADA', 'NOTIF2_NO_ENTREGADA'],
+    condicion: (l) => Boolean(l.cedulaEnCurso) && !l.cedulaEnCurso.notificadorId,
+    ruta: '/tablero',
+    color: 'naranja',
+    roles: ['coordinacion'],
+  },
+  {
+    id: 'solicitudes-prorroga',
+    prioridad: 4.5,
+    titulo: 'Prórrogas pedidas por el titular',
+    descripcion: 'Pedidos del portal que esperan que coordinación decida los días.',
+    estados: ['NOTIF2_ENTREGADA', 'NOTIF2_SIN_FIRMA', 'NOTIF2_FIJADA', 'GENERAR_EXPEDIENTE'],
+    condicion: (l) => Boolean(l.solicitudProrroga),
+    ruta: '/prorrogas',
+    color: 'amarillo',
+    roles: ['coordinacion'],
+  },
+  {
+    id: 'bloqueados',
+    prioridad: 8,
+    titulo: 'Locales con bloqueo manual',
+    descripcion: 'Excluidos del cálculo automático. Revisá si el bloqueo sigue haciendo falta.',
+    estados: null,
+    condicion: (l) => Boolean(l.bloqueado),
+    // Llega al padrón ya filtrado por esta situación (pages/Local.jsx).
+    ruta: '/locales?situacion=bloqueado',
+    color: 'gris',
+    roles: ['coordinacion'],
+    informativa: true,
   },
 ];
 
@@ -192,11 +259,59 @@ export function ordenarBandejas(lista, modo = 'prioridad') {
   return copia.sort(porPrioridad);
 }
 
-export function bandejas(locales, rol, modo = 'prioridad') {
+/* opciones.soloTrabajo: deja en cada bandeja solo los locales que ESTE usuario
+   puede resolver (esTrabajoDe, más abajo). Lo piden el Inicio y el Tablero.
+   Sin opciones devuelve todo, como antes. Las bandejas `informativa` se
+   muestran enteras igual: no esperan un acto de nadie. */
+export function bandejas(locales, rol, modo = 'prioridad', opciones = {}) {
+  const { soloTrabajo = false, idUsuario = null } = opciones;
   const propias = DEFINICION_BANDEJAS
-    .filter((b) => b.roles.includes(rol))
-    .map((b) => ({ ...b, locales: locales.filter((l) => b.estados.includes(l.estado)) }));
+    // El administrador ve todas las bandejas: tiene acceso total.
+    .filter((b) => rol === 'administrador' || b.roles.includes(rol))
+    .map((b) => ({
+      ...b,
+      // `estados: null` = cualquier estado. `condicion` es opcional.
+      locales: locales.filter(
+        (l) =>
+          (!b.estados || b.estados.includes(l.estado)) &&
+          (!b.condicion || b.condicion(l)) &&
+          (!soloTrabajo || b.informativa || esTrabajoDe(l, rol, idUsuario)),
+      ),
+    }));
   return ordenarBandejas(propias, modo);
+}
+
+/* ¿Este local es trabajo de ESTE usuario?
+
+   Una bandeja agrupa por estado, pero no todo lo que hay en una bandeja lo
+   puede resolver cualquiera que la ve: el administrativo ve los relevamientos
+   pendientes de control, pero confirmar una exención es de coordinación. El
+   Inicio y el Tablero cuentan como "esperando una acción tuya" solo lo que
+   pasa esta prueba, que es la misma tabla de actos que dibuja los botones.
+
+     direccion    lectura total: todo es "situación del área", no trabajo suyo
+     notificador  solo las cédulas que tiene asignadas (sección 6.2)
+     relevador    lo mismo, si le asignaron cédulas: "suele acumularse" con
+                  el rol de notificador (sección 7.2)
+     el resto     los locales donde tiene al menos un acto disponible
+
+   Los actos que valen en CUALQUIER estado (registrar documentación, bloquear)
+   y las correcciones no cuentan: con ellos todo el padrón sería "trabajo
+   pendiente". */
+const ESPERAN_ENTREGA = ACCIONES.find((a) => a.id === 'registrar-entrega')?.estados ?? [];
+
+export function esTrabajoDe(local, rol, idUsuario = null) {
+  if (rol === 'direccion' || rol === 'administrador') return true;
+  if (rol === 'notificador' || rol === 'relevador') {
+    return (
+      Boolean(idUsuario) &&
+      !local.bloqueado &&
+      local.cedulaEnCurso?.notificadorId === idUsuario &&
+      ESPERAN_ENTREGA.includes(local.estado)
+    );
+  }
+  const propios = accionesDisponibles(local.estado, rol, local).filter((a) => !a.estados.includes('*') && !a.correccion);
+  return propios.length > 0;
 }
 
 /* Plazos que están por vencer. No es un estado: es un aviso. Un local con el
@@ -232,10 +347,14 @@ export function presentacionesPendientes(base) {
     .map((a) => ({ ...a, local: base.locales.find((l) => l.id === a.localId) ?? null }));
 }
 
-/* Cédulas emitidas: lo que necesita la pantalla de notificaciones. */
+/* Cédulas emitidas: lo que necesita la pantalla de notificaciones.
+   Solo las que tienen número. Una notificación PENDIENTE (la que crean la
+   habilitación de coordinación y el reingreso) todavía no es una cédula: está
+   en la cola de emisión, y en las listas de entrega aparecía como "Cédula
+   null" sin nada que entregar. */
 export function cedulas(base) {
   return base.actuaciones
-    .filter((a) => a.tipo === 'NOTIFICACION')
+    .filter((a) => a.tipo === 'NOTIFICACION' && a.numeroCedula)
     .map((a) => ({
       ...a,
       local: base.locales.find((l) => l.id === a.localId) ?? null,
@@ -269,7 +388,8 @@ export function indicadores(base, locales, refISO = hoyISO()) {
     return Boolean(dia) && dia >= desdeMes && dia <= refISO;
   };
 
-  const notificaciones = base.actuaciones.filter((a) => a.tipo === 'NOTIFICACION');
+  // Emitidas = con número. Las pendientes de emisión no cuentan como cédula.
+  const notificaciones = base.actuaciones.filter((a) => a.tipo === 'NOTIFICACION' && a.numeroCedula);
   const porInstancia = (n) => notificaciones.filter((a) => a.instancia === n);
   const entregadas = (lista) => lista.filter((a) => a.resultado && a.resultado !== 'NO_ENTREGADA');
 
@@ -331,7 +451,9 @@ export function indicadores(base, locales, refISO = hoyISO()) {
     notif1Entregadas: entregadas(porInstancia(1)).length,
     notif2Emitidas: porInstancia(2).length,
     notif2Entregadas: entregadas(porInstancia(2)).length,
-    sinImprimir: notificaciones.filter((a) => !a.impresaEn).length,
+    // Sin la constancia de impresión (sql/04) no se sabe: null, y la
+    // pantalla no muestra un "todas sin imprimir" que no es cierto.
+    sinImprimir: base.capacidades?.impresion === false ? null : notificaciones.filter((a) => !a.impresaEn).length,
 
     // --- documentación por tipo
     ddjj: base.actuaciones.filter((a) => a.tipo === 'DDJJ' && a.validado !== false).length,
@@ -345,6 +467,98 @@ export function indicadores(base, locales, refISO = hoyISO()) {
     prorrogasVigentes: locales.filter((l) => l.estado === 'PRORROGA_VIGENTE').length,
 
     // --- producción por agente
+    porAgente: Object.values(porAgente).sort((a, b) => b.relevamientos + b.entregas - (a.relevamientos + a.entregas)),
+  };
+}
+
+/* ============================================================================
+   INDICADORES DE UN PERÍODO  (sección 9.5 y Anexo A.4)
+   ----------------------------------------------------------------------------
+   Lo que PASÓ entre dos fechas, las dos inclusive: lo que se relevó, se
+   emitió, se entregó, se presentó y se inició. Es la producción del área. La
+   composición del padrón (cuántos locales hay en cada situación HOY) sigue
+   saliendo de indicadores(): es una foto, no un período.
+
+   Cada número cuenta por la fecha de SU acto: una cédula emitida en marzo y
+   entregada en abril suma como emitida en marzo y como entregada en abril.
+
+   "Ayer" es el reporte diario que hoy se manda por correo a las 7, con la
+   producción de las 24 horas previas (Anexo A.4).
+   ============================================================================ */
+export const PERIODOS_REPORTE = [
+  { id: 'mes', etiqueta: 'Mes en curso' },
+  { id: 'ayer', etiqueta: 'Ayer' },
+  { id: 'hoy', etiqueta: 'Hoy' },
+  { id: 'mes-anterior', etiqueta: 'Mes anterior' },
+  { id: 'todo', etiqueta: 'Todo' },
+  { id: 'otro', etiqueta: 'Otro período' },
+];
+
+/* Las fechas de cada período, en ISO. 'otro' lo elige la pantalla. */
+export function rangoDePeriodo(id, refISO = hoyISO()) {
+  const primeroDelMes = `${refISO.slice(0, 7)}-01`;
+  if (id === 'hoy') return { desde: refISO, hasta: refISO };
+  if (id === 'ayer') {
+    const ayer = sumarDias(refISO, -1);
+    return { desde: ayer, hasta: ayer };
+  }
+  if (id === 'mes-anterior') {
+    const ultimoDelAnterior = sumarDias(primeroDelMes, -1);
+    return { desde: `${ultimoDelAnterior.slice(0, 7)}-01`, hasta: ultimoDelAnterior };
+  }
+  if (id === 'todo') return { desde: '0000-01-01', hasta: refISO };
+  return { desde: primeroDelMes, hasta: refISO };
+}
+
+export function indicadoresDelPeriodo(base, desde, hasta) {
+  // Igual que en indicadores(): un registro sin fecha no es de ningún período.
+  const dentro = (fecha) => {
+    const dia = String(fecha ?? '').slice(0, 10);
+    return Boolean(dia) && dia >= desde && dia <= hasta;
+  };
+
+  const relevados = base.relevamientos.filter((r) => dentro(r.fechaHora));
+  const cedulasEmitidas = base.actuaciones.filter((a) => a.tipo === 'NOTIFICACION' && a.numeroCedula);
+  const emitidas = cedulasEmitidas.filter((a) => dentro(a.fecha));
+  // Con resultado cargado en el período (la fecha de la visita; si no la
+  // tiene, la de emisión).
+  const conResultado = cedulasEmitidas.filter((a) => a.resultado && dentro(a.fechaEntrega ?? a.fecha));
+  // Fehaciente: entregada, sin firma o fijada. La no entregada no hace correr plazo.
+  const fehacientes = conResultado.filter((a) => a.resultado !== 'NO_ENTREGADA');
+  const documentos = base.actuaciones.filter(
+    (a) => ['DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO'].includes(a.tipo) && a.validado !== false && dentro(a.fecha),
+  );
+  const deTipo = (tipo) => base.actuaciones.filter((a) => a.tipo === tipo && dentro(a.fecha)).length;
+  const instancia = (lista, n) => lista.filter((a) => a.instancia === n).length;
+
+  // La producción por agente, con la misma regla que indicadores().
+  const porAgente = {};
+  const sumar = (agente, campo) => {
+    const clave = agente || SIN_AGENTE;
+    porAgente[clave] = porAgente[clave] ?? { agente: clave, relevamientos: 0, entregas: 0 };
+    porAgente[clave][campo] += 1;
+  };
+  relevados.forEach((r) => sumar(r.usuario, 'relevamientos'));
+  conResultado.forEach((a) => sumar(base.usuarios.find((u) => u.id === a.notificadorId)?.nombre, 'entregas'));
+
+  return {
+    relevamientos: relevados.length,
+    relevamientosGG: relevados.filter((r) => r.clasificacion === 'GRAN_GENERADOR').length,
+    relevamientosGM: relevados.filter((r) => r.clasificacion === 'GENERADOR_MENOR').length,
+
+    notif1Emitidas: instancia(emitidas, 1),
+    notif1Entregadas: instancia(fehacientes, 1),
+    notif2Emitidas: instancia(emitidas, 2),
+    notif2Entregadas: instancia(fehacientes, 2),
+
+    ddjj: documentos.filter((a) => a.tipo === 'DDJJ').length,
+    ddjjReciclaje: documentos.filter((a) => a.tipo === 'DDJJ_RECICLAJE').length,
+    contratos: documentos.filter((a) => a.tipo === 'CONTRATO').length,
+    contratos9DJ: documentos.filter((a) => a.tipo === 'CONTRATO' && a.origen === 'INFORME_9DJ').length,
+
+    expedientes: deTipo('EXPEDIENTE'),
+    prorrogas: deTipo('PRORROGA'),
+
     porAgente: Object.values(porAgente).sort((a, b) => b.relevamientos + b.entregas - (a.relevamientos + a.entregas)),
   };
 }

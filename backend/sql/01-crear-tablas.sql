@@ -43,10 +43,29 @@ CREATE TABLE usuarios (
   id      INT UNSIGNED NOT NULL AUTO_INCREMENT,
   nombre  VARCHAR(120) NOT NULL,
   email   VARCHAR(160) NOT NULL,
-  rol     ENUM('relevador','notificador','administrativo','coordinacion','direccion','titular','sistema') NOT NULL,
+  rol     ENUM('relevador','notificador','administrativo','coordinacion','direccion','administrador','titular','sistema') NOT NULL,
   activo  TINYINT(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (id),
   UNIQUE KEY uq_usuarios_email (email)
+) ENGINE=InnoDB;
+
+-- Qué ve y qué modifica cada rol (pantalla Accesos → Tipos de usuario).
+-- Guarda solo las DIFERENCIAS respecto del reparto por defecto que trae
+-- src/config/modulos.js; lo que no está acá vale como lo dice el código.
+CREATE TABLE permisos_modulos (
+  modulo  VARCHAR(40) NOT NULL,
+  rol     ENUM('relevador','notificador','administrativo','coordinacion','direccion','administrador','titular') NOT NULL,
+  nivel   ENUM('no','ver','editar') NOT NULL,
+  PRIMARY KEY (modulo, rol)
+) ENGINE=InnoDB;
+
+-- Tipos de usuario prendidos o apagados (llave "Habilitado" de Accesos →
+-- Tipos de usuario). Los roles en sí viven en el código: el circuito depende
+-- de ellos, por eso no se crean ni se borran desde la pantalla.
+CREATE TABLE tipos_usuario (
+  rol        ENUM('relevador','notificador','administrativo','coordinacion','direccion','administrador','titular') NOT NULL,
+  habilitado TINYINT(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (rol)
 ) ENGINE=InnoDB;
 
 CREATE TABLE rubros (

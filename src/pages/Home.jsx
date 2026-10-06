@@ -40,13 +40,13 @@
    misma tabla de permisos que gobierna el menú y el bloqueo por URL.
    ============================================================================ */
 
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import PageHeader from '../components/ui/PageHeader';
-import { Vacio } from '../components/ui/Aviso';
+import Aviso, { Vacio } from '../components/ui/Aviso';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
-import { accionesRapidasPara, puedeVerRuta } from '../config/modulos';
+import { accionesRapidasPara, puedeVerRuta, rolHabilitado } from '../config/modulos';
 
 /* Días dentro de los cuales un plazo ya se considera "encima". Es el mismo
    umbral que usa el aviso del Tablero, para que las dos pantallas no discutan
@@ -63,12 +63,12 @@ const DIAS_URGENTE = 3;
    módulo que el rol no tiene, el link moriría en RutaProtegida y la tarjeta
    sería una trampa. Devolviendo undefined, <Card> se dibuja sin link (muestra
    el número, no navega), que es mucho mejor que un botón que rebota. */
-function destinoDeBandeja(bandeja, rol) {
+function destinoDeBandeja(bandeja, rol, permisos) {
   const ruta = bandeja.rutaPorRol?.[rol] ?? bandeja.ruta;
   if (!ruta) return undefined;
   // El permiso se mira contra la ruta pelada: `?estado=...` no es parte del
   // path que declara config/modulos.js.
-  return puedeVerRuta(rol, ruta.split('?')[0]) ? ruta : undefined;
+  return puedeVerRuta(rol, ruta.split('?')[0], permisos) ? ruta : undefined;
 }
 
 /* El renglón al pie de una tarjeta de pendientes. No agrega información nueva:
@@ -95,10 +95,19 @@ function pieDePlazos(locales) {
 
 function Home() {
   const { rol, datosRol, usuario } = useRol();
-  const { bandejasPara, presentacionesPendientes, indicadores } = useDatos();
+  const { bandejasPara, presentacionesPendientes, indicadores, permisos, usuarios } = useDatos();
+
+  // Quién soy en la tabla de usuarios, igual que en Entregas: las cédulas se
+  // asignan por id. Con un agente elegido en "Firmar como" es él; si no, se
+  // busca por nombre.
+  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.nombre === usuario.nombre);
+
+  // Un tipo de usuario apagado desde Accesos entra y no ve nada. Se le avisa
+  // en vez de mostrarle un Inicio vacío sin explicación.
+  const habilitado = rolHabilitado(rol, permisos);
 
   // ===== A. QUÉ PUEDE INICIAR ESTE ROL =====
-  const acciones = accionesRapidasPara(rol);
+  const acciones = habilitado ? accionesRapidasPara(rol, permisos) : [];
 
   // ===== B. QUÉ ESTÁ ESPERANDO =====
   /* Por prioridad, que es el orden de urgencia administrativa definido en
@@ -107,7 +116,11 @@ function Home() {
      Inicio tiene que mostrar lo que hay para hacer, no el catálogo completo de
      situaciones posibles (para eso está el Tablero, que las lista todas
      siempre en el mismo lugar). */
-  const bandejasDelRol = bandejasPara(rol, 'prioridad');
+  // Solo lo que ESTE usuario puede resolver: al administrativo no se le cuentan
+  // las exenciones que confirma coordinación, y al notificador solo sus cédulas.
+  const bandejasDelRol = habilitado
+    ? bandejasPara(rol, 'prioridad', { soloTrabajo: true, idUsuario: yo?.id ?? null })
+    : [];
   const bandejas = bandejasDelRol.filter((b) => b.locales.length > 0);
 
   /* La validación de presentaciones NO es una bandeja: no agrupa locales por
@@ -117,7 +130,7 @@ function Home() {
 
      Importa que esté a la vista: mientras una presentación está sin validar el
      plazo del local SIGUE CORRIENDO (sección 6.3 del pliego). */
-  const puedeValidar = puedeVerRuta(rol, '/validaciones');
+  const puedeValidar = puedeVerRuta(rol, '/validaciones', permisos);
   const aValidar = puedeValidar ? presentacionesPendientes() : [];
 
   const totalPendientes = bandejas.reduce((n, b) => n + b.locales.length, 0) + aValidar.length;
@@ -132,15 +145,24 @@ function Home() {
 
      En cambio un administrativo con las bandejas en cero SÍ tiene que ver el
      cartel: "hoy no hay nada" es información que estaba esperando. */
-  const leCorrespondenPendientes = bandejasDelRol.length > 0 || puedeValidar;
+  // El relevador ve la sección solo cuando le asignaron cédulas: entregar no
+  // es su tarea de todos los días.
+  const leCorrespondenPendientes =
+    (bandejasDelRol.length > 0 && (rol !== 'relevador' || bandejas.length > 0)) || puedeValidar;
 
   // ===== C. LOS NÚMEROS DEL MES =====
   /* Los indicadores son del conjunto del organismo, no del usuario: los ve
      quien tiene acceso al tablero (oficina y dirección). Un relevador o un
      notificador no los necesita para su tarea, y al titular no le corresponden.
      Se decide con la misma tabla de permisos que todo lo demás. */
-  const verIndicadores = puedeVerRuta(rol, '/tablero');
+  const verIndicadores = puedeVerRuta(rol, '/tablero', permisos);
   const ind = verIndicadores ? indicadores() : null;
+
+  /* El titular entra directo a su portal: es lo único que tiene para hacer,
+     y el Inicio de oficina no le dice nada (sección 6.3). */
+  if (rol === 'titular' && habilitado && puedeVerRuta(rol, '/portal', permisos)) {
+    return <Navigate to="/portal" replace />;
+  }
 
   const fechaFormateada = new Date().toLocaleDateString('es-ES', {
     weekday: 'long',
@@ -160,11 +182,23 @@ function Home() {
              "no tenés nada esperando" sería contarles algo que no aplica. */
           !leCorrespondenPendientes
             ? datosRol.descripcion
-            : totalPendientes === 0
-              ? 'No tenés nada esperando. Podés iniciar algo nuevo desde las acciones de abajo.'
-              : `Tenés ${totalPendientes} caso(s) esperando una acción tuya.`
+            : rol === 'direccion'
+              ? /* Dirección tiene lectura total y no ejecuta actos del circuito
+                   (sección 7.2): las bandejas le muestran la situación del área,
+                   no trabajo suyo. */
+                `Situación del área: ${totalPendientes} caso(s) en las bandejas de trabajo.`
+              : totalPendientes === 0
+                ? 'No tenés nada esperando. Podés iniciar algo nuevo desde las acciones de abajo.'
+                : `Tenés ${totalPendientes} caso(s) esperando una acción tuya.`
         }
       />
+
+      {!habilitado && (
+        <Aviso tipo="alerta" titulo="Este tipo de usuario está deshabilitado">
+          Lo apagó el administrador desde Accesos → Tipos de usuario. Hasta que lo vuelva a habilitar no hay módulos disponibles.
+          {rol === 'administrador' && ' Como administrador conservás Tipos de usuario en el menú para poder revertirlo.'}
+        </Aviso>
+      )}
 
       {/* ---------- Quién sos y cuándo ----------
           Se mantiene tal cual estaba: es la referencia de con qué perfil se
@@ -221,18 +255,24 @@ function Home() {
           <span>Pendientes de trabajo</span>
           {/* El Tablero es la versión profunda de esto mismo. El link va acá y no
               como una tarjeta más para que no parezca otro pendiente. */}
-          {puedeVerRuta(rol, '/tablero') && (
+          {puedeVerRuta(rol, '/tablero', permisos) && (
             <Link to="/tablero" className="accesos-header-link">
               Abrir el tablero de trabajo →
             </Link>
           )}
         </div>
 
+        {/* Las cédulas se asignan por persona: sin saber quién es, el
+            notificador no tiene "suyas" para mostrar. */}
+
         {bandejas.length === 0 && aValidar.length === 0 ? (
-          <Vacio titulo="No hay nada pendiente">
-            Ninguna de tus bandejas tiene casos esperando. Cuando entre un relevamiento para controlar, una cédula para
-            emitir o documentación para validar, va a aparecer acá.
-          </Vacio>
+          ['notificador', 'relevador'].includes(rol) ? (
+            // El agente de campo solo tiene pendientes si le asignan cédulas.
+            <Vacio titulo="No tenés cédulas para entregar"></Vacio>
+          ) : (
+            <Vacio titulo="No hay nada pendiente">
+            </Vacio>
+          )
         ) : (
           <div className="grid-accesos">
             {bandejas.map((b) => (
@@ -242,7 +282,7 @@ function Home() {
                 descripcion={b.descripcion}
                 valor={b.locales.length}
                 color={b.color}
-                to={destinoDeBandeja(b, rol)}
+                to={destinoDeBandeja(b, rol, permisos)}
                 pie={pieDePlazos(b.locales)}
               />
             ))}
@@ -305,7 +345,7 @@ function Home() {
 
           {/* Los indicadores completos, con corte por período y producción por
               agente, están en Reportes. Esta franja es el titular. */}
-          {puedeVerRuta(rol, '/reportes') && (
+          {puedeVerRuta(rol, '/reportes', permisos) && (
             <p className="inicio-pie-indicadores">
               El detalle completo, con producción por agente, está en <Link to="/reportes">Reportes e indicadores</Link>.
             </p>

@@ -181,7 +181,16 @@ export function plazoEnCurso(local, actuaciones, refISO = hoyISO()) {
    Cada acción declara:
      estados  en qué estados aparece ('*' = en cualquiera menos el terminal)
      roles    qué roles la pueden ejecutar
+   y, si hace falta:
+     condicion   (local) => bool, una pregunta extra sobre el local que el
+                 estado no alcanza a decir. Solo la usan las pantallas: el
+                 servidor hace su propio control en la ruta.
+     correccion  arregla algo ya registrado: no es "trabajo pendiente" y no
+                 cuenta en las bandejas (datos/vistas.js, esTrabajoDe).
    ============================================================================ */
+
+/* Los resultados de entrega que hacen correr el plazo. */
+const ENTREGA_EFECTIVA = ['ENTREGADA', 'SIN_FIRMA', 'FIJADA'];
 export const ACCIONES = [
   {
     id: 'confirmar-exencion',
@@ -218,25 +227,56 @@ export const ACCIONES = [
     estados: ['NOTIF1_PENDIENTE', 'NOTIF2_PENDIENTE', 'NOTIF1_GENERANDO', 'NOTIF2_GENERANDO'],
     roles: ['administrativo', 'coordinacion'],
   },
+  /* Las tres que siguen también valen con la cédula NO ENTREGADA. La guía
+     dice que en ese caso el circuito se detiene "hasta que la entrega se
+     concrete" (sección 4.1): para que se concrete hay que poder volver a
+     intentarla, mandar a otro notificador o reemitir la cédula si la
+     dirección estaba mal. Sin esto, el local quedaba trabado sin ningún
+     botón. El intento fallido no se pierde: queda en la auditoría. */
   {
     id: 'regenerar-cedula',
     etiqueta: 'Regenerar cédula',
     ayuda: 'Se corrigieron datos del local: reemplaza el documento ya emitido.',
-    estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA'],
+    estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA', 'NOTIF1_NO_ENTREGADA', 'NOTIF2_NO_ENTREGADA'],
     roles: ['administrativo', 'coordinacion'],
   },
   {
     id: 'asignar-notificador',
     etiqueta: 'Asignar notificador',
-    estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA'],
+    estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA', 'NOTIF1_NO_ENTREGADA', 'NOTIF2_NO_ENTREGADA'],
     roles: ['coordinacion'],
   },
   {
     id: 'registrar-entrega',
     etiqueta: 'Registrar entrega',
     ayuda: 'El plazo empieza a correr desde la fecha de entrega efectiva.',
-    estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA'],
+    estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA', 'NOTIF1_NO_ENTREGADA', 'NOTIF2_NO_ENTREGADA'],
     roles: ['notificador', 'coordinacion'],
+  },
+  /* Corregir una entrega mal cargada (sección 6.2, corrección de cargas).
+     El agente de campo corrige la suya el mismo día: eso lo controla el
+     servidor (PUT /notificaciones/:id/entrega). Después la corrige
+     coordinación, con motivo. Vale mientras esa cédula sea lo último del
+     circuito: en GENERAR_EXPEDIENTE, por ejemplo, la segunda cédula vencida
+     todavía se puede corregir antes de iniciar el expediente. */
+  {
+    id: 'corregir-entrega',
+    etiqueta: 'Corregir entrega',
+    ayuda: 'Se cargó mal el resultado o la fecha. El plazo se recalcula y queda el motivo.',
+    estados: [
+      'NOTIF1_ENTREGADA',
+      'NOTIF1_SIN_FIRMA',
+      'NOTIF1_FIJADA',
+      'NOTIF2_ENTREGADA',
+      'NOTIF2_SIN_FIRMA',
+      'NOTIF2_FIJADA',
+      'NOTIF2_PENDIENTE',
+      'COMPLETAR_DATOS',
+      'GENERAR_EXPEDIENTE',
+    ],
+    roles: ['coordinacion'],
+    condicion: (local) => ENTREGA_EFECTIVA.includes(local?.cedulaEnCurso?.resultado),
+    correccion: true,
   },
   {
     id: 'registrar-documentacion',
@@ -276,8 +316,11 @@ export const ACCIONES = [
 
 export function accionesDisponibles(codigoEstado, rol, local) {
   return ACCIONES.filter((a) => {
-    if (!a.roles.includes(rol)) return false;
+    // El administrador del sistema puede ejecutar cualquier acto: es el perfil
+    // de control total. Los demás, solo los que tienen declarados.
+    if (rol !== 'administrador' && !a.roles.includes(rol)) return false;
     if (local?.bloqueado && a.id !== 'bloquear') return false;
+    if (a.condicion && !a.condicion(local)) return false;
     if (a.estados.includes('*')) return codigoEstado !== 'EXENTO_CONFIRMADO';
     return a.estados.includes(codigoEstado);
   });

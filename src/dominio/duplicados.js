@@ -5,30 +5,25 @@
    una vez con identificadores distintos, y sus actuaciones quedan repartidas
    entre los dos registros: el local aparece con menos historial del que tiene.
 
-   >>> UN DUPLICADO ES EL MISMO LOCAL DOS VECES, NO DOS LOCALES DEL MISMO DUEÑO <<<
-   Esta es LA distinción de todo el archivo, y es la que hacía que la pantalla
-   mostrara medio padrón como duplicado.
-
-   Una empresa puede tener muchas sucursales, cada una con su propio CUIT (el
-   del titular), su propia dirección y su propio recorrido por el circuito.
-   PALPITOS SRL tiene NUEVE locales en el padrón real. Son nueve establecimientos
-   distintos: cada uno genera sus residuos, recibe su cédula y acredita por
-   separado. Fusionarlos sería destruir ocho expedientes.
-
-   Por eso NINGÚN criterio de acá marca un par por el CUIT solo ni por el
-   nombre solo. Siempre hace falta que coincida también LA DIRECCIÓN, porque la
-   dirección es lo que identifica al establecimiento.
-
    >>> SIEMPRE CON CONFIRMACIÓN HUMANA <<<
    Esta función solo PROPONE. La fusión la decide una persona y queda
    registrada (qué ids se unificaron), porque después hay que poder rastrear
    una actuación histórica hasta el registro donde se cargó.
 
-   CRITERIOS, de más fuerte a más débil:
-     alta   mismo CUIT y la misma dirección
-     media  mismo CUIT y direcciones casi iguales (una escrita más completa que
-            la otra, o la altura corrida en pocos números)
-     baja   sin CUIT en común, pero mismo nombre y la misma dirección
+   >>> CUÁNDO ES DUPLICADO (criterio 'direccion', el que se usa) <<<
+   Solo si coinciden las TRES cosas: nombre comercial, nombre de calle y
+   altura (es lo que hace el sistema viejo, sección 9.4). El CUIT solo no
+   alcanza: un mismo titular tiene varios locales, y muchos locales se llaman
+   igual en distintas direcciones. Con el CUIT o el nombre solos, la pantalla
+   se llenaba de pares que no eran duplicados.
+     - nombre, calle, altura y además el mismo CUIT ... coincidencia alta
+     - nombre, calle y altura .......................... coincidencia media
+
+   El criterio anterior (mismo CUIT, o nombre parecido aunque cambie la
+   dirección) sigue disponible con { criterio: 'amplio' }: no se borró.
+
+   QUIÉN SE CONSERVA: el de mayor jerarquía legal (ver jerarquiaLegal),
+   porque es el que referencian los actos ya notificados o iniciados.
    ============================================================================ */
 
 /* Deja solo dígitos: '30-12345678-9' y '30123456789' son el mismo CUIT.
@@ -39,7 +34,7 @@ export function normalizarCuit(cuit) {
 }
 
 /* Minúsculas, sin tildes, sin puntuación y sin las palabras que no distinguen
-   nada ('sa', 'srl', 'la'...). */
+   nada ('supermercado', 'sa', 'srl'...). */
 const RUIDO = ['sa', 'srl', 'sh', 'sas', 'el', 'la', 'los', 'las', 'de', 'del'];
 
 export function normalizarNombre(nombre) {
@@ -54,29 +49,17 @@ export function normalizarNombre(nombre) {
     .trim();
 }
 
-/* Palabras que aparecen en casi todas las direcciones del padrón y no
-   distinguen nada: la ciudad y la provincia que arrastran las direcciones
-   geocodificadas. Sin sacarlas, "SANTIAGO 419" y "SANTIAGO DEL ESTERO 419,
-   SAN MIGUEL DE TUCUMÁN, TUCUMÁN" parecen calles distintas. */
-const RUIDO_DIRECCION = ['san', 'miguel', 'tucuman', 'av', 'avenida', 'calle', 'bo', 'barrio'];
-
-/* Separa 'Av. Alem 123' en { calle: 'alem', altura: 123 }.
-   La altura sale como número para poder comparar cercanía. */
+/* Separa 'Av. Alem 123' en { calle: 'av alem', altura: '123' } */
 export function partirDireccion(direccion) {
-  const texto = normalizarNombre(direccion)
-    .split(' ')
-    .filter((p) => !RUIDO_DIRECCION.includes(p))
-    .join(' ');
-  // La altura es el primer número suelto: en "brigido teran 250 loc 47" es 250.
-  const m = texto.match(/\b(\d{1,5})\b/);
-  const altura = m ? Number(m[1]) : null;
-  const calle = texto.replace(/\b\d+\b.*$/, '').trim();
-  return { calle, altura };
+  const texto = normalizarNombre(direccion);
+  const m = texto.match(/^(.*?)\s*(\d+)\s*$/);
+  return m ? { calle: m[1].trim(), altura: m[2] } : { calle: texto, altura: '' };
 }
 
 /* Similitud de textos por palabras compartidas (índice de Jaccard).
    Devuelve 0 a 1. Alcanza para nombres comerciales cortos y no necesita
-   librería. */
+   librería: una distancia de edición sería más fina pero mucho más lenta
+   sobre 2.000 registros cruzados de a pares. */
 export function similitud(a, b) {
   const A = new Set(normalizarNombre(a).split(' ').filter(Boolean));
   const B = new Set(normalizarNombre(b).split(' ').filter(Boolean));
@@ -88,116 +71,130 @@ export function similitud(a, b) {
   return comunes / (A.size + B.size - comunes);
 }
 
-/* ¿Las dos direcciones apuntan al mismo lugar?
-   Devuelve 'igual', 'parecida' o null.
+/* Qué tan avanzado está el local en el circuito legal: cuanto más alto, más
+   actos con efecto sobre el titular tiene (un expediente iniciado pesa más que
+   una cédula, una cédula más que un relevamiento). Al unificar dos registros,
+   el historial va al de mayor jerarquía. */
+const JERARQUIA_POR_ESTADO = {
+  EXPEDIENTE: 6,
+  GENERAR_EXPEDIENTE: 5,
+  PRORROGA_VIGENTE: 5,
+  CONTRATO_VIGENTE: 4,
+  CONTRATO_9DJ: 4,
+  DDJJ_VIGENTE: 4,
+  DDJJ_RECICLAJE: 4,
+  COMPLETAR_DATOS: 3,
+};
 
-   'parecida' cubre los dos casos reales del padrón:
-     - la misma altura y una calle contenida en la otra
-       ("santiago 419" vs "santiago estero 419")
-     - la misma calle con la altura corrida en pocos números
-       ("sarmiento 1299" vs "sarmiento 1301"), que suele ser el mismo local con
-       dos entradas, pero puede ser el de al lado: por eso no es 'igual'. */
-const TOLERANCIA_ALTURA = 4;
-
-export function compararDirecciones(a, b) {
-  const A = partirDireccion(a);
-  const B = partirDireccion(b);
-  if (!A.calle || !B.calle) return null;
-
-  const mismaCalle = A.calle === B.calle;
-  const calleContenida = A.calle.includes(B.calle) || B.calle.includes(A.calle);
-
-  if (mismaCalle && A.altura === B.altura) return 'igual';
-  if (calleContenida && A.altura === B.altura && A.altura !== null) return 'parecida';
-  if (
-    mismaCalle &&
-    A.altura !== null &&
-    B.altura !== null &&
-    Math.abs(A.altura - B.altura) <= TOLERANCIA_ALTURA
-  ) {
-    return 'parecida';
-  }
-  return null;
+export function jerarquiaLegal(local) {
+  const estado = String(local?.estado ?? '');
+  if (JERARQUIA_POR_ESTADO[estado]) return JERARQUIA_POR_ESTADO[estado];
+  if (estado.startsWith('NOTIF2')) return 3;
+  if (estado.startsWith('NOTIF1')) return 2;
+  if (estado === 'EXENTO_CONFIRMADO' || estado === 'EXENTO_REVISION') return 0;
+  return 1;
 }
 
-/* ============================================================================
-   LA BÚSQUEDA
-   ----------------------------------------------------------------------------
-   Agrupa primero y compara después. Comparar todos los locales contra todos son
-   2.200 × 2.200 ≈ 2,4 millones de pares, que en el navegador se nota; agrupando
-   por CUIT y por dirección, cada grupo tiene dos o tres elementos.
-   ============================================================================ */
-export function buscarDuplicados(locales, { umbralNombre = 0.8 } = {}) {
-  const pares = [];
-  const yaVisto = new Set();
-
-  const agregar = (a, b, nivel, motivo) => {
-    const clave = a.id < b.id ? `${a.id}-${b.id}` : `${b.id}-${a.id}`;
-    if (yaVisto.has(clave)) return;
-    yaVisto.add(clave);
-    pares.push({
-      id: clave,
-      principal: a,
-      duplicado: b,
-      nivel,
-      motivo,
-      parecido: Math.round(similitud(a.nombreLocal, b.nombreLocal) * 100),
-    });
-  };
-
-  /* --- 1 y 2. Por CUIT: entre los locales del mismo titular, los que además
-     comparten dirección son el mismo establecimiento cargado dos veces. Los que
-     tienen direcciones distintas son SUCURSALES y no se tocan. */
-  const porCuit = new Map();
-  for (const l of locales) {
-    const cuit = normalizarCuit(l.cuit);
-    if (!cuit) continue;
-    if (!porCuit.has(cuit)) porCuit.set(cuit, []);
-    porCuit.get(cuit).push(l);
+/* [principal, duplicado]: primero la jerarquía legal; si empatan, el que tiene
+   más actuaciones, después el que tiene CUIT, y por último el más antiguo. */
+export function ordenarPorJerarquia(a, b) {
+  const criterios = [
+    (x) => jerarquiaLegal(x),
+    (x) => x.cantidadActuaciones ?? 0,
+    (x) => (normalizarCuit(x.cuit) ? 1 : 0),
+    (x) => -(Number(x.id) || 0),
+  ];
+  for (const c of criterios) {
+    if (c(a) !== c(b)) return c(a) > c(b) ? [a, b] : [b, a];
   }
+  return [a, b];
+}
 
-  for (const grupo of porCuit.values()) {
-    if (grupo.length < 2) continue;
-    for (let i = 0; i < grupo.length; i += 1) {
-      for (let j = i + 1; j < grupo.length; j += 1) {
-        const comparacion = compararDirecciones(grupo[i].direccion, grupo[j].direccion);
-        if (comparacion === 'igual') {
-          agregar(grupo[i], grupo[j], 'alta', 'Mismo CUIT y la misma dirección.');
-        } else if (comparacion === 'parecida') {
-          agregar(grupo[i], grupo[j], 'media', 'Mismo CUIT y direcciones casi iguales.');
-        }
-        // Direcciones distintas: son dos sucursales del mismo titular. No es
-        // un duplicado y no se propone.
-      }
-    }
-  }
+/* Devuelve los pares candidatos, del más probable al menos.
+   criterio 'direccion' (por defecto): nombre + calle + altura.
+   criterio 'amplio': el de antes (también CUIT solo o nombre solo). */
+export function buscarDuplicados(locales, { umbralNombre = 0.6, criterio = 'direccion' } = {}) {
+  if (criterio === 'direccion') return porNombreYDireccion(locales, umbralNombre);
+  return amplio(locales, umbralNombre);
+}
 
-  /* --- 3. Por dirección: locales en el mismo domicilio con el mismo nombre,
-     cuando el CUIT falta o difiere. Es el caso de la carga manual repetida
-     antes de completar los datos registrales. */
+/* Agrupa por calle y altura antes de comparar nombres: con 2.200 locales,
+   comparar todos contra todos son 2,4 millones de pares; así solo se comparan
+   los que ya comparten la dirección. */
+function porNombreYDireccion(locales, umbralNombre) {
   const porDireccion = new Map();
-  for (const l of locales) {
-    const { calle, altura } = partirDireccion(l.direccion);
-    if (!calle || altura === null) continue;
-    const clave = `${calle} ${altura}`;
+  for (const local of locales) {
+    const { calle, altura } = partirDireccion(local.direccion);
+    if (!calle || !altura) continue; // sin altura no se puede afirmar que sea el mismo lugar
+    const clave = `${calle}|${altura}`;
     if (!porDireccion.has(clave)) porDireccion.set(clave, []);
-    porDireccion.get(clave).push(l);
+    porDireccion.get(clave).push(local);
   }
 
+  const pares = [];
   for (const grupo of porDireccion.values()) {
-    if (grupo.length < 2) continue;
     for (let i = 0; i < grupo.length; i += 1) {
       for (let j = i + 1; j < grupo.length; j += 1) {
         const a = grupo[i];
         const b = grupo[j];
+        const parecidoNombre = similitud(a.nombreLocal, b.nombreLocal);
+        if (parecidoNombre < umbralNombre) continue;
         const cuitA = normalizarCuit(a.cuit);
-        const cuitB = normalizarCuit(b.cuit);
-        // Si los dos tienen CUIT y son distintos, son dos comercios en el mismo
-        // domicilio (una galería, dos locales a la calle). No es duplicado.
-        if (cuitA && cuitB && cuitA !== cuitB) continue;
-        if (similitud(a.nombreLocal, b.nombreLocal) >= umbralNombre) {
-          agregar(a, b, 'baja', 'Mismo nombre y la misma dirección, sin CUIT que los distinga.');
-        }
+        const mismoCuit = Boolean(cuitA) && cuitA === normalizarCuit(b.cuit);
+        pares.push({
+          id: `${a.id}-${b.id}`,
+          principal: a,
+          duplicado: b,
+          nivel: mismoCuit ? 'alta' : 'media',
+          motivo: mismoCuit ? 'Mismo nombre, calle, altura y CUIT.' : 'Mismo nombre, calle y altura.',
+          parecido: Math.round(parecidoNombre * 100),
+        });
+      }
+    }
+  }
+  const orden = { alta: 0, media: 1 };
+  return pares.sort((x, y) => orden[x.nivel] - orden[y.nivel] || y.parecido - x.parecido);
+}
+
+/* El criterio anterior, sin cambios. */
+function amplio(locales, umbralNombre) {
+  const pares = [];
+
+  for (let i = 0; i < locales.length; i += 1) {
+    for (let j = i + 1; j < locales.length; j += 1) {
+      const a = locales[i];
+      const b = locales[j];
+
+      const cuitA = normalizarCuit(a.cuit);
+      const cuitB = normalizarCuit(b.cuit);
+      const dirA = partirDireccion(a.direccion);
+      const dirB = partirDireccion(b.direccion);
+      const parecidoNombre = similitud(a.nombreLocal, b.nombreLocal);
+      const mismaDireccion = dirA.calle && dirA.calle === dirB.calle && dirA.altura === dirB.altura;
+
+      let nivel = null;
+      let motivo = '';
+
+      if (cuitA && cuitA === cuitB) {
+        nivel = 'alta';
+        motivo = 'Mismo CUIT.';
+      } else if (parecidoNombre >= umbralNombre && mismaDireccion) {
+        nivel = 'media';
+        motivo = 'Nombre parecido y misma dirección.';
+      } else if (parecidoNombre >= 0.8) {
+        nivel = 'baja';
+        motivo = 'Nombre muy parecido, dirección distinta.';
+      }
+
+      if (nivel) {
+        pares.push({
+          id: `${a.id}-${b.id}`,
+          principal: a,
+          duplicado: b,
+          nivel,
+          motivo,
+          parecido: Math.round(parecidoNombre * 100),
+        });
       }
     }
   }

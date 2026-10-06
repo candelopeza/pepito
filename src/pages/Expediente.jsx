@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 /* ============================================================================
    pages/Expediente.jsx  —  EXPEDIENTES DE MULTA  (URL: /#/expedientes)
    ----------------------------------------------------------------------------
@@ -32,13 +32,23 @@ import Grilla from '../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import AccionesLocal from '../components/AccionesLocal';
+import Modal from '../components/ui/Modal';
+import Campo from '../components/ui/Campo';
 import { useDatos } from '../datos/datosContexto';
+import { useRol } from '../auth/rolContexto';
+import { puedeEditar } from '../config/modulos';
 import { correPlazo } from '../dominio/actuaciones';
 import { fmtFecha } from '../dominio/fechas';
 import { faltantesRegistrales } from '../dominio/reglas';
 
 function Expediente() {
-  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, parametros } = useDatos();
+  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, parametros, permisos, numeroDefinitivoExpediente } =
+    useDatos();
+  const { rol } = useRol();
+  const puedeCargarNumero = puedeEditar(rol, 'expedientes', permisos);
+  // El expediente provisorio al que se le está cargando el número definitivo.
+  const [definitivo, setDefinitivo] = useState(null);
+  const [numero, setNumero] = useState('');
 
   const paraGenerar = localesConEstado.filter((l) => l.estado === 'GENERAR_EXPEDIENTE');
   const iniciados = actuaciones
@@ -98,7 +108,7 @@ function Expediente() {
         field: 'estado',
         headerName: 'Estado',
         width: 210,
-        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} />,
+        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} sinColor />,
       },
       {
         field: 'acciones',
@@ -120,7 +130,28 @@ function Expediente() {
         field: 'numeroExpediente',
         headerName: 'N° de expediente',
         width: 180,
-        renderCell: ({ row }) => <strong>{row.numeroExpediente}</strong>,
+        renderCell: ({ row }) =>
+          String(row.numeroExpediente ?? '').startsWith('PROV-') ? (
+            <span className="celda-apilada">
+              <strong>{row.numeroExpediente}</strong>
+              {puedeCargarNumero ? (
+                <button
+                  type="button"
+                  className="btn-tabla"
+                  onClick={() => {
+                    setNumero('');
+                    setDefinitivo(row);
+                  }}
+                >
+                  Cargar número definitivo
+                </button>
+              ) : (
+                <small className="celda-sub">provisorio</small>
+              )}
+            </span>
+          ) : (
+            <strong>{row.numeroExpediente}</strong>
+          ),
       },
       {
         field: 'local',
@@ -145,7 +176,7 @@ function Expediente() {
         /* Puede NO decir "Expediente": si el titular presentó documentación
            después, el local ya salió del circuito y el expediente quedó en el
            historial. */
-        renderCell: ({ row }) => <BadgeEstado codigo={row.local?.estado} />,
+        renderCell: ({ row }) => <BadgeEstado codigo={row.local?.estado} sinColor />,
       },
       {
         field: 'acciones',
@@ -156,8 +187,9 @@ function Expediente() {
         renderCell: ({ row }) => row.local && <AccionesLocal local={row.local} compacto />,
       },
     ],
-    [],
+    [puedeCargarNumero],
   );
+  const provisorios = iniciados.filter((a) => String(a.numeroExpediente ?? '').startsWith('PROV-'));
 
   return (
     <>
@@ -206,6 +238,45 @@ function Expediente() {
       <div className="accesos-header">
         <span>Expedientes iniciados ({iniciados.length})</span>
       </div>
+
+      {provisorios.length > 0 && (
+        <Aviso
+          tipo="alerta"
+          titulo={`${provisorios.length} expediente(s) con número provisorio: falta el de la mesa de entradas`}
+        />
+      )}
+
+      {definitivo && (
+        <Modal abierto etiqueta="EXPEDIENTE" titulo="Número definitivo" onCerrar={() => setDefinitivo(null)}>
+          <div className="formulario formulario-modal">
+            <div className="bloque-info">
+              <strong>{definitivo.local?.nombreLocal ?? `Local ${definitivo.localId}`}</strong>
+              <span>Provisorio {definitivo.numeroExpediente}</span>
+            </div>
+            <Campo
+              id="exp-definitivo"
+              etiqueta="N° de la mesa de entradas"
+              valor={numero}
+              onChange={setNumero}
+            />
+            <div className="form-acciones">
+              <button
+                type="button"
+                className="btn-primario"
+                disabled={!numero.trim()}
+                onClick={async () => {
+                  if (await numeroDefinitivoExpediente(definitivo.id, numero.trim())) setDefinitivo(null);
+                }}
+              >
+                Guardar
+              </button>
+              <button type="button" className="btn-secundario" onClick={() => setDefinitivo(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {iniciados.length === 0 ? (
         <Vacio titulo="Todavía no se inició ningún expediente" />

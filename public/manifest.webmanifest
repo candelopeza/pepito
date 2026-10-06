@@ -1,0 +1,12 @@
+{
+  "name": "Grandes Generadores · Municipalidad de San Miguel de Tucumán",
+  "short_name": "Grandes Generadores",
+  "description": "Relevamiento, notificaciones y seguimiento de Grandes Generadores de residuos.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1565c0",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

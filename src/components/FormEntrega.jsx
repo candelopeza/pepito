@@ -33,30 +33,41 @@
    antes de guardar. La conversión y la comparación están en
    dominio/actuaciones.js (completarNumeroCedula / mismoNumeroCedula), no acá:
    si algún día el formato cambia, cambia en un solo lugar.
+
+   >>> MODO CORRECCIÓN (`correccion`) <<<
+   Para arreglar una entrega mal cargada (sección 6.2). Arranca con lo que
+   está registrado y no vuelve a pedir el número del papel. Con `pideMotivo`
+   (la oficina) el motivo es obligatorio: queda en el historial del local.
    ============================================================================ */
 
 import { useState } from 'react';
-import Campo, { CampoSelect, CampoTexto } from './ui/Campo';
+import Campo, { CampoFoto, CampoSelect, CampoTexto } from './ui/Campo';
 import Aviso from './ui/Aviso';
 import { useDatos } from '../datos/datosContexto';
 import {
   DIGITOS_CEDULA,
   RESULTADOS_ENTREGA,
-  completarNumeroCedula,
+  armarNumeroCedula,
   digitosCedula,
   mismoNumeroCedula,
 } from '../dominio/actuaciones';
 import { fmtFecha, hoyISO, vencimientoHabil } from '../dominio/fechas';
 
-function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
-  const { feriados, parametros } = useDatos();
+function FormEntrega({ cedula, local, onGuardar, onCancelar, correccion = false, pideMotivo = false }) {
+  const { feriados, parametros, capacidades } = useDatos();
+  // La foto se guarda si la base tiene la tabla `archivo` (backend/sql/08).
+  // Sin ella no hay dónde guardarla, y no se puede exigir.
+  const fotoSeGuarda = Boolean(capacidades?.archivos);
 
   const [datos, setDatos] = useState({
-    numeroConfirmado: '',
-    resultado: '',
-    fechaEntrega: hoyISO(),
-    observaciones: '',
+    // Al corregir, el número ya se confirmó cuando se registró.
+    numeroConfirmado: correccion ? digitosCedula(cedula.numeroCedula ?? '') : '',
+    resultado: correccion ? (cedula.resultado ?? '') : '',
+    fechaEntrega: correccion ? (cedula.fechaEntrega ?? hoyISO()) : hoyISO(),
+    observaciones: correccion ? (cedula.observaciones ?? '') : '',
     evidencia: '',
+    evidenciaNombre: '',
+    motivo: '',
   });
   const [errores, setErrores] = useState({});
 
@@ -64,9 +75,10 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
 
   const noEntregada = datos.resultado === 'NO_ENTREGADA';
 
-  // Cómo queda el número una vez completado ('1275' -> 'CED-001275'). Se
-  // muestra debajo del campo y es también lo que se valida.
-  const numeroArmado = completarNumeroCedula(datos.numeroConfirmado);
+  // Cómo queda el número una vez completado, con el formato de la cédula
+  // asignada ('675' -> '0001-675'). Se muestra debajo del campo y es también
+  // lo que se valida.
+  const numeroArmado = armarNumeroCedula(datos.numeroConfirmado, cedula.numeroCedula);
   const plazoDias = cedula.instancia === 1 ? parametros.plazoNotif1 : parametros.plazoNotif2;
 
   // Vista previa del vencimiento, calculada con la misma función que usa el
@@ -81,16 +93,22 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
     if (!datos.resultado) e.resultado = 'Indicá qué pasó con la entrega.';
     if (!noEntregada && !datos.fechaEntrega) e.fechaEntrega = 'La fecha de entrega es obligatoria: es la que hace correr el plazo.';
     if (datos.fechaEntrega > hoyISO()) e.fechaEntrega = 'No se puede registrar una entrega con fecha futura.';
-    if (!numeroArmado) {
+    // Al corregir, el número ya se confirmó cuando se registró la entrega: el
+    // campo no se muestra y no se vuelve a validar (si no, el error quedaba
+    // en un campo oculto y no se podía guardar).
+    if (correccion) {
+      // nada que controlar
+    } else if (!numeroArmado) {
       e.numeroConfirmado = 'Escribí el número que figura en la cédula entregada.';
     } else if (!mismoNumeroCedula(numeroArmado, cedula.numeroCedula)) {
       // Los ceros no cuentan: 1275 y 001275 son la misma cédula. Lo que no
       // puede pasar es que sea OTRO número.
       e.numeroConfirmado = `${numeroArmado} no coincide con la cédula asignada (${cedula.numeroCedula}). Revisá el documento.`;
     }
-    if (noEntregada && !datos.evidencia.trim()) {
+    if (noEntregada && fotoSeGuarda && !datos.evidencia) {
       e.evidencia = 'La fotografía es obligatoria cuando la entrega no se concreta.';
     }
+    if (pideMotivo && !datos.motivo.trim()) e.motivo = 'Escribí por qué se corrige: queda en el historial del local.';
     return e;
   }
 
@@ -104,7 +122,11 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
       resultado: datos.resultado,
       fechaEntrega: datos.fechaEntrega,
       observaciones: datos.observaciones,
-      evidencia: datos.evidencia || null,
+      // La foto va solo si se puede guardar: si no, el servidor la ignoraría
+      // y en la cola sin conexión ocuparía lugar para nada.
+      evidencia: fotoSeGuarda ? datos.evidencia || null : null,
+      evidenciaNombre: datos.evidenciaNombre || null,
+      ...(correccion ? { motivo: datos.motivo.trim() } : {}),
     });
   }
 
@@ -123,17 +145,19 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
         {/* Solo dígitos: cualquier otra tecla no entra. Los ceros de adelante
             y el 'CED-' los pone el sistema, por eso el `ayuda` de abajo
             cambia y muestra el número ya armado. */}
-        <Campo
-          id="ent-numero"
-          etiqueta="N° de cédula entregada"
-          teclado="numeric"
-          largoMaximo={DIGITOS_CEDULA}
-          valor={datos.numeroConfirmado}
-          onChange={(v) => cambiar('numeroConfirmado', digitosCedula(v))}
-          error={errores.numeroConfirmado}
-
-          ancho={2}
-        />
+        {!correccion && (
+          <Campo
+            id="ent-numero"
+            etiqueta="N° de cédula entregada"
+            teclado="numeric"
+            largoMaximo={DIGITOS_CEDULA}
+            valor={datos.numeroConfirmado}
+            onChange={(v) => cambiar('numeroConfirmado', digitosCedula(v))}
+            error={errores.numeroConfirmado}
+            ayuda={numeroArmado || undefined}
+            ancho={2}
+          />
+        )}
 
         <CampoSelect
           id="ent-resultado"
@@ -157,13 +181,13 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
           />
         )}
 
-        <Campo
+        <CampoFoto
           id="ent-foto"
-          etiqueta={noEntregada ? 'Fotografía (obligatoria)' : 'Fotografía del local'}
+          etiqueta={noEntregada && fotoSeGuarda ? 'Fotografía (obligatoria)' : 'Fotografía del local'}
           valor={datos.evidencia}
-          onChange={(v) => cambiar('evidencia', v)}
+          onChange={(imagen, nombre) => setDatos((p) => ({ ...p, evidencia: imagen, evidenciaNombre: nombre }))}
           error={errores.evidencia}
-          ayuda=" Subir la imagen PNG o JPG"
+          ayuda={fotoSeGuarda ? undefined : 'Esta base todavía no guarda fotos.'}
         />
 
         <CampoTexto
@@ -174,6 +198,17 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
           ayuda={noEntregada ? 'Contá por qué no se pudo entregar: sirve para el expediente.' : undefined}
           ancho={2}
         />
+
+        {correccion && (
+          <CampoTexto
+            id="ent-motivo"
+            etiqueta={pideMotivo ? 'Motivo de la corrección (obligatorio)' : 'Motivo de la corrección'}
+            valor={datos.motivo}
+            onChange={(v) => cambiar('motivo', v)}
+            error={errores.motivo}
+            ancho={2}
+          />
+        )}
       </div>
 
       {/* ---------- Lo que va a pasar al guardar ----------
@@ -193,7 +228,7 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar }) {
 
       <div className="form-acciones">
         <button type="submit" className="btn-primario">
-          Registrar entrega
+          {correccion ? 'Guardar corrección' : 'Registrar entrega'}
         </button>
         <button type="button" className="btn-secundario" onClick={onCancelar}>
           Cancelar

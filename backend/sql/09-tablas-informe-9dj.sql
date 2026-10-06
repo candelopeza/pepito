@@ -1,5 +1,5 @@
 -- ============================================================================
--- backend/sql/05-tablas-informe-9dj.sql
+-- backend/sql/09-tablas-informe-9dj.sql
 -- ----------------------------------------------------------------------------
 -- Las dos tablas del modulo INFORME 9 DE JULIO (seccion 9.3 del pliego,
 -- modelo de foto): una por cada informe que manda la prestataria, y una por

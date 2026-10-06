@@ -16,7 +16,7 @@
        constancia que el propio módulo exige (criterio 16), no basura.
 
    Si las tablas del módulo no están creadas, el backend responde 503 y la
-   suite lo dice: correr backend/sql/05-tablas-informe-9dj.sql.
+   suite lo dice: correr backend/sql/09-tablas-informe-9dj.sql.
    ============================================================================ */
 
 import { validarCuit } from '../backend/lector-informe-9dj.js';

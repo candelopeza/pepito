@@ -38,9 +38,17 @@ import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import SelectorRol from './SelectorRol';
 import { useRol } from '../auth/rolContexto';
+import { useDatos } from '../datos/datosContexto';
+import { fmtFechaHora } from '../dominio/fechas';
 
 function Navbar({ onAlternarMenu }) {
   const { usuario, datosRol } = useRol();
+  // Trabajo sin conexión (sección 6.2): "indicación visible de cuántos
+  // registros quedan pendientes". Va en la barra para que se vea en todas las
+  // pantallas, no solo en la del formulario.
+  const { sinConexion, pendientesSinConexion = [], sincronizar } = useDatos();
+  const porEnviar = pendientesSinConexion.filter((p) => !p.rechazado).length;
+  const rechazados = pendientesSinConexion.length - porEnviar;
 
   return (
     <header className="navbar">
@@ -81,6 +89,23 @@ function Navbar({ onAlternarMenu }) {
           al extremo derecho (aprovecha que .navbar ya es flex). */}
       <div className="navbar-derecha">
 
+        {sinConexion && (
+          <span className="navbar-conexion" title={sinConexion.desde ? `Datos guardados el ${fmtFechaHora(sinConexion.desde)}` : undefined}>
+            Sin conexión
+          </span>
+        )}
+        {porEnviar > 0 && (
+          <button
+            type="button"
+            className="navbar-conexion navbar-conexion-pendientes"
+            onClick={() => sincronizar()}
+            title="Guardado en el dispositivo. Tocá para enviar ahora."
+          >
+            {porEnviar} sin enviar
+          </button>
+        )}
+        {rechazados > 0 && <span className="navbar-conexion">{rechazados} no se aceptaron</span>}
+
         {/* PROVISORIO. Se va entero cuando exista login. */}
         <SelectorRol />
 
@@ -90,7 +115,7 @@ function Navbar({ onAlternarMenu }) {
         <div className="navbar-usuario">
           <span className="navbar-usuario-nombre">
             {usuario.nombre}
-            <small className="navbar-usuario-rol">{datosRol.etiqueta}</small>
+
           </span>
           <AccountCircleIcon className="navbar-usuario-icono" />
         </div>

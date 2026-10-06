@@ -19,6 +19,11 @@
      compacto  para una fila de tabla: UN solo botón "Acciones" que despliega
                el menú con las opciones, en vez de un botón por acción
      alTerminar  (opcional) se llama después de ejecutar una acción
+     conPadron   (opcional) suma "Editar datos" y "Dar de baja", que no son
+               actos del circuito sino mantenimiento del padrón. Lo pide el
+               tablero (sección 6.1: la bandeja ofrece "editar padrón" y "dar
+               de baja" sin salir de la vista). La ficha no lo usa: tiene su
+               propio botón "Editar datos".
    ============================================================================ */
 
 import { useState } from 'react';
@@ -36,6 +41,11 @@ import VistaCedula from './VistaCedula';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { accionesDisponibles, faltantesRegistrales } from '../dominio/reglas';
+import { puedeEditar } from '../config/modulos';
+
+/* Quiénes dan de baja un local: lo mismo que exige el servidor
+   (DELETE /locales/:id). */
+const ROLES_BAJA = ['coordinacion', 'administrador'];
 
 /* El menú que se abre desde el botón "Acciones" de una fila. Es el Menu de MUI
    (ya está en el bundle por la grilla) porque sale por portal: así no lo
@@ -58,11 +68,12 @@ const ESTILO_ITEM = {
   '&:hover': { backgroundColor: '#e3f2fd', color: '#1565c0' },
 };
 
-function AccionesLocal({ local, compacto = false, alTerminar }) {
-  const { rol } = useRol();
+function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false }) {
+  const { rol, usuario } = useRol();
   const datos = useDatos();
   const {
     usuarios,
+    localesConEstado,
     parametros,
     actuacionesDeLocal,
     guardarLocal,
@@ -77,6 +88,9 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
     reingresarAlCircuito,
     bloquearLocal,
     desbloquearLocal,
+    corregirEntrega,
+    eliminarLocal,
+    permisos,
   } = datos;
 
   /* `abierta` guarda qué acción se está ejecutando. Un solo estado para todos
@@ -86,20 +100,50 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
   // El botón desde el que se abrió el menú (modo compacto). null = cerrado.
   const [anclaMenu, setAnclaMenu] = useState(null);
 
-  const disponibles = accionesDisponibles(local.estado, rol, local);
   const faltan = faltantesRegistrales(local);
 
-  /* La cédula sobre la que operan asignar / entrega / regenerar: la última
-     emitida que todavía no tiene resultado. */
-  const cedulaPendiente = actuacionesDeLocal(local.id)
-    .filter((a) => a.tipo === 'NOTIFICACION' && !a.resultado)
-    .pop() ?? null;
+  /* La cédula sobre la que operan asignar / entrega / regenerar: la ÚLTIMA
+     emitida (con número), si todavía no tiene una entrega efectiva. Incluye
+     la que consta como no entregada: sobre esa se reintenta. Una notificación
+     pendiente de emisión no tiene número y no es una cédula todavía. */
+  const ultimaCedula =
+    actuacionesDeLocal(local.id)
+      .filter((a) => a.tipo === 'NOTIFICACION' && a.numeroCedula)
+      .pop() ?? null;
+  const cedulaPendiente =
+    ultimaCedula && (!ultimaCedula.resultado || ultimaCedula.resultado === 'NO_ENTREGADA') ? ultimaCedula : null;
 
-  const notificadores = usuarios.filter((u) => u.activo && ['notificador', 'relevador'].includes(u.rol));
+  /* Las acciones del estado, menos una: el agente de campo no ve "Registrar
+     entrega" en una cédula asignada a otro (el servidor igual se lo negaría). */
+  const deOtroAgente =
+    ['notificador', 'relevador'].includes(rol) &&
+    Boolean(cedulaPendiente?.notificadorId) &&
+    cedulaPendiente.notificadorId !== usuario?.id;
+  const disponibles = accionesDisponibles(local.estado, rol, local).filter(
+    (a) => !(a.id === 'registrar-entrega' && deOtroAgente),
+  );
+
+  // `activo` lo manda el backend desde que la lista trae también las bajas.
+  // Con `u.activo` a secas, un usuario sin ese dato quedaba afuera y la lista
+  // salía vacía.
+  const notificadores = usuarios.filter((u) => u.activo !== false && ['notificador', 'relevador'].includes(u.rol));
+  // Cuántas cédulas tiene en la calle cada uno, para repartir con criterio.
+  // Se cuenta solo con el modal abierto: este componente va en cada fila.
+  const enCursoDe = (idUsuario) =>
+    abierta === 'asignar-notificador'
+      ? (localesConEstado ?? []).filter(
+          (l) => l.cedulaEnCurso?.notificadorId === idUsuario && /^NOTIF[12]_(GENERADA|NO_ENTREGADA)$/.test(l.estado),
+        ).length
+      : 0;
   const prorrogasPrevias = actuacionesDeLocal(local.id).filter((a) => a.tipo === 'PRORROGA').length;
 
   function abrir(id) {
-    setForm({});
+    // La prórroga arranca con lo que pidió el titular por el portal, si pidió:
+    // coordinación lo revisa y lo cambia si hace falta.
+    const pedido = local.solicitudProrroga;
+    setForm(
+      id === 'otorgar-prorroga' && pedido ? { dias: pedido.dias ?? '', motivo: `Pedido del titular: ${pedido.motivo}` } : {},
+    );
     setAbierta(id);
   }
 
@@ -119,13 +163,20 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
      levantar el bloqueo (y eso, coordinación). */
   const opciones = [];
   if (local.bloqueado) {
-    if (rol === 'coordinacion') opciones.push({ id: 'desbloquear', etiqueta: 'Levantar bloqueo' });
+    if (['coordinacion', 'administrador'].includes(rol)) opciones.push({ id: 'desbloquear', etiqueta: 'Levantar bloqueo' });
   } else {
     opciones.push(...disponibles);
   }
   /* Ver la cédula emitida, desde cualquier pantalla. Requisito válido para las
      dos alternativas de emisión (sección 9.6). */
   if (cedulaPendiente) opciones.push({ id: 'ver-cedula', etiqueta: 'Ver cédula' });
+  if (conPadron) {
+    // "Completar datos" ya abre el mismo formulario: no se repite.
+    if (puedeEditar(rol, 'locales', permisos) && !local.bloqueado && !disponibles.some((a) => a.id === 'completar-datos')) {
+      opciones.push({ id: 'editar-padron', etiqueta: 'Editar datos' });
+    }
+    if (ROLES_BAJA.includes(rol)) opciones.push({ id: 'dar-de-baja', etiqueta: 'Dar de baja' });
+  }
 
   function elegir(id) {
     setAnclaMenu(null);
@@ -244,9 +295,9 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
       <Modal abierto={abierta === 'completar-datos'} etiqueta="PADRÓN" titulo="Completar datos del local" ancho="ancho" onCerrar={cerrar}>
         <FormLocal
           local={local}
-          onGuardar={(l) => {
-            guardarLocal(l);
-            terminar();
+          onGuardar={async (l) => {
+            // Se cierra solo si se guardó: si falla, queda abierto con lo escrito.
+            if (await guardarLocal(l)) terminar();
           }}
           onCancelar={cerrar}
         />
@@ -317,7 +368,7 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
             etiqueta="Notificador"
             valor={form.notificadorId ?? ''}
             onChange={(v) => setForm({ ...form, notificadorId: v })}
-            opciones={notificadores.map((u) => ({ id: u.id, etiqueta: `${u.nombre} (${u.rol})` }))}
+            opciones={notificadores.map((u) => ({ id: u.id, etiqueta: `${u.nombre} (${u.rol}) · ${enCursoDe(u.id)} en curso` }))}
             ayuda="Suele ser el mismo agente que releva."
           />
           <div className="form-acciones">
@@ -325,9 +376,8 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
               type="button"
               className="btn-primario"
               disabled={!form.notificadorId}
-              onClick={() => {
-                asignarNotificador(cedulaPendiente.id, form.notificadorId);
-                terminar();
+              onClick={async () => {
+                if (await asignarNotificador(cedulaPendiente.id, form.notificadorId)) terminar();
               }}
             >
               Asignar
@@ -345,22 +395,70 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
           <FormEntrega
             cedula={cedulaPendiente}
             local={local}
-            onGuardar={(d) => {
-              registrarEntrega(cedulaPendiente.id, d);
-              terminar();
+            onGuardar={async (d) => {
+              const r = await registrarEntrega(cedulaPendiente.id, {
+                ...d,
+                etiqueta: `Cédula ${cedulaPendiente.numeroCedula} · ${local.nombreLocal}`,
+              });
+              if (r) terminar();
             }}
             onCancelar={cerrar}
           />
         )}
       </Modal>
 
+      {/* ======================= CORREGIR ENTREGA =======================
+          La oficina corrige con motivo (el agente de campo corrige la suya el
+          mismo día desde Mis entregas). */}
+      <Modal abierto={abierta === 'corregir-entrega'} etiqueta="NOTIFICACIÓN" titulo="Corregir la entrega" ancho="ancho" onCerrar={cerrar}>
+        {ultimaCedula && (
+          <FormEntrega
+            cedula={ultimaCedula}
+            local={local}
+            correccion
+            pideMotivo={!['notificador', 'relevador'].includes(rol)}
+            onGuardar={async (d) => {
+              if (await corregirEntrega(ultimaCedula.id, d)) terminar();
+            }}
+            onCancelar={cerrar}
+          />
+        )}
+      </Modal>
+
+      {/* ======================= PADRÓN (solo con conPadron) ======================= */}
+      <Modal abierto={abierta === 'editar-padron'} etiqueta="PADRÓN" titulo="Editar datos del local" ancho="ancho" onCerrar={cerrar}>
+        <FormLocal
+          local={local}
+          onGuardar={async (l) => {
+            if (await guardarLocal(l)) terminar();
+          }}
+          onCancelar={cerrar}
+        />
+      </Modal>
+
+      <Confirmar
+        abierto={abierta === 'dar-de-baja'}
+        titulo="Dar de baja del padrón"
+        textoConfirmar="Dar de baja"
+        peligro
+        onCancelar={cerrar}
+        onConfirmar={async () => {
+          if (await eliminarLocal(local.id)) terminar();
+        }}
+      >
+        <p>
+          <strong>{local.nombreLocal}</strong> deja de aparecer en el padrón y en las bandejas. Sus actuaciones no se borran:
+          quedan en la base, marcadas como dadas de baja.
+        </p>
+        <p className="texto-chico">Si es un duplicado, usá Herramientas → Duplicados: unifica el historial en vez de perderlo.</p>
+      </Confirmar>
+
       {/* ======================= DOCUMENTACIÓN ======================= */}
       <Modal abierto={abierta === 'registrar-documentacion'} etiqueta="DOCUMENTACIÓN" titulo="Registrar documentación" ancho="ancho" onCerrar={cerrar}>
         <FormDocumento
           local={local}
-          onGuardar={(d) => {
-            registrarDocumento(local.id, d);
-            terminar();
+          onGuardar={async (d) => {
+            if (await registrarDocumento(local.id, d)) terminar();
           }}
           onCancelar={cerrar}
         />
@@ -373,11 +471,6 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
             <strong>{local.nombreLocal}</strong>
             <span>Prórrogas otorgadas hasta ahora: {prorrogasPrevias}</span>
           </div>
-
-          <Aviso tipo="info" titulo="Es el único plazo que se carga a mano">
-            Los plazos de notificación son fijos (5 y 3 días hábiles). La cantidad de días de la prórroga no lo es, y no tiene valor
-            por defecto: la define coordinación en cada caso. Se cuentan corridos desde hoy.
-          </Aviso>
 
           <Campo
             id="pro-dias"
@@ -413,9 +506,8 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
               type="button"
               className="btn-primario"
               disabled={!form.dias || Number(form.dias) < 1 || !form.motivo?.trim()}
-              onClick={() => {
-                otorgarProrroga(local.id, { dias: form.dias, motivo: form.motivo });
-                terminar();
+              onClick={async () => {
+                if (await otorgarProrroga(local.id, { dias: form.dias, motivo: form.motivo })) terminar();
               }}
             >
               Otorgar prórroga
@@ -453,19 +545,13 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
             ayuda="Dejalo vacío para que lo asigne el sistema. Se carga a mano si el sistema de expedientes municipales no responde."
           />
 
-          <Aviso tipo="alerta" titulo="No es un estado terminal">
-            Desde un local en Expediente, coordinación puede reingresarlo al circuito: eso genera una nueva primera notificación y
-            reinicia la intimación desde cero.
-          </Aviso>
-
           <div className="form-acciones">
             <button
               type="button"
               className="btn-peligro"
               disabled={faltan.length > 0 && parametros.exigirDatosSiempre}
-              onClick={() => {
-                registrarExpediente(local.id, form.numero?.trim());
-                terminar();
+              onClick={async () => {
+                if (await registrarExpediente(local.id, form.numero?.trim())) terminar();
               }}
             >
               Iniciar expediente
@@ -495,9 +581,8 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
               type="button"
               className="btn-primario"
               disabled={!form.motivo?.trim()}
-              onClick={() => {
-                reingresarAlCircuito(local.id, form.motivo);
-                terminar();
+              onClick={async () => {
+                if (await reingresarAlCircuito(local.id, form.motivo)) terminar();
               }}
             >
               Reingresar
@@ -512,10 +597,6 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
       {/* ======================= BLOQUEO MANUAL ======================= */}
       <Modal abierto={abierta === 'bloquear'} etiqueta="EXCEPCIÓN" titulo="Bloqueo manual del recálculo" onCerrar={cerrar}>
         <div className="formulario formulario-modal">
-          <Aviso tipo="alerta" titulo="Usalo solo para casos excepcionales">
-            El local queda excluido del cálculo automático de estado: los plazos siguen pasando pero el sistema no lo mueve. Su
-            estado se congela en <strong>{local.estadoEtiqueta}</strong>.
-          </Aviso>
           <CampoTexto
             id="blo-motivo"
             etiqueta="Motivo del bloqueo"
@@ -528,9 +609,8 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
               type="button"
               className="btn-peligro"
               disabled={!form.motivo?.trim()}
-              onClick={() => {
-                bloquearLocal(local.id, form.motivo.trim());
-                terminar();
+              onClick={async () => {
+                if (await bloquearLocal(local.id, form.motivo.trim())) terminar();
               }}
             >
               Bloquear
@@ -557,7 +637,8 @@ function AccionesLocal({ local, compacto = false, alTerminar }) {
           pasaron mientras estuvo bloqueado, así que puede cambiar de golpe.
         </p>
         <p className="texto-chico">
-          Bloqueado por {local.bloqueadoPor} · motivo: {local.bloqueadoMotivo}
+          Bloqueado por {usuarios.find((u) => u.id === local.bloqueadoPor)?.nombre ?? local.bloqueadoPor ?? '—'} · motivo:{' '}
+          {local.bloqueadoMotivo}
         </p>
       </Confirmar>
 

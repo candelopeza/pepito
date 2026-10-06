@@ -28,3 +28,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>
 );
+
+// --- 5. La app guardada en el teléfono para abrir sin señal (public/sw.js) ---
+// Solo en la versión compilada: con `npm run dev` se pelearía con Vite. Si el
+// navegador no lo permite (sin HTTPS, abierto con doble clic), no pasa nada:
+// la app funciona igual, solo que no abre sin señal.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}

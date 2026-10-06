@@ -106,6 +106,7 @@ export const USUARIOS_INICIALES = [
   { id: 7, nombre: 'Ana Gómez (titular)', email: 'ana.gomez@gmail.com', rol: 'titular', activo: true },
   { id: 8, nombre: 'Sistema', email: 'sistema@smt.gob.ar', rol: 'sistema', activo: true },
   { id: 9, nombre: 'Pedro Ruiz (baja)', email: 'pruiz@smt.gob.ar', rol: 'relevador', activo: false },
+  { id: 10, nombre: 'Administración DITEC', email: 'ditec@smt.gob.ar', rol: 'administrador', activo: true },
 ];
 
 export const RUBROS_INICIALES = [
@@ -487,6 +488,10 @@ export function crearSemilla() {
     parametros: PARAMETROS_INICIALES,
     secuencias: SECUENCIAS_INICIALES,
     plantillaCedula: PLANTILLA_INICIAL,
+    // Accesos: qué ve y qué modifica cada tipo de usuario, y qué roles están
+    // deshabilitados. Solo guarda las DIFERENCIAS respecto de config/modulos.js
+    // (modulos[idModulo][rol] = 'no' | 'ver' | 'editar'). Vacío = como el código.
+    permisos: { modulos: {}, rolesDeshabilitados: [] },
     // Historial de cambios de estado (sección 5.2). En el sistema viejo el
     // estado se sobrescribe sin dejar rastro; sin esto no hay métricas de
     // tiempo de ciclo y no hay defensa ante una impugnación.

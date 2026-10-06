@@ -9,9 +9,11 @@
    de cada local (ver datos/vistas.js → conEstado). No hay un campo `estado`
    que alguien pueda dejar desactualizado.
 
-   FILTROS: los dos buscadores y los dos desplegables filtran ANTES de la
-   grilla; los filtros propios de cada columna del Data Grid funcionan ENCIMA
-   de eso. Si buscás algo y "no aparece", revisá los dos niveles.
+   FILTROS COMBINABLES (sección 6.1): tres desplegables arriba de la grilla
+   —estado, rubro y situación— que se suman entre sí. La grilla gratuita deja
+   un solo filtro por columna a la vez, así que la combinación se hace acá,
+   ANTES de la grilla; el buscador rápido y el filtro de columna funcionan
+   encima. El contador de arriba dice cuántos quedan y "Limpiar" los saca.
 
    QUIÉN PUEDE EDITAR: sale de `rolesEdicion` del módulo 'locales' en
    config/modulos.js. Hoy: administrativo y coordinación. El mismo permiso
@@ -29,18 +31,34 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import DeleteIcon from '@mui/icons-material/Delete';
+import LockIcon from '@mui/icons-material/Lock';
 import PageHeader from '../components/ui/PageHeader';
 import Modal from '../components/ui/Modal';
 import Confirmar from '../components/ui/Confirmar';
 import Grilla from '../components/ui/Grilla';
 import { BadgeEstado } from '../components/ui/Badge';
-import { CampoSelect } from '../components/ui/Campo';
 import FormLocal from '../components/FormLocal';
+import { CampoSelect } from '../components/ui/Campo';
+import { faltantesRegistrales } from '../dominio/reglas';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
-import { LISTA_ESTADOS } from '../dominio/estados';
+import { LISTA_ESTADOS, etiquetaEstado } from '../dominio/estados';
 import { fmtFecha } from '../dominio/fechas';
+
+/* Las situaciones que el estado no dice solo. Cada una es una pregunta sobre
+   el local; para sumar otra, se agrega una fila acá. */
+const SITUACIONES = [
+  { id: 'faltan-datos', etiqueta: 'Faltan datos registrales', cumple: (l) => faltantesRegistrales(l).length > 0 },
+  { id: 'sin-ubicacion', etiqueta: 'Sin ubicación', cumple: (l) => Boolean(l.sinGeo) },
+  { id: 'bloqueado', etiqueta: 'Con bloqueo manual', cumple: (l) => Boolean(l.bloqueado) },
+  { id: 'documentacion', etiqueta: 'Con documentación vigente', cumple: (l) => l.estadoGrupo === 'documental' },
+  {
+    id: 'en-circuito',
+    etiqueta: 'En circuito de intimación',
+    cumple: (l) => ['cola_emision', 'en_tramite', 'entrega', 'bloqueo'].includes(l.estadoGrupo),
+  },
+];
 
 const LOCAL_VACIO = {
   nombreLocal: '',
@@ -55,11 +73,17 @@ const LOCAL_VACIO = {
   observaciones: '',
 };
 
+/* Quiénes dan de baja un local. Es lo mismo que exige el servidor
+   (DELETE /locales/:id en backend/rutas/locales.js): mostrarle la papelera al
+   administrativo terminaba en un "no tenés permiso". */
+const ROLES_BAJA_LOCAL = ['coordinacion', 'administrador'];
+
 function Local() {
   const { rol } = useRol();
   const navegar = useNavigate();
-  const { localesConEstado, rubros, guardarLocal, eliminarLocal } = useDatos();
-  const puedeEditarLocales = puedeEditar(rol, 'locales');
+  const { localesConEstado, guardarLocal, eliminarLocal, permisos } = useDatos();
+  const puedeEditarLocales = puedeEditar(rol, 'locales', permisos);
+  const puedeDarDeBaja = puedeEditarLocales && ROLES_BAJA_LOCAL.includes(rol);
 
   /* ---------- Lo que puede venir pedido desde el Inicio ----------
      Dos parámetros opcionales, y los dos son SOLO ESTADO INICIAL: si la URL
@@ -77,19 +101,23 @@ function Local() {
   const [params, setParams] = useSearchParams();
   const estadoPedido = params.get('estado') ?? '';
 
-  const [buscar, setBuscar] = useState('');
-  const [buscarCuit, setBuscarCuit] = useState('');
-  const [filtroEstado, setFiltroEstado] = useState(
-    // Un código inventado en la URL dejaría la grilla vacía sin explicación.
-    () => (LISTA_ESTADOS.some((e) => e.codigo === estadoPedido) ? estadoPedido : ''),
+  /* Solo lectura: lo fija la URL al entrar y se limpia desde el aviso de abajo.
+     Un código inventado en la URL dejaría la grilla vacía sin explicación, así
+     que se valida contra la lista de estados. */
+  const [filtroEstado, setFiltroEstado] = useState(() =>
+    LISTA_ESTADOS.some((e) => e.codigo === estadoPedido) ? estadoPedido : '',
   );
-  const [filtroRubro, setFiltroRubro] = useState('');
   const [seleccion, setSeleccion] = useState(
     // El permiso se respeta igual que en el botón "+": sin `rolesEdicion` el
     // parámetro no abre nada.
     () => (params.get('nuevo') === '1' && puedeEditarLocales ? { local: { ...LOCAL_VACIO }, esNuevo: true } : null),
   );
   const [aEliminar, setAEliminar] = useState(null);
+  const [filtroRubro, setFiltroRubro] = useState('');
+  // ?situacion=bloqueado llega desde la bandeja de bloqueados del Inicio.
+  const [filtroSituacion, setFiltroSituacion] = useState(() =>
+    SITUACIONES.some((x) => x.id === params.get('situacion')) ? params.get('situacion') : '',
+  );
 
   const cerrarModal = () => {
     setSeleccion(null);
@@ -127,10 +155,16 @@ function Local() {
         width: 230,
         renderCell: ({ row }) => (
           <span className="celda-estado">
-            <BadgeEstado codigo={row.estado} />
+            <BadgeEstado codigo={row.estado} sinColor />
             {/* El candado marca los locales excluidos del recálculo. Sin esto,
                 un local bloqueado parece uno normal que no avanza. */}
-            {row.bloqueado && <span title={row.bloqueadoMotivo}> 🔒</span>}
+            {/* El candado marca los locales excluidos del recálculo. Va como
+                icono y no como emoji: los emoji los dibuja cada sistema
+                operativo a su manera y desentonan con el resto de la interfaz,
+                que usa los iconos de Material. */}
+            {row.bloqueado && (
+              <LockIcon fontSize="inherit" titleAccess={row.bloqueadoMotivo} sx={{ ml: 0.5, color: '#78909c' }} />
+            )}
           </span>
         ),
       },
@@ -178,6 +212,10 @@ function Local() {
                 title="Editar datos del padrón"
                 onClick={() => setSeleccion({ local: row, esNuevo: false })}
               />,
+            );
+          }
+          if (puedeDarDeBaja) {
+            acciones.push(
               <GridActionsCellItem
                 key="eliminar"
                 icon={<DeleteIcon fontSize="small" />}
@@ -191,30 +229,57 @@ function Local() {
         },
       },
     ],
-    [puedeEditarLocales, navegar],
+    [puedeEditarLocales, puedeDarDeBaja, navegar],
   );
 
-  const filas = useMemo(() => {
-    const q = buscar.trim().toLowerCase();
-    const qc = buscarCuit.replace(/\D/g, '');
+  /* LA BÚSQUEDA Y LOS FILTROS SON LOS DE LA GRILLA.
+     Antes esta pantalla tenía dos buscadores y dos desplegables propios encima
+     de la tabla, que hacían lo mismo que el buscador rápido y los filtros por
+     columna del Data Grid. Dos filtros sobre los mismos datos confunden: si uno
+     buscaba arriba y filtraba en la columna, el resultado salía de la
+     combinación y no había forma de ver por qué faltaba una fila.
 
-    return localesConEstado.filter((l) => {
-      // El buscador general mira nombre, razón social, dirección e id legacy:
-      // el pliego pide "búsqueda por cualquier campo" y en la práctica se
-      // busca por lo que uno recuerda, que nunca es el campo que corresponde.
-      const enTexto =
-        !q ||
-        [l.nombreLocal, l.razonSocial, l.direccion, l.idLegacy, String(l.id)]
-          .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(q));
+     Lo único que queda acá es el filtro que llega POR URL: el tablero manda a
+     /locales?estado=COMPLETAR_DATOS y esa lista tiene que aparecer ya filtrada. */
+  const situacion = SITUACIONES.find((x) => x.id === filtroSituacion);
+  const filas = useMemo(
+    () =>
+      localesConEstado.filter(
+        (l) =>
+          (!filtroEstado || l.estado === filtroEstado) &&
+          (!filtroRubro || l.rubro === filtroRubro) &&
+          (!situacion || situacion.cumple(l)),
+      ),
+    [localesConEstado, filtroEstado, filtroRubro, situacion],
+  );
 
-      const enCuit = !qc || String(l.cuit).replace(/\D/g, '').includes(qc);
-      const enEstado = !filtroEstado || l.estado === filtroEstado;
-      const enRubro = !filtroRubro || l.rubro === filtroRubro;
+  // Las opciones salen del padrón: solo los estados y rubros que existen, con
+  // cuántos locales hay en cada uno.
+  const opcionesEstado = useMemo(() => {
+    const cuenta = {};
+    localesConEstado.forEach((l) => (cuenta[l.estado] = (cuenta[l.estado] ?? 0) + 1));
+    return LISTA_ESTADOS.filter((e) => cuenta[e.codigo]).map((e) => ({
+      id: e.codigo,
+      etiqueta: `${e.etiqueta} (${cuenta[e.codigo]})`,
+    }));
+  }, [localesConEstado]);
+  const opcionesRubro = useMemo(
+    () => [...new Set(localesConEstado.map((l) => l.rubro).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')),
+    [localesConEstado],
+  );
+  const hayFiltros = Boolean(filtroEstado || filtroRubro || filtroSituacion);
 
-      return enTexto && enCuit && enEstado && enRubro;
-    });
-  }, [localesConEstado, buscar, buscarCuit, filtroEstado, filtroRubro]);
+  function limpiarFiltros() {
+    setFiltroEstado('');
+    setFiltroRubro('');
+    setFiltroSituacion('');
+    if (params.has('estado') || params.has('situacion')) {
+      const resto = new URLSearchParams(params);
+      resto.delete('estado');
+      resto.delete('situacion');
+      setParams(resto, { replace: true });
+    }
+  }
 
   return (
     <>
@@ -225,36 +290,64 @@ function Local() {
         botonVolver
       />
 
-      {/* ---------- Filtros por estado y rubro ----------
-          Van fuera de la grilla porque son los dos que se usan siempre. */}
-      <div className="filtros-fila">
+      <div className="filtros-fila filtros-padron">
         <CampoSelect
           id="filtro-estado"
-          etiqueta="Filtrar por estado"
+          etiqueta="Estado"
           valor={filtroEstado}
           onChange={setFiltroEstado}
-          opciones={LISTA_ESTADOS.map((e) => ({ id: e.codigo, etiqueta: e.etiqueta }))}
-          vacio="Todos los estados"
+          opciones={opcionesEstado}
+          vacio="Todos"
         />
         <CampoSelect
           id="filtro-rubro"
-          etiqueta="Filtrar por rubro"
+          etiqueta="Rubro"
           valor={filtroRubro}
           onChange={setFiltroRubro}
-          opciones={rubros.map((r) => ({ id: r.nombre, etiqueta: r.nombre }))}
-          vacio="Todos los rubros"
+          opciones={opcionesRubro}
+          vacio="Todos"
         />
+        <CampoSelect
+          id="filtro-situacion"
+          etiqueta="Situación"
+          valor={filtroSituacion}
+          onChange={setFiltroSituacion}
+          opciones={SITUACIONES.map((x) => ({ id: x.id, etiqueta: x.etiqueta }))}
+          vacio="Todas"
+        />
+        {hayFiltros && (
+          <button type="button" className="btn-secundario filtros-limpiar" onClick={limpiarFiltros}>
+            Limpiar filtros
+          </button>
+        )}
       </div>
+
+      {/* El aviso queda para cuando se llega filtrado desde el tablero. */}
+      {filtroEstado && filtroEstado === estadoPedido && (
+        <div className="filtro-activo">
+          <span>
+            Mostrando solo los locales en estado <strong>{etiquetaEstado(filtroEstado)}</strong>.
+          </span>
+          <button
+            type="button"
+            className="btn-secundario"
+            onClick={() => {
+              setFiltroEstado('');
+              const resto = new URLSearchParams(params);
+              resto.delete('estado');
+              setParams(resto, { replace: true });
+            }}
+          >
+            Ver todo el padrón
+          </button>
+        </div>
+      )}
 
       <Grilla
         filas={filas}
         columnas={columnas}
         nombreArchivo="padron-locales"
         vacio="Ningún local coincide con la búsqueda."
-        buscadores={[
-          { placeholder: 'Buscar por nombre, razón social o dirección...', valor: buscar, onChange: setBuscar },
-          { placeholder: 'Buscar por CUIT...', valor: buscarCuit, onChange: setBuscarCuit },
-        ]}
         botones={
           puedeEditarLocales && (
             <button
@@ -284,9 +377,10 @@ function Local() {
             key={seleccion.esNuevo ? 'nuevo' : seleccion.local.id}
             local={seleccion.local}
             esNuevo={seleccion.esNuevo}
-            onGuardar={(l) => {
-              guardarLocal(l);
-              cerrarModal();
+            onGuardar={async (l) => {
+              // Se cierra solo si se guardó: si el servidor lo rechaza (un CUIT
+              // mal escrito, por ejemplo), queda abierto con lo escrito.
+              if (await guardarLocal(l)) cerrarModal();
             }}
             onCancelar={cerrarModal}
           />
@@ -299,9 +393,9 @@ function Local() {
         textoConfirmar="Eliminar"
         peligro
         onCancelar={() => setAEliminar(null)}
-        onConfirmar={() => {
-          eliminarLocal(aEliminar.id);
-          setAEliminar(null);
+        onConfirmar={async () => {
+          // Se cierra solo si se dio de baja: si falla, el cartel dice por qué.
+          if (await eliminarLocal(aEliminar.id)) setAEliminar(null);
         }}
       >
         <p>

@@ -24,7 +24,6 @@
    ============================================================================ */
 
 import PageHeader from '../../components/ui/PageHeader';
-import Aviso from '../../components/ui/Aviso';
 import Badge from '../../components/ui/Badge';
 import CrudCatalogo from '../../components/CrudCatalogo';
 import { useDatos } from '../../datos/datosContexto';

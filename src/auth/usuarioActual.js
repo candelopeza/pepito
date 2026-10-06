@@ -25,6 +25,7 @@ export const USUARIOS_DEMO = {
   administrativo: { nombre: 'Candelaria Peza', email: 'cpeza@smt.gob.ar', rol: 'administrativo' },
   coordinacion: { nombre: 'Mariano Agustín', email: 'magustin@smt.gob.ar', rol: 'coordinacion' },
   direccion: { nombre: 'Dirección de Ambiente', email: 'ambiente@smt.gob.ar', rol: 'direccion' },
+  administrador: { nombre: 'Administración DITEC', email: 'ditec@smt.gob.ar', rol: 'administrador' },
   titular: { nombre: 'Ana Gómez', email: 'ana.gomez@gmail.com', rol: 'titular', cuil: '27-30111222-4' },
 };
 

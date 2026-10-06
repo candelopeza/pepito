@@ -25,14 +25,51 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
+import Grilla from '../../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../../components/ui/Badge';
-import Aviso, { Vacio } from '../../components/ui/Aviso';
+import { Vacio } from '../../components/ui/Aviso';
 import Confirmar from '../../components/ui/Confirmar';
 import { useDatos } from '../../datos/datosContexto';
-import { buscarDuplicados } from '../../dominio/duplicados';
+import { buscarDuplicados, ordenarPorJerarquia } from '../../dominio/duplicados';
 import { fmtFechaHora } from '../../dominio/fechas';
 
 const COLOR_NIVEL = { alta: 'rojo', media: 'naranja', baja: 'amarillo' };
+
+/* La constancia de las fusiones ya hechas. */
+const COLUMNAS_FUSIONES = [
+  {
+    field: 'momento',
+    headerName: 'Momento',
+    width: 170,
+    renderCell: ({ row }) => fmtFechaHora(row.momento),
+  },
+  {
+    field: 'idPrincipal',
+    headerName: 'Se conservó',
+    width: 140,
+    renderCell: ({ row }) => (
+      <Link to={`/locales/${row.idPrincipal}`} className="link-local">
+        N° {row.idPrincipal}
+      </Link>
+    ),
+  },
+  {
+    field: 'nombreDuplicado',
+    headerName: 'Se unificó',
+    flex: 1,
+    minWidth: 220,
+    renderCell: ({ row }) => `N° ${row.idDuplicado} — ${row.nombreDuplicado ?? ''}`,
+  },
+  {
+    field: 'idLegacyDuplicado',
+    headerName: 'Id legacy del eliminado',
+    width: 200,
+    /* Este dato es el que permite rastrear una actuación histórica: los
+       expedientes ya iniciados referencian el id del sistema anterior. */
+    renderCell: ({ row }) => row.idLegacyDuplicado ?? '—',
+  },
+  { field: 'actor', headerName: 'Quién', width: 160 },
+];
 
 function Duplicados() {
   const { localesConEstado, fusiones, fusionarLocales } = useDatos();
@@ -41,13 +78,11 @@ function Duplicados() {
 
   const pares = useMemo(() => buscarDuplicados(localesConEstado), [localesConEstado]);
 
-  /* Cuál de los dos se conserva. Por defecto el que tiene más historial: es el
-     que probablemente esté referenciado en expedientes ya iniciados. */
+  /* Cuál de los dos se conserva: el de mayor jerarquía legal (sección 9.4),
+     que es el que referencian los actos ya notificados o iniciados. Si
+     empatan, el de más historial. Ver ordenarPorJerarquia en el dominio. */
   const decidir = (par) => {
-    const [principal, duplicado] =
-      par.principal.cantidadActuaciones >= par.duplicado.cantidadActuaciones
-        ? [par.principal, par.duplicado]
-        : [par.duplicado, par.principal];
+    const [principal, duplicado] = ordenarPorJerarquia(par.principal, par.duplicado);
     return invertido ? [duplicado, principal] : [principal, duplicado];
   };
 
@@ -128,37 +163,13 @@ function Duplicados() {
           <div className="accesos-header">
             <span>Fusiones registradas</span>
           </div>
-          <table className="tabla-datos">
-            <thead>
-              <tr>
-                <th>Momento</th>
-                <th>Se conservó</th>
-                <th>Se unificó</th>
-                <th>Id legacy del eliminado</th>
-                <th>Quién</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...fusiones].reverse().map((f) => (
-                <tr key={f.id}>
-                  <td>{fmtFechaHora(f.momento)}</td>
-                  <td>
-                    <Link to={`/locales/${f.idPrincipal}`} className="link-local">
-                      N° {f.idPrincipal}
-                    </Link>
-                  </td>
-                  <td>
-                    N° {f.idDuplicado} — {f.nombreDuplicado}
-                  </td>
-                  {/* Este dato es el que permite rastrear una actuación
-                      histórica: los expedientes ya iniciados referencian el id
-                      del sistema anterior. */}
-                  <td>{f.idLegacyDuplicado ?? '—'}</td>
-                  <td>{f.actor}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Grilla
+            filas={fusiones}
+            columnas={COLUMNAS_FUSIONES}
+            nombreArchivo="fusiones-realizadas"
+            vacio="Todavía no se fusionó ningún duplicado."
+            alto="auto"
+          />
         </>
       )}
 

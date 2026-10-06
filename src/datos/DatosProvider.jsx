@@ -1,743 +1,726 @@
 /* ============================================================================
    datos/DatosProvider.jsx  —  EL STORE. TODO LO QUE MODIFICA DATOS PASA POR ACÁ
    ----------------------------------------------------------------------------
-   >>> ESTE ARCHIVO REEMPLAZA AL BACKEND MIENTRAS NO EXISTA <<<
-   Cada función de abajo es, uno a uno, un endpoint que va a haber que escribir.
-   Los nombres están elegidos pensando en eso: guardarLocal -> PUT /locales/:id,
-   generarCedula -> POST /locales/:id/cedulas, y así.
-
-   CUANDO EXISTA LA API: se cambia SOLO este archivo. Las pantallas llaman a
-   estas funciones con useDatos() y no saben de dónde salen los datos, así que
-   no hay que tocar ninguna.
+   >>> AHORA HABLA CON EL BACKEND <<<
+   Antes este archivo ERA el backend: guardaba todo en localStorage con los
+   datos de prueba de semilla.js. Hoy lee y escribe contra la API
+   (backend/, Node + Express sobre MariaDB), y es el ÚNICO archivo del front
+   que cambió: las 29 pantallas siguen usando useDatos() igual que antes.
 
    ---------------------------------------------------------------------------
-   DOS COSAS QUE HACEN QUE ESTO NO SE DESALINEE NUNCA
+   CÓMO FUNCIONA
 
-   1. NINGUNA FUNCIÓN ESCRIBE EL ESTADO DEL LOCAL.
-      El estado se calcula (dominio/reglas.js). Las funciones registran
-      ACTUACIONES; el estado sale de eso. Es imposible que un local quede con
-      un estado que no se corresponde con su historial, que es el bug crónico
-      del sistema viejo.
+   1. Al montar, carga TODO de una vez (cargarTodo) y lo deja en `base`, con la
+      misma forma que tenía la semilla: { locales, actuaciones, relevamientos,
+      usuarios, rubros, feriados, parametros, ... }. Por eso vistas.js y las
+      pantallas no notan la diferencia.
 
-   2. TODA MODIFICACIÓN PASA POR despachar().
-      Ese envoltorio compara los estados de todos los locales antes y después
-      del cambio y anota solo, en la tabla de auditoría, quién cambió qué y por
-      qué (sección 5.2). No hay forma de cambiar un estado sin dejar rastro,
-      porque no depende de que uno se acuerde de registrarlo.
+   2. Mientras carga, muestra una pantalla de espera en lugar de los hijos. Es
+      lo que evita que 29 pantallas tengan que preguntar "¿ya llegaron los
+      datos?": cuando se renderizan, los datos están.
+
+   3. Cada acción llama al endpoint y después RECARGA. No intenta adivinar cómo
+      quedaron los datos después del cambio: se los vuelve a pedir al servidor,
+      que es el único que sabe. Es más tráfico y es a propósito; con 2.200
+      locales en red local no se nota, y elimina de raíz que la pantalla muestre
+      algo distinto de lo que hay en la base.
+
+   4. Si una acción falla, el error NO rompe la pantalla: se muestra abajo en un
+      cartel con el mensaje que mandó el backend ("No se puede emitir la cédula:
+      faltan CUIT, razón social"). Las pantallas llaman a estas funciones sin
+      await, igual que cuando eran síncronas, y siguen andando.
+
    ---------------------------------------------------------------------------
+   LO QUE CAMBIÓ RESPECTO DE LA VERSIÓN CON localStorage
 
-   PERSISTENCIA: guarda en localStorage del navegador, así F5 no borra la demo.
-   Es del navegador de cada uno, no es una base compartida. Se limpia desde
-   Configuración → Parámetros → "Reiniciar datos de demostración".
+   - EL ESTADO DEL LOCAL YA NO SE CALCULA ACÁ. Lo resuelve el backend leyendo
+     `local.id_estado` y el último trámite (ver backend/mapeo.js). El front lo
+     recibe hecho. Antes se calculaba con resolverEstado() sobre el historial.
+   - EL HISTORIAL DE ESTADOS lo escribe el backend en la tabla opcional
+     `auditoria` (backend/sql/05). Acá se pide por local, cuando se abre la
+     ficha (cargarAuditoria). Sin la tabla, la lista viene vacía.
+   - LOS PARÁMETROS Y LA PLANTILLA se guardan si la base tiene la tabla
+     opcional `parametro` (backend/sql/06). Sin ella son de solo lectura y
+     viven en backend/parametros-sistema.js.
+   - QUÉ TIENE PRENDIDO EL SERVIDOR llega en `capacidades`, y las pantallas no
+     ofrecen lo que no se puede guardar.
+
+   ---------------------------------------------------------------------------
+   TRABAJO SIN CONEXIÓN (sección 6.2)
+
+   - Cada carga exitosa deja una copia de los datos en el dispositivo. Si al
+     abrir la app no hay señal, se trabaja con esa copia (`sinConexion`).
+   - Relevamientos y entregas hechos sin señal quedan en una cola del
+     dispositivo (colaSinConexion.js) y se envían solos al volver la conexión.
+     `pendientesSinConexion` es lo que espera; la barra lo muestra.
    ============================================================================ */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Snackbar from '@mui/material/Snackbar';
+import Typography from '@mui/material/Typography';
+
 import { DatosContext } from './datosContexto';
-import { crearSemilla } from './semilla';
-import { bandejas, cedulas, conEstado, documentosPorVencer, indicadores, porVencer, presentacionesPendientes } from './vistas';
-import { hoyISO, vencimientoHabil } from '../dominio/fechas';
-import { vencimientoDocumento } from '../dominio/vigencias';
-import { resolverEstado } from '../dominio/reglas';
-import { geocodificar } from '../dominio/geo';
-import { deLocal, numeroCedula } from '../dominio/actuaciones';
+import { api, identificarse } from './api';
+import { aplicarEtiquetas } from '../dominio/estados';
+import {
+  bandejas,
+  cedulas,
+  conEstado,
+  documentosPorVencer,
+  indicadores,
+  indicadoresDelPeriodo,
+  porVencer,
+  presentacionesPendientes,
+} from './vistas';
+import { guardar as guardarEnDispositivo, leer as leerDelDispositivo } from './almacenLocal';
+import { encolar, enviarPendientes, listar as listarPendientes, quitar as quitarPendiente, suscribir } from './colaSinConexion';
+import { hoyISO } from '../dominio/fechas';
+import { deLocal } from '../dominio/actuaciones';
 import { useRol } from '../auth/rolContexto';
 
-const CLAVE_ALMACEN = 'gg-datos-v3';
+/* Accesos sin nada guardado: rige el reparto por defecto de config/modulos.js. */
+const PERMISOS_VACIOS = { modulos: {}, rolesDeshabilitados: [] };
 
-function leerAlmacen() {
-  try {
-    const crudo = localStorage.getItem(CLAVE_ALMACEN);
-    if (!crudo) return null;
-    const datos = JSON.parse(crudo);
-    // Si cambia la forma de los datos, la semilla nueva gana: un store viejo
-    // con campos que ya no existen rompe pantallas de formas raras.
-    if (datos.version !== crearSemilla().version) return null;
-    return datos;
-  } catch {
-    return null;
-  }
-}
+/* Qué funciones opcionales tiene prendidas el servidor (backend/capacidades.js).
+   Arranca todo apagado: si el servidor es viejo y no sabe responder, las
+   pantallas no ofrecen lo que no se puede guardar. */
+const CAPACIDADES_VACIAS = { auditoria: false, parametros: false, accesos: false, impresion: false, geocodificador: 'ninguno' };
 
-/* Siguiente id de una lista. No reutiliza números dados de baja. */
-const siguienteId = (lista) => lista.reduce((max, x) => Math.max(max, Number(x.id) || 0), 0) + 1;
+/* Donde queda la última copia de los datos, para abrir la app sin señal. */
+const CLAVE_COPIA = 'copia-datos';
 
-/* Atajo para modificar un local puntual. Es pura, así que vive acá afuera. */
-const conLocal = (prev, localId, cambios) => ({
-  ...prev,
-  locales: prev.locales.map((l) => (l.id === localId ? { ...l, ...cambios } : l)),
-});
+/* ¿El error es "no hubo respuesta" (sin señal o servidor apagado)? Lo marca
+   api.js con estado 0. Cualquier otro error es una respuesta del servidor. */
+const esSinConexion = (e) => e?.estado === 0;
+
+/* La forma del store antes de que lleguen los datos. Existe para que nada
+   explote si algo se renderiza antes de tiempo: todas las colecciones son
+   arrays vacíos, no undefined. */
+const BASE_VACIA = {
+  locales: [],
+  actuaciones: [],
+  relevamientos: [],
+  usuarios: [],
+  rubros: [],
+  feriados: [],
+  fusiones: [],
+  // La auditoría se conserva como array vacío para no romper las pantallas que
+  // la leen. El historial de cada local se pide aparte, cuando se abre su
+  // ficha (ver cargarAuditoria más abajo): traer el de 2.200 locales de una
+  // vez sería pesado y casi nunca hace falta.
+  auditoria: [],
+  parametros: {},
+  plantillaCedula: '',
+  secuencias: { cedula: 0, expediente: 0 },
+  permisos: PERMISOS_VACIOS,
+  capacidades: CAPACIDADES_VACIAS,
+  // Prórrogas pedidas por el portal sin resolver (las usa la bandeja de
+  // coordinación). Vacía si la base no tiene el historial (sql/05).
+  solicitudesProrroga: [],
+};
 
 function DatosProvider({ children }) {
   const { usuario } = useRol();
-  const [base, setBase] = useState(() => leerAlmacen() ?? crearSemilla());
+  const [base, setBase] = useState(BASE_VACIA);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
+  const [aviso, setAviso] = useState(null);
+  // null con señal; { desde } cuando se está mostrando la copia guardada.
+  const [sinConexion, setSinConexion] = useState(null);
+  // Lo cargado sin señal que espera para enviarse (colaSinConexion.js).
+  const [pendientes, setPendientes] = useState([]);
+  // Historial de estados ya pedido, por local: { [idLocal]: [...] }.
+  const [auditorias, setAuditorias] = useState({});
+  // Sube cada vez que llegan datos nuevos del servidor. Las pantallas que
+  // piden algo aparte (el historial de la ficha) lo usan para volver a pedir.
+  const [versionDatos, setVersionDatos] = useState(0);
   const hoy = hoyISO();
 
+  /* El backend identifica al usuario por cabeceras (ver src/datos/api.js).
+     Se avisa apenas cambia el rol, antes de cualquier pedido. */
   useEffect(() => {
-    try {
-      localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(base));
-    } catch {
-      // Modo privado o almacenamiento lleno: la app sigue funcionando en
-      // memoria, solo se pierde al recargar.
-    }
-  }, [base]);
+    identificarse(usuario);
+  }, [usuario]);
 
   /* ==========================================================================
-     despachar()  —  el envoltorio por donde pasa TODO cambio
+     LA CARGA
      --------------------------------------------------------------------------
-     `motivo` es el texto que queda en la auditoría. Escribilo pensando en
-     alguien que dentro de dos años tiene que entender qué pasó.
+     Todos los pedidos salen en paralelo (Promise.all): tardan lo que tarda el
+     más lento, no la suma. Son diez y el pesado es /locales.
      ========================================================================== */
-  const despachar = useCallback(
-    (motivo, transformar) => {
-      setBase((prev) => {
-        const siguiente = transformar(prev);
-        if (!siguiente) return prev;
+  const cargarTodo = useCallback(async () => {
+    const [
+      locales,
+      actuaciones,
+      relevamientos,
+      usuarios,
+      rubros,
+      feriados,
+      parametros,
+      plantilla,
+      fusiones,
+      permisos,
+      capacidades,
+      solicitudesProrroga,
+    ] = await Promise.all([
+      api.locales(),
+      api.actuaciones(),
+      api.relevamientos(),
+      api.usuarios(),
+      api.rubros(),
+      api.feriados(),
+      api.parametros(),
+      api.plantilla(),
+      api.fusiones(),
+      // Si la base todavía no tiene las tablas de Accesos, la llamada falla y
+      // el sistema sigue con el reparto por defecto del código en vez de
+      // quedarse sin cargar.
+      api.permisos().catch(() => PERMISOS_VACIOS),
+      // Lo mismo con un servidor que todavía no sabe responder capacidades.
+      api.capacidades().catch(() => CAPACIDADES_VACIAS),
+      api.solicitudesProrroga().catch(() => []),
+    ]);
 
-        const antes = new Map(prev.locales.map((l) => [l.id, resolverEstado(l, prev.actuaciones, { hoy })]));
-        const filas = [];
+    /* `secuencias` ya no es una tabla: el último número de cédula se deduce de
+       las actuaciones. Se conserva la forma { cedula, expediente } porque es lo
+       que espera la pantalla de Reportes.
 
-        siguiente.locales.forEach((l) => {
-          const nuevo = resolverEstado(l, siguiente.actuaciones, { hoy });
-          const anterior = antes.get(l.id) ?? null;
-          if (anterior !== nuevo) {
-            filas.push({
-              id: `${Date.now()}-${l.id}-${filas.length}`,
-              localId: l.id,
-              estadoAnterior: anterior,
-              estadoNuevo: nuevo,
-              motivo,
-              actor: usuario?.nombre ?? 'Sistema',
-              momento: new Date().toISOString(),
-            });
-          }
-        });
+       El correlativo es lo que va DESPUÉS del guion: '0001-675' -> 675. No se
+       usa digitosCedula() del dominio porque esa función está hecha para el
+       formato 'CED-001275' de la maqueta y sobre '0001-675' devuelve 1675. */
+    const ultimaCedula = actuaciones.reduce((max, a) => {
+      if (!a.numeroCedula) return max;
+      const n = Number(String(a.numeroCedula).split('-').pop());
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
 
-        return filas.length ? { ...siguiente, auditoria: [...siguiente.auditoria, ...filas] } : siguiente;
+    const nueva = {
+      locales,
+      actuaciones,
+      relevamientos,
+      usuarios,
+      rubros,
+      feriados,
+      fusiones,
+      permisos,
+      auditoria: [],
+      parametros,
+      plantillaCedula: plantilla?.texto ?? '',
+      secuencias: { cedula: ultimaCedula, expediente: 0 },
+      capacidades: { ...CAPACIDADES_VACIAS, ...capacidades },
+      solicitudesProrroga,
+    };
+    // Los nombres de estado que cambió el área (sección 3.1), antes de dibujar.
+    aplicarEtiquetas(parametros?.etiquetasEstado);
+    setBase(nueva);
+    setSinConexion(null);
+    setAuditorias({});
+    setVersionDatos((v) => v + 1);
+    // La copia para trabajar sin señal. No se espera: si el dispositivo no
+    // deja guardar, la app sigue igual con conexión.
+    guardarEnDispositivo(CLAVE_COPIA, { momento: new Date().toISOString(), base: nueva });
+  }, []);
+
+  useEffect(() => {
+    let vigente = true;
+    setCargando(true);
+    cargarTodo()
+      .then(() => {
+        if (vigente) setErrorCarga(null);
+      })
+      .catch(async (e) => {
+        /* SIN SEÑAL AL ABRIR LA APP. Si hay una copia guardada de la última
+           vez, se trabaja con ella: el relevador puede cargar y el notificador
+           ve sus cédulas. Lo que carguen queda en la cola y sale solo cuando
+           vuelva la conexión. Sin copia, no hay nada que mostrar. */
+        const copia = esSinConexion(e) ? await leerDelDispositivo(CLAVE_COPIA) : null;
+        if (!vigente) return;
+        if (copia?.base) {
+          aplicarEtiquetas(copia.base?.parametros?.etiquetasEstado);
+          setBase({ ...BASE_VACIA, ...copia.base });
+          setSinConexion({ desde: copia.momento });
+          setErrorCarga(null);
+        } else {
+          setErrorCarga(e.message);
+        }
+      })
+      .finally(() => {
+        if (vigente) setCargando(false);
       });
+    // Evita que una carga que quedó en el aire pise el estado después de que el
+    // componente se desmontó (pasa con el recambio en caliente de Vite).
+    return () => {
+      vigente = false;
+    };
+  }, [cargarTodo]);
+
+  /* ==========================================================================
+     ejecutar()  —  el envoltorio por donde pasa TODA acción
+     --------------------------------------------------------------------------
+     Reemplaza al despachar() de la versión con localStorage. Aquel calculaba
+     los cambios de estado para anotarlos en la auditoría; ahora de eso se
+     ocupa el backend, y acá lo que hace falta es otra cosa:
+
+       - llamar al endpoint
+       - recargar los datos
+       - si algo falla, mostrar el mensaje en vez de dejar la promesa suelta
+
+     Ese último punto es el que permite que las pantallas sigan llamando a las
+     acciones sin await, exactamente como cuando eran síncronas.
+     ========================================================================== */
+  const ejecutar = useCallback(
+    async (mensajeOk, llamada) => {
+      try {
+        const resultado = await llamada();
+        await cargarTodo();
+        if (mensajeOk) setAviso({ tipo: 'success', texto: mensajeOk });
+        // Siempre algo "verdadero" cuando salió bien, aunque el endpoint no
+        // devuelva cuerpo: las pantallas cierran el formulario solo si esto
+        // no es null, y así no se pierde lo escrito cuando falla.
+        return resultado ?? true;
+      } catch (e) {
+        if (esSinConexion(e)) {
+          setSinConexion((s) => s ?? { desde: null });
+          setAviso({ tipo: 'error', texto: 'Sin conexión con el servidor: no se guardó. Probá de nuevo cuando vuelva la señal.' });
+        } else {
+          setAviso({ tipo: 'error', texto: e.message });
+        }
+        return null;
+      }
     },
-    [hoy, usuario],
+    [cargarTodo],
   );
 
-  /* Atajo para agregar una actuación firmada por el usuario actual.
-     Va en useCallback porque lo usan varias acciones que también están
-     memorizadas: si cambiara de identidad en cada render, todas se
-     recrearían y el useMemo del final no serviría para nada. */
-  const conActuacion = useCallback(
-    (prev, actuacion) => ({
-      ...prev,
-      actuaciones: [
-        ...prev.actuaciones,
-        { id: siguienteId(prev.actuaciones), usuario: usuario?.nombre ?? 'Sistema', ...actuacion },
-      ],
-    }),
-    [usuario],
+  /* ==========================================================================
+     TRABAJO SIN CONEXIÓN  (sección 6.2, requisito no negociable)
+     --------------------------------------------------------------------------
+     Relevamientos y entregas: si no hay señal al guardar, la carga queda en
+     el dispositivo (colaSinConexion.js) y sale sola cuando vuelve la conexión.
+     El resto de los actos (los de oficina) necesitan señal y lo dicen.
+     ========================================================================== */
+  const enviarItem = useCallback(
+    (item) =>
+      item.tipo === 'relevamiento'
+        ? api.crearRelevamiento(item.datos)
+        : api.registrarEntrega(item.referencia, item.datos),
+    [],
+  );
+
+  const sincronizar = useCallback(async () => {
+    const { enviados, rechazados, ocupada } = await enviarPendientes(enviarItem);
+    if (ocupada) return;
+    if (enviados) {
+      try {
+        await cargarTodo();
+      } catch {
+        // Se enviaron, pero recargar falló: se ve en la próxima recarga.
+      }
+    }
+    if (enviados && !rechazados) {
+      setAviso({ tipo: 'success', texto: `Se enviaron ${enviados} carga(s) que estaban guardadas en el dispositivo` });
+    } else if (rechazados) {
+      setAviso({
+        tipo: 'error',
+        texto: `${rechazados} carga(s) guardadas sin señal no se aceptaron. Revisalas en la lista de pendientes.`,
+      });
+    }
+  }, [enviarItem, cargarTodo]);
+
+  /* Guarda en la cola o envía: lo que corresponda según haya señal. */
+  const guardarOEncolar = useCallback(
+    async (item, mensajeOk) => {
+      try {
+        const resultado = await enviarItem(item);
+        await cargarTodo();
+        setAviso({ tipo: 'success', texto: mensajeOk });
+        return resultado ?? true;
+      } catch (e) {
+        if (!esSinConexion(e)) {
+          setAviso({ tipo: 'error', texto: e.message });
+          return null;
+        }
+        const guardado = await encolar(item);
+        setSinConexion((s) => s ?? { desde: null });
+        setAviso({
+          tipo: 'info',
+          texto: 'Sin señal: quedó guardado en el dispositivo y se envía solo cuando vuelva la conexión.',
+        });
+        return { enCola: true, idCola: guardado.id };
+      }
+    },
+    [enviarItem, cargarTodo],
+  );
+
+  const descartarPendiente = useCallback((id) => quitarPendiente(id), []);
+
+  // La cola se lee al arrancar y se escucha: el contador de la barra se
+  // actualiza solo. Al volver la señal, y cada minuto si hay pendientes, se
+  // intenta enviar.
+  useEffect(() => {
+    let vigente = true;
+    listarPendientes().then((l) => vigente && setPendientes(l));
+    const dejar = suscribir((l) => setPendientes(l));
+    const alVolver = () => sincronizar();
+    window.addEventListener('online', alVolver);
+    return () => {
+      vigente = false;
+      dejar();
+      window.removeEventListener('online', alVolver);
+    };
+  }, [sincronizar]);
+
+  const hayPorEnviar = pendientes.some((p) => !p.rechazado);
+  useEffect(() => {
+    if (!hayPorEnviar) return undefined;
+    const primero = setTimeout(sincronizar, 3000);
+    const t = setInterval(sincronizar, 60 * 1000);
+    return () => {
+      clearTimeout(primero);
+      clearInterval(t);
+    };
+  }, [hayPorEnviar, sincronizar]);
+
+  /* Con la copia del dispositivo en pantalla, se reintenta traer los datos
+     frescos cada 30 segundos y apenas el navegador avisa que volvió la red. */
+  useEffect(() => {
+    if (!sinConexion) return undefined;
+    const reintentar = () => cargarTodo().catch(() => {});
+    window.addEventListener('online', reintentar);
+    const t = setInterval(reintentar, 30 * 1000);
+    return () => {
+      window.removeEventListener('online', reintentar);
+      clearInterval(t);
+    };
+  }, [sinConexion, cargarTodo]);
+
+  /* ==========================================================================
+     HISTORIAL DE ESTADOS  (tabla opcional `auditoria`, sql/05)
+     --------------------------------------------------------------------------
+     Se pide por local, cuando la ficha lo necesita. auditoriaDeLocal() sigue
+     siendo sincrónica como antes: devuelve lo que ya llegó, o [] mientras tanto.
+     ========================================================================== */
+  const cargarAuditoria = useCallback(
+    (idLocal) => {
+      if (!base.capacidades.auditoria) return;
+      api
+        .auditoria(idLocal)
+        .then((lista) => setAuditorias((prev) => ({ ...prev, [Number(idLocal)]: lista })))
+        .catch(() => {});
+    },
+    [base.capacidades.auditoria],
   );
 
   /* ==========================================================================
      PADRÓN
      ========================================================================== */
 
-  /* Alta y edición. La coordenada NO se recibe: se obtiene geocodificando la
-     dirección declarada, que es la única fuente válida (sección 9.2). */
+  /* Alta y edición. La coordenada NO se manda: la obtiene el backend
+     geocodificando la dirección declarada, que es la única fuente válida
+     (sección 9.2 del pliego). */
   const guardarLocal = useCallback(
-    (datos) => {
-      despachar(datos.id ? `Edición de datos del local` : 'Alta manual de local', (prev) => {
-        const geo = geocodificar(datos.direccion);
-        const ubicacion = geo.ok
-          ? { latitud: geo.latitud, longitud: geo.longitud, motivoSinGeo: null }
-          : { latitud: null, longitud: null, motivoSinGeo: geo.motivo };
-
-        if (datos.id && prev.locales.some((l) => l.id === datos.id)) {
-          return conLocal(prev, datos.id, { ...datos, ...ubicacion });
-        }
-        const id = siguienteId(prev.locales);
-        return {
-          ...prev,
-          locales: [...prev.locales, { estadoInicial: 'REVISION_DATOS', bloqueado: false, ...datos, ...ubicacion, id }],
-        };
-      });
-    },
-    [despachar],
+    (datos) =>
+      ejecutar(datos.id ? 'Local actualizado' : 'Local dado de alta', () =>
+        datos.id ? api.localEdicion(datos.id, datos) : api.localAlta(datos),
+      ),
+    [ejecutar],
   );
 
   const eliminarLocal = useCallback(
-    (localId) => {
-      despachar('Baja de local', (prev) => ({
-        ...prev,
-        locales: prev.locales.filter((l) => l.id !== localId),
-        actuaciones: prev.actuaciones.filter((a) => a.localId !== localId),
-        relevamientos: prev.relevamientos.filter((r) => r.localId !== localId),
-      }));
-    },
-    [despachar],
+    (localId) => ejecutar('Local dado de baja', () => api.localBaja(localId)),
+    [ejecutar],
   );
 
-  /* Bloqueo manual (sección 3.4). Queda quién, cuándo y por qué, y el estado
-     se congela en el que tenía al momento del bloqueo. */
   const bloquearLocal = useCallback(
-    (localId, motivo) => {
-      despachar(`Bloqueo manual: ${motivo}`, (prev) => {
-        const local = prev.locales.find((l) => l.id === localId);
-        if (!local) return null;
-        return conLocal(prev, localId, {
-          bloqueado: true,
-          bloqueadoMotivo: motivo,
-          bloqueadoPor: usuario?.nombre ?? 'Sistema',
-          bloqueadoEn: new Date().toISOString(),
-          estadoCongelado: resolverEstado(local, prev.actuaciones, { hoy }),
-        });
-      });
-    },
-    [despachar, hoy, usuario],
+    (localId, motivo) => ejecutar('Local bloqueado', () => api.bloquear(localId, motivo)),
+    [ejecutar],
   );
 
   const desbloquearLocal = useCallback(
-    (localId) => {
-      despachar('Se levantó el bloqueo manual', (prev) =>
-        conLocal(prev, localId, { bloqueado: false, bloqueadoMotivo: '', estadoCongelado: null }),
-      );
-    },
-    [despachar],
+    (localId) => ejecutar('Se levantó el bloqueo', () => api.desbloquear(localId)),
+    [ejecutar],
   );
 
-  /* Proceso diario de geocodificación (sección 9.1). Acá se dispara a mano
-     desde Herramientas para poder mostrarlo. */
-  const geocodificarPendientes = useCallback(() => {
-    despachar('Geocodificación de direcciones pendientes', (prev) => ({
-      ...prev,
-      locales: prev.locales.map((l) => {
-        if (l.latitud !== null && l.longitud !== null) return l;
-        const geo = geocodificar(l.direccion);
-        return geo.ok
-          ? { ...l, latitud: geo.latitud, longitud: geo.longitud, motivoSinGeo: null }
-          : { ...l, motivoSinGeo: geo.motivo };
+  const geocodificarPendientes = useCallback(
+    () =>
+      ejecutar(null, async () => {
+        const r = await api.geocodificar();
+        setAviso(
+          r.configurado === false
+            ? {
+                tipo: 'info',
+                texto: `Todavía no hay un servicio de geocodificación configurado: los ${r.revisados} locales siguen sin ubicación. Corregí la dirección de cada uno o pedí a DITEC que configure el servicio.`,
+              }
+            : { tipo: 'success', texto: `Geocodificación: ${r.resueltos} de ${r.revisados} direcciones resueltas` },
+        );
+        return r;
       }),
-    }));
-  }, [despachar]);
+    [ejecutar],
+  );
 
   /* ==========================================================================
-     RELEVAMIENTO  (etapa 1)
-     --------------------------------------------------------------------------
-     El formulario de campo NO pide CUIT ni razón social: los relevadores no
-     tienen facultades de inspector y no están autorizados a requerir esa
-     información al comerciante. Los datos registrales los completa la oficina
-     desde la constancia de inscripción fiscal (sección 6.2).
+     RELEVAMIENTO  (etapas 1 y 2)
      ========================================================================== */
+  /* Sin señal, el relevamiento queda en el dispositivo (ver guardarOEncolar).
+     `datos.momento` es el instante del guardado: viaja con la carga y es el
+     que queda en la base aunque llegue horas después. */
   const crearRelevamiento = useCallback(
-    (datos) => {
-      despachar(
-        `Relevamiento de campo: clasificado como ${datos.clasificacion === 'GRAN_GENERADOR' ? 'Gran Generador' : 'Generador Menor'}`,
-        (prev) => {
-          const localId = siguienteId(prev.locales);
-          const geo = geocodificar(datos.direccionRelevada);
-
-          const nuevoLocal = {
-            id: localId,
-            idLegacy: null,
-            nombreLocal: datos.nombreLocal,
-            razonSocial: '',
-            cuit: '',
-            rubro: datos.rubro,
-            direccion: datos.direccionRelevada,
-            domicilioFiscal: '',
-            email: '',
-            telefono: '',
-            observaciones: datos.observaciones ?? '',
-            titularCuil: null,
-            bloqueado: false,
-            estadoCongelado: null,
-            // La coordenada del padrón sale de la dirección, NUNCA del GPS del
-            // dispositivo. Ver el encabezado de dominio/geo.js.
-            latitud: geo.ok ? geo.latitud : null,
-            longitud: geo.ok ? geo.longitud : null,
-            motivoSinGeo: geo.ok ? null : geo.motivo,
-            estadoInicial: datos.clasificacion === 'GRAN_GENERADOR' ? 'REVISION_DATOS' : 'EXENTO_REVISION',
-          };
-
-          const nuevoRelevamiento = {
-            id: siguienteId(prev.relevamientos),
-            localId,
-            usuario: usuario?.nombre ?? 'Sistema',
-            fechaHora: new Date().toISOString(),
-            direccionRelevada: datos.direccionRelevada,
-            // Coordenada del DISPOSITIVO al guardar. Es una métrica del trabajo
-            // de campo, no la ubicación del establecimiento.
-            latitud: datos.latitud ?? null,
-            longitud: datos.longitud ?? null,
-            nombreLocal: datos.nombreLocal,
-            rubro: datos.rubro,
-            clasificacion: datos.clasificacion,
-            revisadoPor: null,
-            revisadoEn: null,
-            offline: Boolean(datos.offline),
-          };
-
-          return {
-            ...prev,
-            locales: [...prev.locales, nuevoLocal],
-            relevamientos: [...prev.relevamientos, nuevoRelevamiento],
-          };
-        },
-      );
-    },
-    [despachar, usuario],
+    (datos) =>
+      guardarOEncolar(
+        { tipo: 'relevamiento', datos: { momento: new Date().toISOString(), ...datos }, etiqueta: datos.nombreLocal },
+        'Relevamiento registrado',
+      ),
+    [guardarOEncolar],
   );
 
-  /* Control administrativo (etapa 2). Los tres cierres posibles del control. */
+  /* El agente corrige su propia carga el mismo día. Necesita señal: es una
+     corrección, no una carga nueva, y el servidor tiene que confirmar que
+     todavía se puede (mismo día, sin control de coordinación). */
+  const editarRelevamiento = useCallback(
+    (id, datos) => ejecutar('Relevamiento corregido', () => api.editarRelevamiento(id, datos)),
+    [ejecutar],
+  );
+
   const revisarRelevamiento = useCallback(
-    (localId, resultado) => {
-      const motivos = {
-        EXENTO_CONFIRMADO: 'Coordinación confirmó la exención',
-        GRAN_GENERADOR: 'Coordinación corrigió la clasificación: sí es Gran Generador',
-        HABILITADO: 'Coordinación habilitó la notificación',
-      };
-      const estados = {
-        EXENTO_CONFIRMADO: 'EXENTO_CONFIRMADO',
-        GRAN_GENERADOR: 'NOTIF1_PENDIENTE',
-        HABILITADO: 'NOTIF1_PENDIENTE',
-      };
-      despachar(motivos[resultado], (prev) => {
-        const conRevision = {
-          ...prev,
-          relevamientos: prev.relevamientos.map((r) =>
-            r.localId === localId && !r.revisadoEn
-              ? { ...r, revisadoPor: usuario?.nombre ?? 'Sistema', revisadoEn: new Date().toISOString(), resultadoRevision: resultado }
-              : r,
-          ),
-        };
-        return conLocal(conRevision, localId, { estadoInicial: estados[resultado] });
-      });
-    },
-    [despachar, usuario],
+    (localId, resultado) => ejecutar('Control administrativo registrado', () => api.revisarRelevamiento(localId, resultado)),
+    [ejecutar],
   );
 
   /* ==========================================================================
      NOTIFICACIONES  (etapas 3 y 4)
      ========================================================================== */
-
-  /* Emite la cédula. La instancia se deduce del estado: no se elige a mano,
-     así no se puede emitir una primera notificación en un local que ya tiene
-     una segunda (sección 6.1, "Registro de actuaciones").
-
-     El número sale de una secuencia controlada, sin reutilización (sección 5.4).
-     La emisión NO altera ningún plazo: el cómputo arranca en la entrega. */
   const generarCedula = useCallback(
-    (localId) => {
-      despachar('Se emitió la cédula de notificación', (prev) => {
-        const local = prev.locales.find((l) => l.id === localId);
-        if (!local) return null;
-        const estado = resolverEstado(local, prev.actuaciones, { hoy });
-        const instancia = estado.startsWith('NOTIF2') ? 2 : 1;
-        const numero = prev.secuencias.cedula + 1;
-
-        const conNueva = conActuacion(prev, {
-          localId,
-          tipo: 'NOTIFICACION',
-          fecha: hoy,
-          instancia,
-          numeroCedula: numeroCedula(numero),
-          notificadorId: null,
-          fechaEntrega: null,
-          plazoDias: instancia === 1 ? prev.parametros.plazoNotif1 : prev.parametros.plazoNotif2,
-          fechaVencimiento: null,
-          resultado: null,
-          evidencia: null,
-          impresaPor: null,
-          impresaEn: null,
-          observaciones: '',
-        });
-        return { ...conNueva, secuencias: { ...prev.secuencias, cedula: numero } };
-      });
-    },
-    [despachar, hoy, conActuacion],
+    (localId) => ejecutar('Cédula emitida', () => api.generarCedula(localId)),
+    [ejecutar],
   );
 
-  /* Regeneración: se corrigieron datos del local después de emitir. Reemplaza
-     el documento y le da número nuevo, porque el anterior ya salió con datos
-     mal y no puede quedar circulando con el mismo número. */
   const regenerarCedula = useCallback(
-    (actuacionId) => {
-      despachar('Se regeneró la cédula por corrección de datos', (prev) => {
-        const numero = prev.secuencias.cedula + 1;
-        return {
-          ...prev,
-          secuencias: { ...prev.secuencias, cedula: numero },
-          actuaciones: prev.actuaciones.map((a) =>
-            a.id === actuacionId
-              ? {
-                  ...a,
-                  numeroCedula: numeroCedula(numero),
-                  fecha: hoy,
-                  impresaPor: null,
-                  impresaEn: null,
-                  observaciones: `${a.observaciones ? `${a.observaciones} · ` : ''}Reemplaza la cédula ${a.numeroCedula}.`,
-                }
-              : a,
-          ),
-        };
-      });
-    },
-    [despachar, hoy],
+    (actuacionId) => ejecutar('Cédula regenerada', () => api.regenerarCedula(actuacionId)),
+    [ejecutar],
   );
 
   const asignarNotificador = useCallback(
-    (actuacionId, notificadorId) => {
-      despachar('Se asignó notificador a la cédula', (prev) => ({
-        ...prev,
-        actuaciones: prev.actuaciones.map((a) => (a.id === actuacionId ? { ...a, notificadorId: Number(notificadorId) || null } : a)),
-      }));
-    },
-    [despachar],
+    (actuacionId, notificadorId) => ejecutar('Notificador asignado', () => api.asignarNotificador(actuacionId, notificadorId)),
+    [ejecutar],
   );
 
-  /* Constancia de impresión (sección 9.6): quién imprimió y cuándo. Evita
-     tanto la duplicación como el olvido, sin depender de la memoria de nadie. */
+  /* La constancia de impresión necesita las columnas de sql/04. Sin ellas no
+     se llama: se imprime igual y no aparece un error que el usuario no puede
+     resolver. */
   const marcarImpresa = useCallback(
-    (actuacionId) => {
-      despachar('Se registró la impresión de la cédula', (prev) => ({
-        ...prev,
-        actuaciones: prev.actuaciones.map((a) =>
-          a.id === actuacionId && !a.impresaEn
-            ? { ...a, impresaPor: usuario?.nombre ?? 'Sistema', impresaEn: new Date().toISOString() }
-            : a,
-        ),
-      }));
-    },
-    [despachar, usuario],
+    (actuacionId) =>
+      base.capacidades.impresion ? ejecutar('Impresión registrada', () => api.marcarImpresa(actuacionId)) : Promise.resolve(null),
+    [ejecutar, base.capacidades.impresion],
   );
 
-  /* >>> ACÁ EMPIEZA A CORRER EL PLAZO <<<
-     Es el único lugar del sistema donde se calcula una fecha de vencimiento de
-     notificación, y se calcula UNA vez y se guarda (vencimiento materializado).
-     Si el resultado no hace correr el plazo (no entregada), no hay vencimiento:
-     el circuito se detiene hasta que la entrega se concrete. */
-  const registrarEntrega = useCallback(
-    (actuacionId, { resultado, fechaEntrega, observaciones, evidencia }) => {
-      despachar(`Resultado de entrega registrado: ${resultado}`, (prev) => {
-        const corre = resultado !== 'NO_ENTREGADA';
-        const act = prev.actuaciones.find((a) => a.id === actuacionId);
-        if (!act) return null;
-        const plazoDias = act.instancia === 1 ? prev.parametros.plazoNotif1 : prev.parametros.plazoNotif2;
+  /* La impresión por lote (sección 6.4): una constancia por cédula, y la
+     recarga de datos UNA vez al final (con marcarImpresa serían N recargas). */
+  const marcarImpresas = useCallback(
+    (ids) =>
+      base.capacidades.impresion && ids.length
+        ? ejecutar(`${ids.length} cédula(s) registradas como impresas`, async () => {
+            for (const id of ids) await api.marcarImpresa(id);
+          })
+        : Promise.resolve(null),
+    [ejecutar, base.capacidades.impresion],
+  );
 
-        return {
-          ...prev,
-          actuaciones: prev.actuaciones.map((a) =>
-            a.id === actuacionId
-              ? {
-                  ...a,
-                  resultado,
-                  fechaEntrega: corre ? fechaEntrega : null,
-                  plazoDias,
-                  fechaVencimiento: corre
-                    ? vencimientoHabil(fechaEntrega, plazoDias, prev.feriados, prev.parametros.contarDiaEntrega)
-                    : null,
-                  evidencia: evidencia ?? a.evidencia,
-                  observaciones: observaciones ?? a.observaciones,
-                }
-              : a,
-          ),
-        };
-      });
-    },
-    [despachar],
+  /* Acá empieza a correr el plazo: el backend calcula el vencimiento una sola
+     vez, con los feriados y los parámetros vigentes ese día. Sin señal, la
+     entrega queda en el dispositivo con su fecha y se envía después. */
+  const registrarEntrega = useCallback(
+    (actuacionId, datos) =>
+      guardarOEncolar(
+        { tipo: 'entrega', referencia: actuacionId, datos, etiqueta: datos.etiqueta ?? `Cédula ${actuacionId}` },
+        'Entrega registrada',
+      ),
+    [guardarOEncolar],
+  );
+
+  /* Corregir una entrega ya registrada (sección 6.2). Necesita señal: es una
+     corrección, no una carga de campo, y el servidor decide si todavía se
+     puede (el mismo día para el agente; después, coordinación con motivo). */
+  const corregirEntrega = useCallback(
+    (actuacionId, datos) => ejecutar('Entrega corregida', () => api.corregirEntrega(actuacionId, datos)),
+    [ejecutar],
   );
 
   /* ==========================================================================
-     DOCUMENTACIÓN  (sección 4.5)
-     --------------------------------------------------------------------------
-     Todo documento lleva el número de SU EXPEDIENTE DE TRÁMITE, que es el que
-     se inicia en CiDiTuc al presentarlo. Es un dato distinto del expediente de
-     multa: uno acredita cumplimiento, el otro inicia una sanción. No comparten
-     campo ni tipo de actuación. El sistema viejo no guardaba este número, así
-     que hoy no se puede reconstruir el trámite que respalda una acreditación.
+     DOCUMENTACIÓN
      ========================================================================== */
   const registrarDocumento = useCallback(
-    (localId, datos) => {
-      const validado = datos.validado !== false;
-      despachar(
-        validado ? `Se registró documentación: ${datos.tipo}` : `Presentación del titular pendiente de validación: ${datos.tipo}`,
-        (prev) =>
-          conActuacion(prev, {
-            localId,
-            tipo: datos.tipo,
-            fecha: datos.fechaEmision || hoy,
-            numero: datos.numero,
-            fechaEmision: datos.fechaEmision,
-            // El vencimiento se calcula y se almacena. La DDJJ vence al año
-            // exacto; el contrato trae su propia fecha.
-            fechaVencimiento: vencimientoDocumento(datos, prev.parametros.modoBisiesto),
-            origen: datos.origen ?? 'PRESENTADO_TITULAR',
-            expedienteTramite: datos.expedienteTramite ?? null,
-            archivo: datos.archivo ?? null,
-            validado,
-            observaciones: datos.observaciones ?? '',
-          }),
-      );
-    },
-    [despachar, hoy, conActuacion],
+    (localId, datos) => ejecutar('Documentación registrada', () => api.registrarDocumento({ ...datos, localId })),
+    [ejecutar],
   );
 
-  /* Bandeja de validación del portal. Hasta que un agente aprueba, el
-     documento no suspende ningún plazo. */
   const validarPresentacion = useCallback(
-    (actuacionId, aprobar, observaciones = '') => {
-      despachar(aprobar ? 'Presentación del portal aprobada' : 'Presentación del portal rechazada', (prev) =>
-        aprobar
-          ? {
-              ...prev,
-              actuaciones: prev.actuaciones.map((a) =>
-                a.id === actuacionId
-                  ? { ...a, validado: true, observaciones: `${a.observaciones ? `${a.observaciones} · ` : ''}Aprobada por ${usuario?.nombre}. ${observaciones}`.trim() }
-                  : a,
-              ),
-            }
-          : { ...prev, actuaciones: prev.actuaciones.filter((a) => a.id !== actuacionId) },
-      );
-    },
-    [despachar, usuario],
+    (actuacionId, aprobar, observaciones = '') =>
+      ejecutar(aprobar ? 'Presentación aprobada' : 'Presentación rechazada', () =>
+        api.validarPresentacion(actuacionId, aprobar, observaciones),
+      ),
+    [ejecutar],
   );
 
   /* ==========================================================================
-     PRÓRROGA  (etapa 5)
-     --------------------------------------------------------------------------
-     Los días NO tienen valor por defecto: es el único plazo que se ingresa
-     manualmente en cada caso (sección 4.1).
+     PRÓRROGA Y EXPEDIENTE  (etapas 5 y 6)
      ========================================================================== */
   const otorgarProrroga = useCallback(
-    (localId, { dias, motivo }) => {
-      despachar(`Prórroga otorgada por ${dias} días`, (prev) =>
-        conActuacion(prev, {
-          localId,
-          tipo: 'PRORROGA',
-          fecha: hoy,
-          diasOtorgados: Number(dias),
-          // Días corridos desde el otorgamiento: la prórroga no se cuenta en
-          // días hábiles, a diferencia del plazo de las notificaciones.
-          fechaVencimiento: (() => {
-            const f = new Date(`${hoy}T12:00:00`);
-            f.setDate(f.getDate() + Number(dias));
-            return f.toISOString().slice(0, 10);
-          })(),
-          motivo,
-          observaciones: '',
-        }),
-      );
-    },
-    [despachar, hoy, conActuacion],
+    (localId, datos) => ejecutar('Prórroga otorgada', () => api.otorgarProrroga(localId, datos)),
+    [ejecutar],
   );
 
-  /* ==========================================================================
-     EXPEDIENTE DE MULTA  (etapa 6)
-     ========================================================================== */
+  /* Desde el portal: el titular pide, no otorga. Queda anotado en el
+     historial del local para que coordinación lo resuelva. */
+  const solicitarProrroga = useCallback(
+    (localId, datos) =>
+      ejecutar('Solicitud enviada: la oficina la va a revisar', () => api.solicitarProrroga(localId, datos)),
+    [ejecutar],
+  );
+
   const registrarExpediente = useCallback(
-    (localId, numeroManual) => {
-      despachar('Se inició el expediente de multa', (prev) => {
-        const numero = prev.secuencias.expediente + 1;
-        const anio = hoy.slice(0, 4);
-        const conNueva = conActuacion(prev, {
-          localId,
-          tipo: 'EXPEDIENTE',
-          fecha: hoy,
-          // Si la integración con expedientes municipales no responde, el
-          // número se ingresa a mano y se reconcilia después (sección 8.3).
-          numeroExpediente: numeroManual || `EXP-${anio}-${String(numero).padStart(6, '0')}`,
-          observaciones: numeroManual ? 'Número ingresado manualmente.' : 'Número asignado por el sistema.',
-        });
-        return numeroManual ? conNueva : { ...conNueva, secuencias: { ...prev.secuencias, expediente: numero } };
-      });
-    },
-    [despachar, hoy, conActuacion],
+    (localId, numeroManual) => ejecutar('Expediente registrado', () => api.registrarExpediente(localId, numeroManual)),
+    [ejecutar],
   );
 
-  /* El expediente NO es terminal: coordinación puede reingresar el local y la
-     intimación arranca de cero. */
+  /* El número definitivo de un expediente provisorio (sección 8.3). */
+  const numeroDefinitivoExpediente = useCallback(
+    (actuacionId, numero) =>
+      ejecutar('Número de expediente registrado', () => api.numeroDefinitivoExpediente(actuacionId, numero)),
+    [ejecutar],
+  );
+
   const reingresarAlCircuito = useCallback(
-    (localId, motivo) => {
-      despachar('Reingreso al circuito desde expediente', (prev) =>
-        conActuacion(prev, { localId, tipo: 'REINGRESO', fecha: hoy, observaciones: motivo ?? '' }),
-      );
-    },
-    [despachar, hoy, conActuacion],
+    (localId, motivo) => ejecutar('Local reingresado al circuito', () => api.reingresar(localId, motivo)),
+    [ejecutar],
   );
 
   /* ==========================================================================
      HERRAMIENTAS
      ========================================================================== */
-
-  /* Fusión de duplicados (sección 9.4). Las actuaciones y los relevamientos
-     del duplicado pasan al principal, y queda constancia de qué ids se
-     unificaron: sin eso no se puede rastrear una actuación histórica. */
   const fusionarLocales = useCallback(
-    (idPrincipal, idDuplicado) => {
-      despachar(`Fusión de duplicados: el local ${idDuplicado} se unificó en el ${idPrincipal}`, (prev) => {
-        const duplicado = prev.locales.find((l) => l.id === idDuplicado);
-        const principal = prev.locales.find((l) => l.id === idPrincipal);
-        if (!duplicado || !principal) return null;
-
-        return {
-          ...prev,
-          // Los datos que el principal no tenga se completan con los del
-          // duplicado: la fusión no debería perder información.
-          locales: prev.locales
-            .filter((l) => l.id !== idDuplicado)
-            .map((l) =>
-              l.id === idPrincipal
-                ? {
-                    ...l,
-                    cuit: l.cuit || duplicado.cuit,
-                    razonSocial: l.razonSocial || duplicado.razonSocial,
-                    email: l.email || duplicado.email,
-                    telefono: l.telefono || duplicado.telefono,
-                    domicilioFiscal: l.domicilioFiscal || duplicado.domicilioFiscal,
-                  }
-                : l,
-            ),
-          actuaciones: prev.actuaciones.map((a) => (a.localId === idDuplicado ? { ...a, localId: idPrincipal } : a)),
-          relevamientos: prev.relevamientos.map((r) => (r.localId === idDuplicado ? { ...r, localId: idPrincipal } : r)),
-          fusiones: [
-            ...prev.fusiones,
-            {
-              id: siguienteId(prev.fusiones),
-              idPrincipal,
-              idDuplicado,
-              idLegacyDuplicado: duplicado.idLegacy,
-              nombreDuplicado: duplicado.nombreLocal,
-              actor: usuario?.nombre ?? 'Sistema',
-              momento: new Date().toISOString(),
-            },
-          ],
-        };
-      });
-    },
-    [despachar, usuario],
+    (idPrincipal, idDuplicado) => ejecutar('Locales fusionados', () => api.fusionar(idPrincipal, idDuplicado)),
+    [ejecutar],
   );
 
-  /* Informe de la prestataria (sección 9.3). El pliego pide reemplazar la
-     automatización por CARGA MANUAL ASISTIDA: el sistema propone los cambios y
-     un agente confirma. Acá llegan las filas ya confirmadas. */
   const aplicarInforme9DJ = useCallback(
-    (filas) => {
-      despachar(`Informe de 9 de Julio aplicado: ${filas.length} registro(s)`, (prev) => {
-        let siguiente = prev;
-        filas.forEach((fila) => {
-          let localId = fila.localId;
-
-          if (!localId) {
-            // Alta: los locales creados desde el informe llevan prefijo CON en
-            // el id legacy, igual que en el sistema viejo.
-            localId = siguienteId(siguiente.locales);
-            const geo = geocodificar(fila.direccion);
-            siguiente = {
-              ...siguiente,
-              locales: [
-                ...siguiente.locales,
-                {
-                  id: localId,
-                  idLegacy: `CON-${String(localId).padStart(4, '0')}`,
-                  nombreLocal: fila.razonSocial,
-                  razonSocial: fila.razonSocial,
-                  cuit: fila.cuit,
-                  rubro: '',
-                  direccion: fila.direccion,
-                  domicilioFiscal: '',
-                  email: '',
-                  telefono: '',
-                  observaciones: 'Creado desde el informe de la prestataria.',
-                  titularCuil: null,
-                  bloqueado: false,
-                  estadoCongelado: null,
-                  latitud: geo.ok ? geo.latitud : null,
-                  longitud: geo.ok ? geo.longitud : null,
-                  motivoSinGeo: geo.ok ? null : geo.motivo,
-                  estadoInicial: 'REVISION_DATOS',
-                },
-              ],
-            };
-          }
-
-          siguiente = {
-            ...siguiente,
-            actuaciones: [
-              ...siguiente.actuaciones,
-              {
-                id: siguienteId(siguiente.actuaciones),
-                localId,
-                tipo: 'CONTRATO',
-                fecha: hoy,
-                usuario: usuario?.nombre ?? 'Sistema',
-                numero: fila.numeroContrato,
-                fechaEmision: hoy,
-                fechaVencimiento: fila.vencimiento,
-                // El origen es lo que distingue este contrato del presentado
-                // por el titular: distinto valor probatorio (sección 4.6).
-                origen: 'INFORME_9DJ',
-                expedienteTramite: null,
-                archivo: null,
-                validado: true,
-                observaciones: 'Informado por la empresa 9 de Julio.',
-              },
-            ],
-          };
-        });
-        return siguiente;
-      });
-    },
-    [despachar, hoy, usuario],
+    (filas) =>
+      ejecutar(null, async () => {
+        const r = await api.informe9DJ(filas);
+        setAviso({ tipo: 'success', texto: `Informe aplicado: ${r.aplicadas} registro(s), ${r.creados.length} local(es) nuevo(s)` });
+        return r;
+      }),
+    [ejecutar],
   );
 
   /* ==========================================================================
      CONFIGURACIÓN
      ========================================================================== */
   const guardarEnCatalogo = useCallback(
-    (clave, item) => {
-      despachar(`Configuración: se guardó un registro en ${clave}`, (prev) => ({
-        ...prev,
-        [clave]: item.id
-          ? prev[clave].map((x) => (x.id === item.id ? { ...x, ...item } : x))
-          : [...prev[clave], { ...item, id: siguienteId(prev[clave]) }],
-      }));
-    },
-    [despachar],
+    (clave, item) =>
+      ejecutar('Registro guardado', () =>
+        item.id ? api.catalogoEdicion(clave, item.id, item) : api.catalogoAlta(clave, item),
+      ),
+    [ejecutar],
   );
 
   const eliminarDeCatalogo = useCallback(
-    (clave, id) => {
-      despachar(`Configuración: se eliminó un registro de ${clave}`, (prev) => ({
-        ...prev,
-        [clave]: prev[clave].filter((x) => x.id !== id),
-      }));
-    },
-    [despachar],
+    (clave, id) => ejecutar('Registro eliminado', () => api.catalogoBaja(clave, id)),
+    [ejecutar],
   );
 
-  /* Los plazos solo los puede tocar Dirección. El control del rol está en la
-     pantalla; acá se guarda lo que llegue. La restricción de verdad va en el
-     backend: esto corre en el navegador del usuario. */
+  /* Los parámetros y la plantilla viven en el código del backend
+     (backend/parametros-sistema.js), no en una tabla. El backend responde 405 y
+     ese mensaje es el que se muestra: avisa dónde se cambian. */
+  /* Con la tabla opcional `parametro` (sql/06) se guardan de verdad y
+     devuelven el resultado: la pantalla dice "Guardado" solo si salió bien.
+     Sin la tabla, avisan que todavía no se puede y devuelven null. */
   const guardarParametros = useCallback(
-    (parametros) => {
-      despachar('Se modificaron los parámetros del sistema', (prev) => ({ ...prev, parametros: { ...prev.parametros, ...parametros } }));
+    async (valores) => {
+      if (!base.capacidades.parametros) {
+        setAviso({ tipo: 'info', texto: 'Los parámetros todavía no se pueden guardar desde la aplicación en esta base.' });
+        return null;
+      }
+      return ejecutar('Parámetros guardados', () => api.guardarParametros(valores));
     },
-    [despachar],
+    [ejecutar, base.capacidades.parametros],
   );
 
   const guardarPlantilla = useCallback(
-    (texto) => {
-      despachar('Se modificó la plantilla de la cédula', (prev) => ({ ...prev, plantillaCedula: texto }));
+    async (texto) => {
+      if (!base.capacidades.parametros) {
+        setAviso({ tipo: 'info', texto: 'La plantilla todavía no se puede guardar desde la aplicación en esta base.' });
+        return null;
+      }
+      return ejecutar('Plantilla guardada', () => api.guardarPlantilla(texto));
     },
-    [despachar],
+    [ejecutar, base.capacidades.parametros],
   );
 
-  const reiniciarDemo = useCallback(() => {
-    localStorage.removeItem(CLAVE_ALMACEN);
-    setBase(crearSemilla());
-  }, []);
+  /* Corre ahora la recorrida diaria del backend: anota en el historial los
+     cambios de estado que produjo el paso del tiempo. */
+  const recalcularEstados = useCallback(
+    () =>
+      ejecutar(null, async () => {
+        const r = await api.recalcularEstados();
+        setAviso(
+          r.omitida
+            ? { tipo: 'info', texto: 'El historial de estados todavía no está habilitado en esta base.' }
+            : { tipo: 'success', texto: `Estados revisados: ${r.cambios} cambio(s) anotados en ${r.revisados} locales` },
+        );
+        return r;
+      }),
+    [ejecutar],
+  );
+
+  /* ==========================================================================
+     ACCESOS  (qué ve y qué modifica cada tipo de usuario)
+     --------------------------------------------------------------------------
+     Solo se guardan las DIFERENCIAS respecto de config/modulos.js:
+       permisos.modulos[idModulo][rol] = 'no' | 'ver' | 'editar'
+       permisos.rolesDeshabilitados    = roles apagados enteros
+     Lo que no está guardado sale del código, así un módulo nuevo aparece con
+     su reparto por defecto. La pantalla es Accesos → Tipos de usuario; la
+     restricción real va en el backend (tablas permisos_modulos y tipos_usuario).
+
+     Las tres escrituras necesitan las tablas opcionales de sql/07 y el rol
+     administrador. Sin las tablas el backend responde 501 y el cartel de error
+     lo dice.
+     ========================================================================== */
+  const guardarPermiso = useCallback(
+    (idModulo, rol, nivel) =>
+      ejecutar(`Accesos: ${rol} en ${idModulo} pasa a "${nivel}"`, () => api.guardarPermiso(idModulo, rol, nivel)),
+    [ejecutar],
+  );
+
+  /* Borra todo lo guardado para un rol: vuelve a lo que trae el código. */
+  const restablecerPermisosDeRol = useCallback(
+    (rol) => ejecutar(`Accesos: ${rol} vuelve a los valores por defecto`, () => api.restablecerPermisosDeRol(rol)),
+    [ejecutar],
+  );
+
+  /* Apaga o prende un tipo de usuario entero. Apagado, no ve ningún módulo
+     aunque tenga permisos guardados; sus usuarios siguen dados de alta. El
+     administrador también se puede apagar, pero conserva Tipos de usuario
+     (config/modulos.js, FIJOS): siempre hay una puerta para deshacerlo. */
+  const habilitarRol = useCallback(
+    (rol, habilitado) =>
+      ejecutar(`Accesos: ${rol} ${habilitado ? 'habilitado' : 'deshabilitado'}`, () => api.habilitarRol(rol, habilitado)),
+    [ejecutar],
+  );
+
+  /* Ya no hay demo que reiniciar: los datos son los de la base del área. Se
+     conserva la función para no romper la pantalla de Parámetros, y hace lo
+     único sensato que puede hacer, que es volver a pedir los datos. */
+  const reiniciarDemo = useCallback(
+    () => ejecutar('Datos actualizados desde el servidor', async () => null),
+    [ejecutar],
+  );
 
   /* ==========================================================================
      DERIVADOS
-     --------------------------------------------------------------------------
-     Se recalculan cuando cambian los datos. El estado de los 20 locales de la
-     demo se resuelve en microsegundos; con 2.000 tampoco es un problema, pero
-     si algún día lo fuera, el punto a optimizar es este useMemo, no las reglas.
      ========================================================================== */
   const localesConEstado = useMemo(() => conEstado(base, hoy), [base, hoy]);
 
@@ -746,20 +729,33 @@ function DatosProvider({ children }) {
       // --- datos crudos
       ...base,
       hoy,
+      cargando,
+      recargar: cargarTodo,
 
       // --- derivados
       localesConEstado,
       localPorId: (id) => localesConEstado.find((l) => l.id === Number(id)) ?? null,
       actuacionesDeLocal: (id) => deLocal(base.actuaciones, Number(id)),
       relevamientosDeLocal: (id) => base.relevamientos.filter((r) => r.localId === Number(id)),
-      auditoriaDeLocal: (id) => base.auditoria.filter((a) => a.localId === Number(id)),
-      // `modo` es el orden de las bandejas: 'prioridad' (por defecto) o 'cantidad'.
-      bandejasPara: (rol, modo) => bandejas(localesConEstado, rol, modo),
+      // El historial de estados que ya llegó para ese local ([] mientras tanto
+      // o si la base no tiene la tabla). Lo pide cargarAuditoria(id).
+      auditoriaDeLocal: (id) => auditorias[Number(id)] ?? [],
+      cargarAuditoria,
+      versionDatos,
+
+      // --- trabajo sin conexión
+      sinConexion,
+      pendientesSinConexion: pendientes,
+      sincronizar,
+      descartarPendiente,
+      bandejasPara: (rol, modo, opciones) => bandejas(localesConEstado, rol, modo, opciones),
       cedulas: () => cedulas(base),
       porVencer: (dias) => porVencer(localesConEstado, dias),
       documentosPorVencer: (dias) => documentosPorVencer(base, localesConEstado, dias, hoy),
       presentacionesPendientes: () => presentacionesPendientes(base),
       indicadores: () => indicadores(base, localesConEstado, hoy),
+      // Lo que pasó entre dos fechas ISO (Reportes, selector de período).
+      indicadoresDelPeriodo: (desde, hasta) => indicadoresDelPeriodo(base, desde, hasta),
 
       // --- acciones
       guardarLocal,
@@ -768,16 +764,21 @@ function DatosProvider({ children }) {
       desbloquearLocal,
       geocodificarPendientes,
       crearRelevamiento,
+      editarRelevamiento,
       revisarRelevamiento,
       generarCedula,
       regenerarCedula,
       asignarNotificador,
       marcarImpresa,
+      marcarImpresas,
       registrarEntrega,
+      corregirEntrega,
       registrarDocumento,
       validarPresentacion,
       otorgarProrroga,
+      solicitarProrroga,
       registrarExpediente,
+      numeroDefinitivoExpediente,
       reingresarAlCircuito,
       fusionarLocales,
       aplicarInforme9DJ,
@@ -785,19 +786,89 @@ function DatosProvider({ children }) {
       eliminarDeCatalogo,
       guardarParametros,
       guardarPlantilla,
+      guardarPermiso,
+      restablecerPermisosDeRol,
+      habilitarRol,
       reiniciarDemo,
+      recalcularEstados,
     }),
     [
-      base, hoy, localesConEstado,
+      base, hoy, cargando, cargarTodo, localesConEstado,
+      auditorias, cargarAuditoria, versionDatos, sinConexion, pendientes, sincronizar, descartarPendiente,
       guardarLocal, eliminarLocal, bloquearLocal, desbloquearLocal, geocodificarPendientes,
-      crearRelevamiento, revisarRelevamiento, generarCedula, regenerarCedula, asignarNotificador,
-      marcarImpresa, registrarEntrega, registrarDocumento, validarPresentacion, otorgarProrroga,
-      registrarExpediente, reingresarAlCircuito, fusionarLocales, aplicarInforme9DJ,
-      guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla, reiniciarDemo,
+      crearRelevamiento, editarRelevamiento, revisarRelevamiento, generarCedula, regenerarCedula, asignarNotificador,
+      marcarImpresa, marcarImpresas, registrarEntrega, corregirEntrega, registrarDocumento, validarPresentacion, otorgarProrroga, solicitarProrroga,
+      registrarExpediente, numeroDefinitivoExpediente, reingresarAlCircuito, fusionarLocales, aplicarInforme9DJ,
+      guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla,
+      guardarPermiso, restablecerPermisosDeRol, habilitarRol, reiniciarDemo, recalcularEstados,
     ],
   );
 
-  return <DatosContext.Provider value={valor}>{children}</DatosContext.Provider>;
+  /* ==========================================================================
+     LO QUE SE VE MIENTRAS TANTO
+     ========================================================================== */
+
+  if (cargando) {
+    return (
+      <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '100vh', gap: 2 }}>
+        <CircularProgress />
+        <Typography color="text.secondary">Cargando el padrón desde el servidor…</Typography>
+      </Box>
+    );
+  }
+
+  /* Si la carga inicial falló no se puede mostrar nada: sin locales no hay
+     pantalla que tenga sentido. Se explica qué pasó y se ofrece reintentar, que
+     es lo que resuelve el caso más común (el backend todavía no estaba
+     levantado cuando se abrió la página). */
+  if (errorCarga) {
+    return (
+      <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '100vh', p: 3 }}>
+        <Alert
+          severity="error"
+          sx={{ maxWidth: 560 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => window.location.reload()}>
+              Reintentar
+            </Button>
+          }
+        >
+          <Typography fontWeight={600} gutterBottom>
+            No se pudieron cargar los datos
+          </Typography>
+          <Typography variant="body2" gutterBottom>
+            {errorCarga}
+          </Typography>
+          {/* Lo que puede hacer un agente en la calle, y abajo lo que mira DITEC. */}
+          <Typography variant="body2" gutterBottom>
+            Si estás sin señal, reintentá cuando vuelva: la primera vez hace falta conexión para bajar los datos.
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Revisá que el backend esté corriendo (<code>cd backend &amp;&amp; npm run dev</code>) y que la
+            base responda (<code>npm run probar</code>).
+          </Typography>
+        </Alert>
+      </Box>
+    );
+  }
+
+  return (
+    <DatosContext.Provider value={valor}>
+      {children}
+      <Snackbar
+        open={Boolean(aviso)}
+        autoHideDuration={aviso?.tipo === 'error' ? 10000 : 4000}
+        onClose={() => setAviso(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        {aviso ? (
+          <Alert severity={aviso.tipo} onClose={() => setAviso(null)} variant="filled" sx={{ maxWidth: 600 }}>
+            {aviso.texto}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
+    </DatosContext.Provider>
+  );
 }
 
 export default DatosProvider;

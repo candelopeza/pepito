@@ -1,3 +1,4 @@
+import { useCallback, useMemo, useState } from 'react';
 /* ============================================================================
    pages/Expediente.jsx  —  EXPEDIENTES DE MULTA  (URL: /#/expedientes)
    ----------------------------------------------------------------------------
@@ -27,16 +28,27 @@
 
 import { Link } from 'react-router-dom';
 import PageHeader from '../components/ui/PageHeader';
+import Grilla from '../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import AccionesLocal from '../components/AccionesLocal';
+import Modal from '../components/ui/Modal';
+import Campo from '../components/ui/Campo';
 import { useDatos } from '../datos/datosContexto';
+import { useRol } from '../auth/rolContexto';
+import { puedeEditar } from '../config/modulos';
 import { correPlazo } from '../dominio/actuaciones';
 import { fmtFecha } from '../dominio/fechas';
 import { faltantesRegistrales } from '../dominio/reglas';
 
 function Expediente() {
-  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, parametros } = useDatos();
+  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, parametros, permisos, numeroDefinitivoExpediente } =
+    useDatos();
+  const { rol } = useRol();
+  const puedeCargarNumero = puedeEditar(rol, 'expedientes', permisos);
+  // El expediente provisorio al que se le está cargando el número definitivo.
+  const [definitivo, setDefinitivo] = useState(null);
+  const [numero, setNumero] = useState('');
 
   const paraGenerar = localesConEstado.filter((l) => l.estado === 'GENERAR_EXPEDIENTE');
   const iniciados = actuaciones
@@ -46,11 +58,138 @@ function Expediente() {
 
   /* Cuántas entregas FEHACIENTES tiene el local. Es el control de debido
      proceso: dos entregas efectivas son la condición para el expediente. */
-  const entregasFehacientes = (localId) =>
-    actuacionesDeLocal(localId).filter((a) => a.tipo === 'NOTIFICACION' && correPlazo(a.resultado)).length;
+  const entregasFehacientes = useCallback(
+    (localId) =>
+      actuacionesDeLocal(localId).filter((a) => a.tipo === 'NOTIFICACION' && correPlazo(a.resultado)).length,
+    [actuacionesDeLocal],
+  );
 
   const sinDebidoProceso = paraGenerar.filter((l) => entregasFehacientes(l.id) < 2);
   const sinDatos = paraGenerar.filter((l) => faltantesRegistrales(l).length > 0);
+
+  /* Locales que ya agotaron las dos notificaciones y esperan el expediente. */
+  const columnasParaGenerar = useMemo(
+    () => [
+      {
+        field: 'nombreLocal',
+        headerName: 'Local',
+        flex: 1.2,
+        minWidth: 200,
+        renderCell: ({ row }) => (
+          <span className="celda-apilada">
+            <Link to={`/locales/${row.id}`} className="link-local">
+              {row.nombreLocal}
+            </Link>
+            <small className="celda-sub">{row.razonSocial || 'SIN RAZÓN SOCIAL'}</small>
+          </span>
+        ),
+      },
+      {
+        field: 'cuit',
+        headerName: 'CUIT',
+        width: 150,
+        renderCell: ({ row }) => row.cuit || <Badge color="rojo">Falta</Badge>,
+      },
+      {
+        field: 'fehacientes',
+        headerName: 'Notificaciones fehacientes',
+        width: 230,
+        valueGetter: (_v, row) => entregasFehacientes(row.id),
+        renderCell: ({ row }) => {
+          const cantidad = entregasFehacientes(row.id);
+          return cantidad >= 2 ? (
+            <Badge color="verde">{cantidad} entregas</Badge>
+          ) : (
+            <Badge color="rojo">{cantidad} entrega(s)</Badge>
+          );
+        },
+      },
+      {
+        field: 'estado',
+        headerName: 'Estado',
+        width: 210,
+        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} sinColor />,
+      },
+      {
+        field: 'acciones',
+        headerName: 'Acciones',
+        width: 260,
+        sortable: false,
+        filterable: false,
+        renderCell: ({ row }) => <AccionesLocal local={row} compacto />,
+      },
+    ],
+    [entregasFehacientes],
+  );
+
+  /* Los expedientes ya iniciados. Cada fila es una ACTUACIÓN de tipo
+     EXPEDIENTE con su local adentro. */
+  const columnasIniciados = useMemo(
+    () => [
+      {
+        field: 'numeroExpediente',
+        headerName: 'N° de expediente',
+        width: 180,
+        renderCell: ({ row }) =>
+          String(row.numeroExpediente ?? '').startsWith('PROV-') ? (
+            <span className="celda-apilada">
+              <strong>{row.numeroExpediente}</strong>
+              {puedeCargarNumero ? (
+                <button
+                  type="button"
+                  className="btn-tabla"
+                  onClick={() => {
+                    setNumero('');
+                    setDefinitivo(row);
+                  }}
+                >
+                  Cargar número definitivo
+                </button>
+              ) : (
+                <small className="celda-sub">provisorio</small>
+              )}
+            </span>
+          ) : (
+            <strong>{row.numeroExpediente}</strong>
+          ),
+      },
+      {
+        field: 'local',
+        headerName: 'Local',
+        flex: 1,
+        minWidth: 180,
+        valueGetter: (_v, row) => row.local?.nombreLocal ?? `Local ${row.localId}`,
+        renderCell: ({ row }) => (
+          <Link to={`/locales/${row.localId}`} className="link-local">
+            {row.local?.nombreLocal ?? `Local ${row.localId}`}
+          </Link>
+        ),
+      },
+      { field: 'cuit', headerName: 'CUIT', width: 150, valueGetter: (_v, row) => row.local?.cuit || '—' },
+      { field: 'fecha', headerName: 'Fecha', width: 120, renderCell: ({ row }) => fmtFecha(row.fecha) },
+      { field: 'usuario', headerName: 'Registró', width: 150 },
+      {
+        field: 'estadoLocal',
+        headerName: 'Estado actual del local',
+        width: 210,
+        valueGetter: (_v, row) => row.local?.estado ?? '',
+        /* Puede NO decir "Expediente": si el titular presentó documentación
+           después, el local ya salió del circuito y el expediente quedó en el
+           historial. */
+        renderCell: ({ row }) => <BadgeEstado codigo={row.local?.estado} sinColor />,
+      },
+      {
+        field: 'acciones',
+        headerName: 'Acciones',
+        width: 260,
+        sortable: false,
+        filterable: false,
+        renderCell: ({ row }) => row.local && <AccionesLocal local={row.local} compacto />,
+      },
+    ],
+    [puedeCargarNumero],
+  );
+  const provisorios = iniciados.filter((a) => String(a.numeroExpediente ?? '').startsWith('PROV-'));
 
   return (
     <>
@@ -86,46 +225,13 @@ function Expediente() {
           Un local llega acá cuando vence la segunda notificación sin presentación, o cuando vence una prórroga.
         </Vacio>
       ) : (
-        <table className="tabla-datos tabla-bandeja">
-          <thead>
-            <tr>
-              <th>Local</th>
-              <th>CUIT</th>
-              <th>Notificaciones fehacientes</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paraGenerar.map((l) => {
-              const fehacientes = entregasFehacientes(l.id);
-              return (
-                <tr key={l.id}>
-                  <td>
-                    <Link to={`/locales/${l.id}`} className="link-local">
-                      {l.nombreLocal}
-                    </Link>
-                    <small className="celda-sub">{l.razonSocial || 'SIN RAZÓN SOCIAL'}</small>
-                  </td>
-                  <td>{l.cuit || <Badge color="rojo">Falta</Badge>}</td>
-                  <td>
-                    {fehacientes >= 2 ? (
-                      <Badge color="verde">{fehacientes} entregas</Badge>
-                    ) : (
-                      <Badge color="rojo">{fehacientes} entrega(s)</Badge>
-                    )}
-                  </td>
-                  <td>
-                    <BadgeEstado codigo={l.estado} />
-                  </td>
-                  <td>
-                    <AccionesLocal local={l} compacto />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <Grilla
+          filas={paraGenerar}
+          columnas={columnasParaGenerar}
+          nombreArchivo="expedientes-para-generar"
+          vacio="No hay locales para generar expediente."
+          alto="auto"
+        />
       )}
 
       {/* ================= INICIADOS ================= */}
@@ -133,46 +239,55 @@ function Expediente() {
         <span>Expedientes iniciados ({iniciados.length})</span>
       </div>
 
+      {provisorios.length > 0 && (
+        <Aviso
+          tipo="alerta"
+          titulo={`${provisorios.length} expediente(s) con número provisorio: falta el de la mesa de entradas`}
+        />
+      )}
+
+      {definitivo && (
+        <Modal abierto etiqueta="EXPEDIENTE" titulo="Número definitivo" onCerrar={() => setDefinitivo(null)}>
+          <div className="formulario formulario-modal">
+            <div className="bloque-info">
+              <strong>{definitivo.local?.nombreLocal ?? `Local ${definitivo.localId}`}</strong>
+              <span>Provisorio {definitivo.numeroExpediente}</span>
+            </div>
+            <Campo
+              id="exp-definitivo"
+              etiqueta="N° de la mesa de entradas"
+              valor={numero}
+              onChange={setNumero}
+            />
+            <div className="form-acciones">
+              <button
+                type="button"
+                className="btn-primario"
+                disabled={!numero.trim()}
+                onClick={async () => {
+                  if (await numeroDefinitivoExpediente(definitivo.id, numero.trim())) setDefinitivo(null);
+                }}
+              >
+                Guardar
+              </button>
+              <button type="button" className="btn-secundario" onClick={() => setDefinitivo(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {iniciados.length === 0 ? (
         <Vacio titulo="Todavía no se inició ningún expediente" />
       ) : (
-        <table className="tabla-datos">
-          <thead>
-            <tr>
-              <th>N° de expediente</th>
-              <th>Local</th>
-              <th>CUIT</th>
-              <th>Fecha</th>
-              <th>Registró</th>
-              <th>Estado actual del local</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {iniciados.map((e) => (
-              <tr key={e.id}>
-                <td>
-                  <strong>{e.numeroExpediente}</strong>
-                </td>
-                <td>
-                  <Link to={`/locales/${e.localId}`} className="link-local">
-                    {e.local?.nombreLocal ?? `Local ${e.localId}`}
-                  </Link>
-                </td>
-                <td>{e.local?.cuit || '—'}</td>
-                <td>{fmtFecha(e.fecha)}</td>
-                <td>{e.usuario}</td>
-                <td>
-                  {/* Puede NO decir "Expediente": si el titular presentó
-                      documentación después, el local ya salió del circuito y
-                      el expediente quedó en el historial. */}
-                  <BadgeEstado codigo={e.local?.estado} />
-                </td>
-                <td>{e.local && <AccionesLocal local={e.local} compacto />}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Grilla
+          filas={iniciados}
+          columnas={columnasIniciados}
+          nombreArchivo="expedientes-iniciados"
+          vacio="Todavía no se inició ningún expediente."
+          alto="auto"
+        />
       )}
 
     </>

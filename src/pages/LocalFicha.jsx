@@ -5,23 +5,25 @@
    Es donde alguien decide un acto administrativo, así que tiene que mostrar
    TODO el contexto de esa decisión en un solo lugar (sección 6.1).
 
-   CUATRO BLOQUES:
-     1. Situación actual   estado calculado, plazo en curso, documentación
-                           vigente, y las acciones que corresponden
+   TRES BLOQUES:
+     1. Situación actual   estado, plazo en curso, documentación vigente, y las
+                           acciones que corresponden
      2. Datos del padrón   incluido el relevamiento de origen
      3. Historial          todas las actuaciones en orden cronológico
-     4. Auditoría          cada cambio de estado, con actor, momento y motivo
 
-   EL BLOQUE 4 NO EXISTE EN EL SISTEMA VIEJO. Hoy el estado se sobrescribe sin
-   dejar rastro: no se puede saber cuándo un local pasó a expediente ni quién
-   lo movió. Sin eso no hay métricas de tiempo de ciclo y, sobre todo, no hay
-   nada que mostrar ante una impugnación (sección 5.2).
+   EL HISTORIAL ES LA TRAZABILIDAD. Cada trámite guarda quién lo registró y
+   cuándo, así que de ahí sale qué le pasó al local y en qué orden.
 
    LAS DOS COORDENADAS SE MUESTRAN SEPARADAS Y ETIQUETADAS. No es un detalle
    estético: son datos distintos con propósitos distintos, y confundirlos es el
    error conceptual que arrastra el sistema actual (sección 9.2).
+
+   EDITAR DATOS (2026-10-02): quien edita el padrón corrige el teléfono o el
+   correo desde acá, sin volver al listado. El acto "Completar datos" sigue
+   igual: ese es el paso del circuito; esto es mantener el padrón al día.
    ============================================================================ */
 
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import PageHeader from '../components/ui/PageHeader';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
@@ -29,8 +31,13 @@ import Aviso, { Vacio } from '../components/ui/Aviso';
 import { Dato } from '../components/ui/Campo';
 import AccionesLocal from '../components/AccionesLocal';
 import HistorialActuaciones from '../components/HistorialActuaciones';
+import HistorialEstados from '../components/HistorialEstados';
+import Modal from '../components/ui/Modal';
+import FormLocal from '../components/FormLocal';
 import { useDatos } from '../datos/datosContexto';
-import { etiquetaEstado } from '../dominio/estados';
+import { useRol } from '../auth/rolContexto';
+import { puedeEditar, puedeVerRuta } from '../config/modulos';
+
 import { ETIQUETA_DOCUMENTO } from '../dominio/actuaciones';
 import { fmtFecha, fmtFechaHora } from '../dominio/fechas';
 import { faltantesRegistrales } from '../dominio/reglas';
@@ -38,9 +45,31 @@ import { colorClasificacion, etiquetaClasificacion } from '../config/catalogos';
 
 function LocalFicha() {
   const { id } = useParams();
-  const { localPorId, actuacionesDeLocal, relevamientosDeLocal, auditoriaDeLocal, usuarios } = useDatos();
+  const {
+    localPorId,
+    actuacionesDeLocal,
+    relevamientosDeLocal,
+    usuarios,
+    capacidades,
+    auditoriaDeLocal,
+    cargarAuditoria,
+    versionDatos,
+    guardarLocal,
+    permisos,
+  } = useDatos();
+  const { rol } = useRol();
+  // Va antes del "local no encontrado": los hooks no pueden quedar después
+  // de un return.
+  const [editando, setEditando] = useState(false);
 
   const local = localPorId(id);
+
+  // El historial de estados se pide al abrir la ficha, y otra vez cada vez
+  // que llegan datos nuevos (después de un acto, por ejemplo).
+  const idLocal = local?.id;
+  useEffect(() => {
+    if (idLocal) cargarAuditoria(idLocal);
+  }, [idLocal, versionDatos, cargarAuditoria]);
 
   // Puede pasar: alguien guardó el link de un local que después se fusionó o
   // se eliminó. Mejor decirlo que mostrar una pantalla vacía.
@@ -57,13 +86,19 @@ function LocalFicha() {
 
   const actuaciones = actuacionesDeLocal(local.id);
   const relevamientos = relevamientosDeLocal(local.id);
-  const auditoria = [...auditoriaDeLocal(local.id)].reverse();
   const faltan = faltantesRegistrales(local);
-  const relevamientoOrigen = relevamientos[0] ?? null;
+  // El de ORIGEN es el primero en el tiempo. La lista llega con el más nuevo
+  // adelante, así que antes se mostraba el último relevamiento.
+  const relevamientoOrigen =
+    [...relevamientos].sort((a, b) => String(a.fechaHora ?? '').localeCompare(String(b.fechaHora ?? '')))[0] ?? null;
+  const nombreDe = (idUsuario) => usuarios.find((u) => u.id === idUsuario)?.nombre ?? idUsuario ?? '—';
 
   const docsVigentes = ['contrato', 'reciclaje', 'ddjj']
     .map((k) => local.vigente[k])
     .filter(Boolean);
+
+  const puedeEditarPadron = puedeEditar(rol, 'locales', permisos) && !local.bloqueado;
+  const solicitud = local.solicitudProrroga;
 
   return (
     <>
@@ -74,7 +109,27 @@ function LocalFicha() {
         botonVolver
         volverA="/locales"
         volverTexto="VOLVER AL PADRÓN"
+        acciones={
+          puedeEditarPadron && (
+            <button type="button" className="btn-secundario" onClick={() => setEditando(true)}>
+              Editar datos
+            </button>
+          )
+        }
       />
+
+      {editando && (
+        <Modal abierto etiqueta="PADRÓN" titulo="Editar datos del local" ancho="ancho" onCerrar={() => setEditando(false)}>
+          <FormLocal
+            local={local}
+            onGuardar={async (l) => {
+              // Se cierra solo si se guardó: si falla, queda lo escrito.
+              if (await guardarLocal(l)) setEditando(false);
+            }}
+            onCancelar={() => setEditando(false)}
+          />
+        </Modal>
+      )}
 
       {/* ================= 1. SITUACIÓN ACTUAL ================= */}
       <div className="accesos-header">
@@ -103,8 +158,17 @@ function LocalFicha() {
           Lo que la persona necesita saber ANTES de apretar un botón. */}
       {local.bloqueado && (
         <Aviso tipo="bloqueo" titulo="Bloqueo manual activo">
-          Este local está excluido del cálculo automático de estado. Bloqueado por {local.bloqueadoPor} el{' '}
-          {fmtFechaHora(local.bloqueadoEn)}. Motivo: {local.bloqueadoMotivo}
+          Este local está excluido del cálculo automático de estado. Bloqueado por {nombreDe(local.bloqueadoPor)}
+          {local.bloqueadoEn ? ` el ${fmtFechaHora(local.bloqueadoEn)}` : ''}. Motivo: {local.bloqueadoMotivo}
+        </Aviso>
+      )}
+
+      {solicitud && (
+        <Aviso
+          tipo="info"
+          titulo={`El titular pidió una prórroga${solicitud.dias ? ` de ${solicitud.dias} día(s)` : ''} el ${fmtFechaHora(solicitud.momento)}`}
+        >
+          {solicitud.motivo}
         </Aviso>
       )}
 
@@ -127,7 +191,13 @@ function LocalFicha() {
       {local.sinGeo && (
         <Aviso tipo="alerta" titulo="El local no tiene ubicación en el padrón">
           {local.motivoSinGeo} No aparece en el mapa ni entra en el ruteo de notificaciones. Corregí la dirección para que se pueda
-          geocodificar. <Link to="/herramientas/geocodificacion">Ver todos los pendientes</Link>.
+          geocodificar.
+          {puedeVerRuta(rol, '/herramientas/geocodificacion', permisos) && (
+            <>
+              {' '}
+              <Link to="/herramientas/geocodificacion">Ver todos los pendientes</Link>.
+            </>
+          )}
         </Aviso>
       )}
 
@@ -184,9 +254,7 @@ function LocalFicha() {
           </Dato>
           <Dato etiqueta="Control de coordinación" ancho={2}>
             {relevamientoOrigen.revisadoEn
-              ? `${relevamientoOrigen.revisadoPor} el ${fmtFechaHora(relevamientoOrigen.revisadoEn)} · resultado: ${
-                  relevamientoOrigen.resultadoRevision ?? '—'
-                }`
+              ? `Controlado el ${fmtFechaHora(relevamientoOrigen.revisadoEn)}`
               : 'pendiente de control'}
           </Dato>
           {relevamientoOrigen.offline && (
@@ -205,40 +273,18 @@ function LocalFicha() {
       <div className="accesos-header">
         <span>Historial de actuaciones ({actuaciones.length})</span>
       </div>
-      <HistorialActuaciones actuaciones={actuaciones} usuarios={usuarios} />
+      <HistorialActuaciones actuaciones={actuaciones} usuarios={usuarios} local={local} />
 
-      {/* ================= 4. AUDITORÍA DE ESTADOS ================= */}
-      <div className="accesos-header">
-        <span>Historial de cambios de estado ({auditoria.length})</span>
-      </div>
-      {auditoria.length === 0 ? (
-        <Vacio titulo="Sin cambios registrados">
-          La auditoría empieza a llenarse con los cambios que se hacen desde la aplicación. Los estados que vienen de la
-          importación del sistema anterior no tienen historial: allá el estado se sobrescribía sin dejar rastro.
-        </Vacio>
-      ) : (
-        <table className="tabla-datos">
-          <thead>
-            <tr>
-              <th>Momento</th>
-              <th>De</th>
-              <th>A</th>
-              <th>Motivo</th>
-              <th>Actor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {auditoria.map((a) => (
-              <tr key={a.id}>
-                <td>{fmtFechaHora(a.momento)}</td>
-                <td>{a.estadoAnterior ? etiquetaEstado(a.estadoAnterior) : '—'}</td>
-                <td>{etiquetaEstado(a.estadoNuevo)}</td>
-                <td>{a.motivo}</td>
-                <td>{a.actor}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* LA AUDITORÍA DE ESTADOS aparece solo si la base tiene la tabla
+          `auditoria` (backend/sql/05-tabla-auditoria.sql). Sin ella no se
+          muestra: una sección vacía permanente sugería que faltaba cargar algo. */}
+      {capacidades?.auditoria && (
+        <>
+          <div className="accesos-header">
+            <span>Historial de estados</span>
+          </div>
+          <HistorialEstados filas={auditoriaDeLocal(local.id)} />
+        </>
       )}
     </>
   );

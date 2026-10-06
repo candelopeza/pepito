@@ -30,7 +30,7 @@ import Grilla from '../components/ui/Grilla';
 import Modal from '../components/ui/Modal';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso from '../components/ui/Aviso';
-import { CampoSelect } from '../components/ui/Campo';
+import BuscadorLocal from '../components/BuscadorLocal';
 import FormDocumento from '../components/FormDocumento';
 import HistorialActuaciones from '../components/HistorialActuaciones';
 import { useRol } from '../auth/rolContexto';
@@ -44,16 +44,18 @@ const PASOS = ['Seleccionar local', 'Situación del proceso', 'Documento'];
 
 function Documentacion() {
   const { rol } = useRol();
-  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, usuarios, registrarDocumento } = useDatos();
-  const puedeCargar = puedeEditar(rol, 'documentacion');
+  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, usuarios, registrarDocumento, permisos } = useDatos();
+  const puedeCargar = puedeEditar(rol, 'documentacion', permisos);
 
-  const [buscar, setBuscar] = useState('');
-  const [filtroTipo, setFiltroTipo] = useState('');
   const [modal, setModal] = useState(false);
   const [paso, setPaso] = useState(0);
   const [localId, setLocalId] = useState('');
 
   const localElegido = localId ? localPorId(localId) : null;
+  const localesSinExentos = useMemo(
+    () => localesConEstado.filter((l) => l.estado !== 'EXENTO_CONFIRMADO'),
+    [localesConEstado],
+  );
 
   function cerrar() {
     setModal(false);
@@ -142,21 +144,17 @@ function Documentacion() {
         field: 'estadoLocal',
         headerName: 'Estado del local',
         width: 215,
-        renderCell: ({ value }) => <BadgeEstado codigo={value} />,
+        renderCell: ({ value }) => <BadgeEstado codigo={value} sinColor />,
       },
     ],
     [],
   );
 
-  const filas = useMemo(() => {
-    const q = buscar.trim().toLowerCase();
-    return documentos.filter((d) => {
-      const enTexto =
-        !q || [d.nombreLocal, d.numero, d.expedienteTramite].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
-      const enTipo = !filtroTipo || d.tipo === filtroTipo;
-      return enTexto && enTipo;
-    });
-  }, [documentos, buscar, filtroTipo]);
+  /* LA BÚSQUEDA ES LA DE LA GRILLA. Esta pantalla tenía su propio buscador
+     encima de la tabla, que hacía lo mismo que el buscador rápido del Data
+     Grid. Con los dos puestos, el resultado salía de combinarlos y no había
+     forma de entender por qué faltaba una fila. */
+  const filas = documentos;
 
   const sinExpediente = documentos.filter((d) => !d.expedienteTramite && d.origen !== 'INFORME_9DJ').length;
 
@@ -170,22 +168,9 @@ function Documentacion() {
       />
 
       {sinExpediente > 0 && (
-        <Aviso tipo="alerta" titulo={`${sinExpediente} documento(s) sin número de expediente de trámite`}>
-          Vienen de la importación del sistema anterior, que no guardaba ese dato. Hasta completarlos no se puede reconstruir desde
-          el sistema el trámite que respalda esa acreditación.
+        <Aviso tipo="alerta" titulo={`${sinExpediente} documentos sin número de expediente de trámite`}>
         </Aviso>
       )}
-
-      <div className="filtros-fila">
-        <CampoSelect
-          id="filtro-tipo-doc"
-          etiqueta="Filtrar por tipo"
-          valor={filtroTipo}
-          onChange={setFiltroTipo}
-          opciones={TIPOS_DOCUMENTO.map((t) => ({ id: t, etiqueta: ETIQUETA_DOCUMENTO[t] }))}
-          vacio="Todos los tipos"
-        />
-      </div>
 
       <Grilla
         filas={filas}
@@ -193,7 +178,6 @@ function Documentacion() {
         nombreArchivo="documentacion"
         vacio="Todavía no hay documentación registrada."
         ordenInicial={[{ field: 'fechaEmision', sort: 'desc' }]}
-        buscadores={[{ placeholder: 'Buscar por local, número o expediente...', valor: buscar, onChange: setBuscar }]}
         botones={
           puedeCargar && (
             <button
@@ -227,16 +211,14 @@ function Documentacion() {
                 <p>Elegí el local para ver su situación actual antes de registrar nada.</p>
               </div>
 
-              <CampoSelect
-                id="doc-local"
-                etiqueta="Local"
+              {/* Antes era un desplegable con los 2.200 locales. Ahora se busca
+                  escribiendo parte del nombre, la dirección o el CUIT. */}
+              <BuscadorLocal
+                locales={localesSinExentos}
                 valor={localId}
-                onChange={setLocalId}
-                opciones={localesConEstado
-                  .filter((l) => l.estado !== 'EXENTO_CONFIRMADO')
-                  .map((l) => ({ id: l.id, etiqueta: `${l.nombreLocal} — ${l.direccion}` }))}
-                vacio="Seleccionar establecimiento"
-                ayuda="Los locales con exención confirmada no aparecen: no tienen que presentar documentación."
+                onElegir={setLocalId}
+                etiqueta="Local"
+                ayuda="Escribí el nombre, la dirección o el CUIT. Los exentos confirmados no aparecen: no presentan documentación."
               />
 
               <div className="form-acciones">
@@ -314,9 +296,9 @@ function Documentacion() {
           {paso === 2 && localElegido && (
             <FormDocumento
               local={localElegido}
-              onGuardar={(d) => {
-                registrarDocumento(localElegido.id, d);
-                cerrar();
+              onGuardar={async (d) => {
+                // Se cierra solo si se registró: si falla, queda lo escrito.
+                if (await registrarDocumento(localElegido.id, d)) cerrar();
               }}
               onCancelar={() => setPaso(1)}
             />

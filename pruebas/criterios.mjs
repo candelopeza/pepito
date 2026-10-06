@@ -15,7 +15,7 @@
 import { vencimientoHabil, plazoVencido } from '../src/dominio/fechas.js';
 import { vencimientoAnual, estaVigente } from '../src/dominio/vigencias.js';
 import { resolverEstado } from '../src/dominio/reglas.js';
-import { completarNumeroCedula, mismoNumeroCedula, numeroCedula } from '../src/dominio/actuaciones.js';
+import { armarNumeroCedula, completarNumeroCedula, mismoNumeroCedula, numeroCedula } from '../src/dominio/actuaciones.js';
 
 let ok = 0;
 let mal = 0;
@@ -149,6 +149,11 @@ chequear('sin dígitos no hay número', completarNumeroCedula('CED-'), '');
 chequear('1275 es la misma cédula que CED-001275', mismoNumeroCedula('1275', 'CED-001275'), true);
 chequear('1276 NO es la cédula asignada', mismoNumeroCedula('1276', 'CED-001275'), false);
 chequear('lo vacío no coincide con ninguna cédula', mismoNumeroCedula('', 'CED-001275'), false);
+// Formato de la base del área: SERIE-CORRELATIVO. El notificador escribe el
+// correlativo, lo que figura después del guion en el papel.
+chequear('675 es la cédula 0001-675 de la base', mismoNumeroCedula('675', '0001-675'), true);
+chequear('676 NO es la cédula 0001-675', mismoNumeroCedula('676', '0001-675'), false);
+chequear('escribiendo 675 se arma 0001-675', armarNumeroCedula('675', '0001-675'), '0001-675');
 
 console.log(`\n${ok} criterio(s) cumplidos · ${mal} falla(s)`);
 if (mal) process.exit(1);

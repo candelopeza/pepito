@@ -28,3 +28,7 @@ dist-ssr
 
 # Backend: credenciales de la base, nunca al repo
 backend/.env
+backend/revision/
+
+# Backend: fotos de entregas y documentos subidos (van en el respaldo del servidor, no al repo)
+backend/archivos/

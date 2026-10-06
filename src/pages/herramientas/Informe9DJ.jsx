@@ -19,6 +19,16 @@
    actualizaciones y coincidencias dudosas— y un agente confirma antes de
    aplicar. Conserva la eficiencia y elimina el riesgo.
 
+   EL ARCHIVO: el CSV que guarda Excel ("Guardar como → CSV"). Lo lee
+   datos/leerInforme.js, que reconoce las columnas por su título.
+
+   EL INFORME DE EJEMPLO sigue estando, para mostrar cómo funciona la pantalla,
+   pero NO SE PUEDE APLICAR: son contratos inventados y la base es la del área.
+
+   LAS COINCIDENCIAS DUDOSAS ARRANCAN DESTILDADAS. Son justamente los casos que
+   la automatización vieja resolvía mal: alguien tiene que mirarlas y tildar a
+   propósito las que corresponden.
+
    POR QUÉ EL CONTRATO INFORMADO TIENE ESTADO PROPIO (CONTRATO_9DJ, sección
    4.6): su vigencia no se acredita con un documento cargado en el sistema sino
    con la información periódica que remite la empresa, así que solo puede
@@ -26,23 +36,63 @@
    distinto del de un contrato presentado por el titular.
    ============================================================================ */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
+import Grilla from '../../components/ui/Grilla';
 import Badge from '../../components/ui/Badge';
 import Aviso, { Vacio } from '../../components/ui/Aviso';
 import Confirmar from '../../components/ui/Confirmar';
 import { useDatos } from '../../datos/datosContexto';
 import { INFORME_9DJ_EJEMPLO } from '../../datos/semilla';
+import { leerInformeCsv } from '../../datos/leerInforme';
 import { normalizarCuit, similitud } from '../../dominio/duplicados';
 import { fmtFecha } from '../../dominio/fechas';
 
 function Informe9DJ() {
   const { localesConEstado, aplicarInforme9DJ } = useDatos();
 
-  const [cargado, setCargado] = useState(false);
-  const [excluidas, setExcluidas] = useState([]);
+  // De dónde salieron las filas: null (nada cargado), 'archivo' o 'ejemplo'.
+  const [origen, setOrigen] = useState(null);
+  const [filasInforme, setFilasInforme] = useState([]);
+  const [erroresArchivo, setErroresArchivo] = useState([]);
+  const [nombreArchivo, setNombreArchivo] = useState('');
+  // Lo que la persona decidió fila por fila. Lo que no tocó vale lo de
+  // siempre: se aplica, salvo las coincidencias dudosas.
+  const [decisiones, setDecisiones] = useState({});
   const [confirmar, setConfirmar] = useState(false);
+  const cargado = origen !== null;
+  const esEjemplo = origen === 'ejemplo';
+
+  function descartar() {
+    setOrigen(null);
+    setFilasInforme([]);
+    setErroresArchivo([]);
+    setNombreArchivo('');
+    setDecisiones({});
+  }
+
+  function cargarEjemplo() {
+    descartar();
+    setFilasInforme(INFORME_9DJ_EJEMPLO);
+    setOrigen('ejemplo');
+  }
+
+  function cargarArchivo(ev) {
+    const archivo = ev.target.files?.[0];
+    ev.target.value = '';
+    if (!archivo) return;
+    const lector = new FileReader();
+    lector.onload = () => {
+      const { filas, errores } = leerInformeCsv(String(lector.result ?? ''));
+      descartar();
+      setFilasInforme(filas);
+      setErroresArchivo(errores);
+      setNombreArchivo(archivo.name);
+      setOrigen('archivo');
+    };
+    lector.readAsText(archivo);
+  }
 
   /* La previsualización: qué haría cada fila del informe. Es el corazón de la
      pantalla. Se decide por CUIT normalizado (el criterio fuerte) y, si no
@@ -50,7 +100,7 @@ function Informe9DJ() {
   const analisis = useMemo(() => {
     if (!cargado) return [];
 
-    return INFORME_9DJ_EJEMPLO.map((fila, i) => {
+    return filasInforme.map((fila, i) => {
       const cuitFila = normalizarCuit(fila.cuit);
       const porCuit = localesConEstado.find((l) => cuitFila && normalizarCuit(l.cuit) === cuitFila);
 
@@ -93,13 +143,77 @@ function Informe9DJ() {
         detalle: 'No está en el padrón: se crea un local nuevo con prefijo CON en el id legacy.',
       };
     });
-  }, [cargado, localesConEstado]);
+  }, [cargado, filasInforme, localesConEstado]);
 
-  const aAplicar = analisis.filter((a) => !excluidas.includes(a.indice));
+  const aplica = useCallback((fila) => decisiones[fila.indice] ?? fila.accion !== 'dudosa', [decisiones]);
+  const aAplicar = analisis.filter(aplica);
   const dudosas = analisis.filter((a) => a.accion === 'dudosa');
 
-  const alternar = (indice) =>
-    setExcluidas((prev) => (prev.includes(indice) ? prev.filter((x) => x !== indice) : [...prev, indice]));
+  /* Va memorizada porque las columnas de la grilla dependen de ella: si
+     cambiara de identidad en cada render, las columnas se rearmarían solas. */
+  const alternar = useCallback(
+    (fila) => setDecisiones((prev) => ({ ...prev, [fila.indice]: !(prev[fila.indice] ?? fila.accion !== 'dudosa') })),
+    [],
+  );
+
+  /* Las filas del informe ya analizadas. La columna "Aplicar" mantiene el
+     checkbox propio en vez de usar la selección del Data Grid: acá lo
+     seleccionado no es una selección temporal, es la decisión de qué filas se
+     van a aplicar, y viene marcada por defecto. */
+  const columnasAnalisis = useMemo(
+    () => [
+      {
+        field: 'aplicar',
+        headerName: 'Aplicar',
+        width: 90,
+        sortable: false,
+        filterable: false,
+        valueGetter: (_v, row) => (aplica(row) ? 'Sí' : 'No'),
+        renderCell: ({ row }) => (
+          <input
+            type="checkbox"
+            checked={aplica(row)}
+            onChange={() => alternar(row)}
+            aria-label={`Aplicar la fila de ${row.razonSocial}`}
+          />
+        ),
+      },
+      { field: 'cuit', headerName: 'CUIT informado', width: 150 },
+      { field: 'razonSocial', headerName: 'Razón social', flex: 1, minWidth: 200 },
+      { field: 'direccion', headerName: 'Dirección', flex: 1, minWidth: 180 },
+      { field: 'numeroContrato', headerName: 'Contrato', width: 150 },
+      {
+        field: 'vencimiento',
+        headerName: 'Vence',
+        width: 120,
+        renderCell: ({ row }) => fmtFecha(row.vencimiento),
+      },
+      {
+        field: 'accion',
+        headerName: 'Qué haría',
+        flex: 1.2,
+        minWidth: 260,
+        renderCell: ({ row }) => (
+          <span className="celda-apilada">
+            <span>
+              {row.accion === 'alta' && <Badge color="azul">Alta de local</Badge>}
+              {row.accion === 'actualiza' && <Badge color="verde">Actualiza existente</Badge>}
+              {row.accion === 'dudosa' && <Badge color="naranja">Coincidencia dudosa</Badge>}
+            </span>
+            <small className="celda-sub">{row.detalle}</small>
+            {row.local && (
+              <small className="celda-sub">
+                <Link to={`/locales/${row.local.id}`} className="link-local">
+                  Ver el local
+                </Link>
+              </small>
+            )}
+          </span>
+        ),
+      },
+    ],
+    [aplica, alternar],
+  );
 
   return (
     <>
@@ -107,84 +221,63 @@ function Informe9DJ() {
 
       {!cargado ? (
         <>
-          {/* MAQUETA: no hay lectura real de archivo. Cuando exista, acá va un
-              <input type="file"> que acepte el CSV o el XLSX que manda la
-              empresa, y el resto de la pantalla no cambia. */}
+          {/* El archivo real (CSV) o el ejemplo, que solo se mira. */}
           <div className="zona-carga">
             <strong>Cargar el listado que remitió la empresa</strong>
-            <p>
-              Maqueta: el botón carga un informe de ejemplo con cuatro filas, armado para mostrar los tres casos posibles (alta,
-              actualización y coincidencia dudosa).
-            </p>
-            <button type="button" className="btn-primario" onClick={() => setCargado(true)}>
-              Cargar informe de ejemplo
+            <p>En CSV: desde Excel, Guardar como → CSV.</p>
+            <input type="file" accept=".csv,text/csv,text/plain" onChange={cargarArchivo} aria-label="Archivo del informe" />
+            <button type="button" className="btn-secundario" onClick={cargarEjemplo}>
+              Ver un informe de ejemplo
             </button>
           </div>
         </>
       ) : (
         <>
           <div className="accesos-header">
-            <span>Previsualización de los cambios ({analisis.length} filas)</span>
+            <span>
+              Previsualización de los cambios ({analisis.length} filas){nombreArchivo ? ` · ${nombreArchivo}` : ''}
+            </span>
           </div>
+
+          {esEjemplo && (
+            <Aviso tipo="info" titulo="Es un ejemplo: no se puede aplicar">
+              Son contratos inventados para ver cómo funciona la pantalla.
+            </Aviso>
+          )}
+          {erroresArchivo.length > 0 && (
+            <Aviso tipo="alerta" titulo={`${erroresArchivo.length} fila(s) del archivo no se pudieron leer`}>
+              {erroresArchivo.slice(0, 5).join(' · ')}
+              {erroresArchivo.length > 5 ? ' · …' : ''}
+            </Aviso>
+          )}
 
           {dudosas.length > 0 && (
             <Aviso tipo="alerta" titulo={`${dudosas.length} coincidencia(s) dudosa(s)`}>
               El nombre se parece pero el CUIT no coincide. Si aplicás sin revisar, podés crear un duplicado o registrarle un
-              contrato al local equivocado. Destildá las que no quieras aplicar.
+              contrato al local equivocado. Están destildadas: tildá solo las que revisaste.
             </Aviso>
           )}
 
-          <table className="tabla-datos">
-            <thead>
-              <tr>
-                <th>Aplicar</th>
-                <th>CUIT informado</th>
-                <th>Razón social</th>
-                <th>Dirección</th>
-                <th>Contrato</th>
-                <th>Vence</th>
-                <th>Qué haría</th>
-              </tr>
-            </thead>
-            <tbody>
-              {analisis.map((a) => (
-                <tr key={a.indice} className={a.accion === 'dudosa' ? 'fila-dudosa' : ''}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={!excluidas.includes(a.indice)}
-                      onChange={() => alternar(a.indice)}
-                      aria-label={`Aplicar la fila de ${a.razonSocial}`}
-                    />
-                  </td>
-                  <td>{a.cuit}</td>
-                  <td>{a.razonSocial}</td>
-                  <td>{a.direccion}</td>
-                  <td>{a.numeroContrato}</td>
-                  <td>{fmtFecha(a.vencimiento)}</td>
-                  <td>
-                    {a.accion === 'alta' && <Badge color="azul">Alta de local</Badge>}
-                    {a.accion === 'actualiza' && <Badge color="verde">Actualiza existente</Badge>}
-                    {a.accion === 'dudosa' && <Badge color="naranja">Coincidencia dudosa</Badge>}
-                    <small className="celda-sub">{a.detalle}</small>
-                    {a.local && (
-                      <small className="celda-sub">
-                        <Link to={`/locales/${a.local.id}`} className="link-local">
-                          Ver el local
-                        </Link>
-                      </small>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Grilla
+            filas={analisis}
+            columnas={columnasAnalisis}
+            idFila={(fila) => fila.indice}
+            nombreArchivo="informe-9-de-julio"
+            vacio="El archivo no trajo ninguna fila."
+            alto="auto"
+            filasPorPagina={25}
+          />
 
           <div className="barra-lote">
-            <button type="button" className="btn-primario" disabled={aAplicar.length === 0} onClick={() => setConfirmar(true)}>
-              Aplicar {aAplicar.length} de {analisis.length} filas
+            <button
+              type="button"
+              className="btn-primario"
+              disabled={esEjemplo || aAplicar.length === 0}
+              onClick={() => setConfirmar(true)}
+            >
+              {esEjemplo ? 'El ejemplo no se aplica' : `Aplicar ${aAplicar.length} de ${analisis.length} filas`}
             </button>
-            <button type="button" className="btn-secundario" onClick={() => { setCargado(false); setExcluidas([]); }}>
+            <button type="button" className="btn-secundario" onClick={descartar}>
               Descartar el informe
             </button>
           </div>
@@ -218,11 +311,13 @@ function Informe9DJ() {
         titulo="Aplicar el informe"
         textoConfirmar={`Aplicar ${aAplicar.length} filas`}
         onCancelar={() => setConfirmar(false)}
-        onConfirmar={() => {
-          aplicarInforme9DJ(aAplicar);
+        onConfirmar={async () => {
           setConfirmar(false);
-          setCargado(false);
-          setExcluidas([]);
+          if (esEjemplo) return;
+          // Se descarta solo si se aplicó: si el servidor lo rechaza (por
+          // ejemplo, una fila con el contrato vencido), no se aplica NADA y la
+          // previsualización queda para corregir el archivo.
+          if (await aplicarInforme9DJ(aAplicar)) descartar();
         }}
       >
         <p>

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 /* ============================================================================
    pages/Prorrogas.jsx  —  PRÓRROGAS  (URL: /#/prorrogas)
    ----------------------------------------------------------------------------
@@ -22,19 +23,27 @@
    PENDIENTE con el área legal (Anexo B.2): si hay un tope de días y una
    cantidad máxima de prórrogas por local. Está resuelto con dos parámetros de
    Configuración, hoy en 30 días y 1 prórroga.
+
+   LOS PEDIDOS DEL PORTAL (2026-10-02): si el titular pidió la prórroga desde
+   su portal, el local aparece primero en "pueden recibir una prórroga", con
+   lo que pidió. Al otorgarla, el formulario arranca con esos días y motivo.
    ============================================================================ */
 
 import { Link } from 'react-router-dom';
 import PageHeader from '../components/ui/PageHeader';
+import Grilla from '../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import AccionesLocal from '../components/AccionesLocal';
 import { useDatos } from '../datos/datosContexto';
-import { diasEntre, fmtFecha, hoyISO } from '../dominio/fechas';
+import { useRol } from '../auth/rolContexto';
+import { puedeVerRuta } from '../config/modulos';
+import { diasEntre, fmtFecha, fmtFechaHora, hoyISO } from '../dominio/fechas';
 import { estaVigente } from '../dominio/vigencias';
 
 function Prorrogas() {
-  const { actuaciones, localesConEstado, localPorId } = useDatos();
+  const { actuaciones, localesConEstado, localPorId, permisos } = useDatos();
+  const { rol } = useRol();
 
   const otorgadas = actuaciones
     .filter((a) => a.tipo === 'PRORROGA')
@@ -44,8 +53,119 @@ function Prorrogas() {
   const vigentes = otorgadas.filter((p) => p.vigente);
 
   // Los que la regla habilita. No se calcula acá: se pregunta por el estado.
-  const habilitados = localesConEstado.filter((l) =>
-    ['NOTIF2_ENTREGADA', 'NOTIF2_SIN_FIRMA', 'NOTIF2_FIJADA', 'GENERAR_EXPEDIENTE'].includes(l.estado),
+  // Primero los que lo pidieron por el portal: son los que esperan respuesta.
+  const habilitados = localesConEstado
+    .filter((l) => ['NOTIF2_ENTREGADA', 'NOTIF2_SIN_FIRMA', 'NOTIF2_FIJADA', 'GENERAR_EXPEDIENTE'].includes(l.estado))
+    .sort((a, b) => Number(Boolean(b.solicitudProrroga)) - Number(Boolean(a.solicitudProrroga)));
+  const pedidos = habilitados.filter((l) => l.solicitudProrroga);
+
+  /* Las prórrogas ya otorgadas. Cada fila es una PRÓRROGA y trae su local
+     adentro (row.local), que es lo que arma la pantalla antes de dibujar. */
+  const columnasOtorgadas = useMemo(
+    () => [
+      {
+        field: 'local',
+        headerName: 'Local',
+        flex: 1,
+        minWidth: 180,
+        valueGetter: (_v, row) => row.local?.nombreLocal ?? `Local ${row.localId}`,
+        renderCell: ({ row }) => (
+          <Link to={`/locales/${row.localId}`} className="link-local">
+            {row.local?.nombreLocal ?? `Local ${row.localId}`}
+          </Link>
+        ),
+      },
+      { field: 'fecha', headerName: 'Otorgada', width: 120, renderCell: ({ row }) => fmtFecha(row.fecha) },
+      { field: 'diasOtorgados', headerName: 'Días', width: 80 },
+      {
+        field: 'fechaVencimiento',
+        headerName: 'Vence',
+        width: 120,
+        renderCell: ({ row }) => fmtFecha(row.fechaVencimiento),
+      },
+      {
+        field: 'situacion',
+        headerName: 'Situación',
+        width: 270,
+        valueGetter: (_v, row) =>
+          row.vigente ? 'Vigente' : row.local?.estadoGrupo === 'documental' ? 'Presentó' : 'Venció sin presentación',
+        renderCell: ({ row }) =>
+          row.vigente ? (
+            /* Cuando esto llegue a 0, el local cae solo en la bandeja de
+               expedientes: no hay que hacer nada para que pase. */
+            <Badge color="amarillo">Vigente · restan {diasEntre(hoyISO(), row.fechaVencimiento)} día(s)</Badge>
+          ) : row.local?.estadoGrupo === 'documental' ? (
+            /* Terminó con documentación vigente: presentó durante la prórroga
+               y salió del circuito. */
+            <Badge color="verde">Presentó durante la prórroga</Badge>
+          ) : (
+            <Badge color="naranja">Venció sin presentación</Badge>
+          ),
+      },
+      {
+        field: 'estadoLocal',
+        headerName: 'Estado actual del local',
+        width: 210,
+        valueGetter: (_v, row) => row.local?.estado ?? '',
+        /* La consecuencia, a la vista: el que venció sin presentar ya figura
+           para generar expediente. */
+        renderCell: ({ row }) => <BadgeEstado codigo={row.local?.estado} sinColor />,
+      },
+      { field: 'motivo', headerName: 'Motivo', flex: 1, minWidth: 200 },
+      { field: 'usuario', headerName: 'Otorgó', width: 150 },
+    ],
+    [],
+  );
+
+  /* Los locales en condiciones de recibir una prórroga. */
+  const columnasHabilitados = useMemo(
+    () => [
+      {
+        field: 'nombreLocal',
+        headerName: 'Local',
+        flex: 1,
+        minWidth: 200,
+        renderCell: ({ row }) => (
+          <Link to={`/locales/${row.id}`} className="link-local">
+            {row.nombreLocal}
+          </Link>
+        ),
+      },
+      { field: 'direccion', headerName: 'Dirección', flex: 1.2, minWidth: 180 },
+      {
+        field: 'estado',
+        headerName: 'Estado',
+        width: 210,
+        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} sinColor />,
+      },
+      {
+        field: 'pedido',
+        headerName: 'Pedido del titular',
+        flex: 1,
+        minWidth: 200,
+        valueGetter: (_v, row) => row.solicitudProrroga?.motivo ?? '',
+        renderCell: ({ row }) =>
+          row.solicitudProrroga ? (
+            <span className="celda-apilada">
+              {row.solicitudProrroga.dias ? `${row.solicitudProrroga.dias} día(s)` : 'Sin días indicados'}
+              <small className="celda-sub" title={row.solicitudProrroga.motivo}>
+                {fmtFechaHora(row.solicitudProrroga.momento)} · {row.solicitudProrroga.motivo}
+              </small>
+            </span>
+          ) : (
+            <span className="texto-gris">—</span>
+          ),
+      },
+      {
+        field: 'acciones',
+        headerName: 'Acciones',
+        width: 260,
+        sortable: false,
+        filterable: false,
+        renderCell: ({ row }) => <AccionesLocal local={row} compacto />,
+      },
+    ],
+    [],
   );
 
   return (
@@ -62,8 +182,12 @@ function Prorrogas() {
       <Aviso
         tipo="alerta"
         titulo="Si vence sin presentación, el local pasa solo a generación de expediente"
-        accion={<Link to="/tablero">Expedientes para generar</Link>}
+        accion={puedeVerRuta(rol, '/expedientes', permisos) && <Link to="/expedientes">Expedientes para generar</Link>}
       />
+
+      {pedidos.length > 0 && (
+        <Aviso tipo="info" titulo={`${pedidos.length} pedido(s) de prórroga del portal esperando respuesta`} />
+      )}
 
       {/* ================= OTORGADAS ================= */}
       {/* Vigentes y vencidas en UNA tabla, de la más reciente a la más vieja.
@@ -78,54 +202,13 @@ function Prorrogas() {
       {otorgadas.length === 0 ? (
         <Vacio titulo="Todavía no se otorgó ninguna prórroga">No hay locales con el circuito sancionatorio suspendido.</Vacio>
       ) : (
-        <table className="tabla-datos">
-          <thead>
-            <tr>
-              <th>Local</th>
-              <th>Otorgada</th>
-              <th>Días</th>
-              <th>Vence</th>
-              <th>Situación</th>
-              <th>Estado actual del local</th>
-              <th>Motivo</th>
-              <th>Otorgó</th>
-            </tr>
-          </thead>
-          <tbody>
-            {otorgadas.map((p) => (
-              <tr key={p.id}>
-                <td>
-                  <Link to={`/locales/${p.localId}`} className="link-local">
-                    {p.local?.nombreLocal ?? `Local ${p.localId}`}
-                  </Link>
-                </td>
-                <td>{fmtFecha(p.fecha)}</td>
-                <td>{p.diasOtorgados}</td>
-                <td>{fmtFecha(p.fechaVencimiento)}</td>
-                <td>
-                  {p.vigente ? (
-                    /* Cuando esto llegue a 0, el local cae solo en la bandeja de
-                       expedientes: no hay que hacer nada para que pase. */
-                    <Badge color="amarillo">Vigente · restan {diasEntre(hoyISO(), p.fechaVencimiento)} día(s)</Badge>
-                  ) : p.local?.estadoGrupo === 'documental' ? (
-                    /* Terminó con documentación vigente: presentó durante la
-                       prórroga y salió del circuito. */
-                    <Badge color="verde">Presentó durante la prórroga</Badge>
-                  ) : (
-                    <Badge color="naranja">Venció sin presentación</Badge>
-                  )}
-                </td>
-                <td>
-                  {/* La consecuencia, a la vista: el que venció sin presentar
-                      ya figura para generar expediente. */}
-                  <BadgeEstado codigo={p.local?.estado} />
-                </td>
-                <td className="celda-motivo">{p.motivo}</td>
-                <td>{p.usuario}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Grilla
+          filas={otorgadas}
+          columnas={columnasOtorgadas}
+          nombreArchivo="prorrogas-otorgadas"
+          vacio="Todavía no se otorgó ninguna prórroga."
+          alto="auto"
+        />
       )}
 
       {/* ================= A QUIÉNES SE LES PUEDE OTORGAR ================= */}
@@ -138,34 +221,13 @@ function Prorrogas() {
           La prórroga solo se puede otorgar con las dos notificaciones agotadas y antes de que exista expediente.
         </Vacio>
       ) : (
-        <table className="tabla-datos tabla-bandeja">
-          <thead>
-            <tr>
-              <th>Local</th>
-              <th>Dirección</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {habilitados.map((l) => (
-              <tr key={l.id}>
-                <td>
-                  <Link to={`/locales/${l.id}`} className="link-local">
-                    {l.nombreLocal}
-                  </Link>
-                </td>
-                <td>{l.direccion}</td>
-                <td>
-                  <BadgeEstado codigo={l.estado} />
-                </td>
-                <td>
-                  <AccionesLocal local={l} compacto />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Grilla
+          filas={habilitados}
+          columnas={columnasHabilitados}
+          nombreArchivo="locales-para-prorroga"
+          vacio="No hay locales en condiciones de recibir una prórroga."
+          alto="auto"
+        />
       )}
     </>
   );

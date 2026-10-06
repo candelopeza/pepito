@@ -34,6 +34,7 @@ import rutasProrrogasExpedientes from './rutas/prorrogas-expedientes.js';
 import rutasConfiguracion from './rutas/configuracion.js';
 import rutasHerramientas from './rutas/herramientas.js';
 import rutasArchivos from './rutas/archivos.js';
+import rutasInforme9DJ from './rutas/informe-9dj.js';
 
 const app = express();
 const PUERTO = Number(process.env.PUERTO) || 3000;
@@ -43,7 +44,9 @@ const PUERTO = Number(process.env.PUERTO) || 3000;
 app.use(cors({ origin: process.env.ORIGEN_FRONT || true }));
 // Lee el JSON que manda el front en el body de los POST/PUT. El límite deja
 // lugar a la foto de una entrega (achicada en el celular antes de enviarla).
-app.use(express.json({ limit: '8mb' }));
+// El limite deja lugar a la foto de una entrega (achicada en el celular) y
+// al informe de la prestataria, que viaja como archivo en base64.
+app.use(express.json({ limit: '15mb' }));
 // Quién está pidiendo y con qué rol. Provisorio hasta CiDiTuc (ver middlewares/usuario.js).
 app.use(identificarUsuario);
 
@@ -72,6 +75,7 @@ app.use('/documentacion', rutasDocumentacion);
 app.use('/', rutasProrrogasExpedientes); // /locales/:id/prorrogas y /locales/:id/expedientes
 app.use('/configuracion', rutasConfiguracion);
 app.use('/herramientas', rutasHerramientas);
+app.use('/informe-9dj', rutasInforme9DJ);
 app.use('/archivos', rutasArchivos);
 
 /* --- lo que no matcheó ninguna ruta --------------------------------------- */

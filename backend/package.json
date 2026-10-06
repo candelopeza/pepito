@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
-    "mysql2": "^3.14.1"
+    "mysql2": "^3.14.1",
+    "pdf-parse": "^2.4.5"
   }
 }

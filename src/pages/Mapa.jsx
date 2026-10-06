@@ -4,37 +4,45 @@
    Los locales en el territorio, con código de colores por estado y los mismos
    filtros que el padrón (sección 6.1).
 
-   >>> POR QUÉ ES UN SVG Y NO UN MAPA DE VERDAD <<<
-   Porque una capa de mapa (Leaflet, MapLibre) trae dependencia de servidor de
-   tiles, y el build de este proyecto se arma en UN SOLO ARCHIVO para poder
-   abrirlo desde el disco (ver vite.config.js). Un mapa que necesita internet
-   rompe justamente eso.
+   >>> POR QUÉ LEAFLET Y NO GOOGLE MAPS <<<
+   Porque Google Maps Platform exige una cuenta con tarjeta de crédito asociada
+   al proyecto, y conseguir eso en un municipio suele llevar más que el
+   desarrollo entero. Leaflet con OpenStreetMap no pide cuenta, no pide clave y
+   no tiene costo.
 
-   Lo que hay acá es la geometría real: el polígono del ejido municipal y cada
-   local en su coordenada, proyectados sobre el recuadro que los contiene. Sirve
-   para ver distribución y detectar locales mal ubicados, que es para lo que se
-   usa el mapa en la práctica.
+   Además es lo que ya usa el municipio: el visor mapa.smt.gob.ar está hecho con
+   Leaflet. Si mañana la Dirección de Innovación Tecnológica expone sus propias
+   capas (calles, manzanas, barrios), se enchufan acá cambiando la URL del
+   TileLayer, sin tocar nada más.
 
-   CUANDO SE DEFINA EL DESPLIEGUE: si la app va a estar servida desde un
-   servidor municipal, acá va la capa real con el KML de límites que tiene la
-   Dirección de Ambiente. Lo único que hay que cambiar es este archivo; las
-   coordenadas ya están bien guardadas (dos números, no una cadena de texto).
+   >>> ESTE MAPA NECESITA INTERNET <<<
+   Las baldosas vienen de los servidores de OpenStreetMap. Sin conexión el mapa
+   queda gris y los puntos igual se dibujan, pero sin calles debajo.
+
+   Antes esta pantalla era un SVG dibujado a mano justamente para no depender de
+   internet, porque el build se arma en un solo archivo para abrirlo desde el
+   disco (ver vite.config.js). Eso dejó de tener sentido cuando el front pasó a
+   consumir la API: la aplicación ya necesita un servidor corriendo igual.
 
    >>> LOS PUNTOS SON LA COORDENADA DEL PADRÓN <<<
-   La geocodificada desde la dirección. NUNCA la del relevamiento. Los locales
-   sin coordenada no se dibujan y se listan aparte: no se les pone un punto
-   aproximado, porque un punto aproximado en un mapa se lee como un dato.
+   La geocodificada desde la dirección. NUNCA la del relevamiento (sección 9.2).
+   Los locales sin coordenada no se dibujan y se listan aparte: no se les pone
+   un punto aproximado, porque un punto aproximado en un mapa se lee como un
+   dato.
    ============================================================================ */
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, Tooltip } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+
 import PageHeader from '../components/ui/PageHeader';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
+import Grilla from '../components/ui/Grilla';
 import Aviso from '../components/ui/Aviso';
 import { CampoSelect } from '../components/ui/Campo';
 import { useDatos } from '../datos/datosContexto';
-import { LIMITE_MUNICIPAL, RECUADRO_MUNICIPAL } from '../dominio/geo';
-import { LISTA_ESTADOS } from '../dominio/estados';
+import { LISTA_ESTADOS, colorEstado, etiquetaEstado } from '../dominio/estados';
 
 /* Los colores de los badges, para que el punto del mapa y la pastilla de la
    grilla sean del mismo color. Si divergen, el mapa deja de ser legible. */
@@ -47,25 +55,52 @@ const COLOR_HEX = {
   gris: '#90a4ae',
 };
 
-const ANCHO = 900;
-const ALTO = 620;
-const MARGEN = 24;
+/* El centro del ejido y el acercamiento inicial. 13 muestra la ciudad entera
+   sin que los puntos se pisen. */
+const CENTRO = [-26.8285, -65.2125];
+const ZOOM = 13;
 
-/* Proyección lineal del recuadro al SVG. A escala de ciudad la distorsión es
-   invisible, así que no hace falta una proyección cartográfica. */
-function proyectar(lat, lng) {
-  const { latMin, latMax, lngMin, lngMax } = RECUADRO_MUNICIPAL;
-  const x = MARGEN + ((lng - lngMin) / (lngMax - lngMin)) * (ANCHO - 2 * MARGEN);
-  // La latitud se invierte: en pantalla el norte va arriba (y crece hacia abajo).
-  const y = MARGEN + ((latMax - lat) / (latMax - latMin)) * (ALTO - 2 * MARGEN);
-  return [x, y];
-}
+/* Radio del punto en píxeles. Chico a propósito: con casi dos mil locales, un
+   marcador con forma de gota tapa el mapa entero y no se ve la distribución,
+   que es justamente para lo que se usa esta pantalla. */
+const RADIO = 5;
+
+/* Los locales que no entraron al mapa. Van en la misma tabla que el resto del
+   sistema: con 253 registros, una lista suelta no se puede ni buscar ni
+   exportar para repartir el trabajo de corrección. */
+const COLUMNAS_SIN_UBICACION = [
+  { field: 'id', headerName: 'N°', width: 80 },
+  {
+    field: 'nombreLocal',
+    headerName: 'Local',
+    flex: 1,
+    minWidth: 200,
+    renderCell: ({ row }) => (
+      <Link to={`/locales/${row.id}`} className="link-local">
+        {row.nombreLocal}
+      </Link>
+    ),
+  },
+  { field: 'direccion', headerName: 'Dirección declarada', flex: 1.2, minWidth: 220 },
+  {
+    field: 'motivoSinGeo',
+    headerName: 'Por qué no se pudo ubicar',
+    flex: 1,
+    minWidth: 220,
+    renderCell: ({ row }) => <Badge color="gris">{row.motivoSinGeo}</Badge>,
+  },
+  {
+    field: 'estado',
+    headerName: 'Estado',
+    width: 210,
+    renderCell: ({ row }) => <BadgeEstado codigo={row.estado} />,
+  },
+];
 
 function Mapa() {
-  const { localesConEstado, rubros } = useDatos();
+  const { localesConEstado, rubros, limiteMunicipal, limiteOficial } = useDatos();
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroRubro, setFiltroRubro] = useState('');
-  const [encima, setEncima] = useState(null);
 
   const filtrados = useMemo(
     () =>
@@ -75,10 +110,8 @@ function Mapa() {
     [localesConEstado, filtroEstado, filtroRubro],
   );
 
-  const conUbicacion = filtrados.filter((l) => !l.sinGeo);
-  const sinUbicacion = filtrados.filter((l) => l.sinGeo);
-
-  const contorno = LIMITE_MUNICIPAL.map(([lat, lng]) => proyectar(lat, lng).join(',')).join(' ');
+  const conUbicacion = useMemo(() => filtrados.filter((l) => !l.sinGeo), [filtrados]);
+  const sinUbicacion = useMemo(() => filtrados.filter((l) => l.sinGeo), [filtrados]);
 
   // Solo los estados que están en pantalla: una leyenda con los 24 no se lee.
   const estadosPresentes = [...new Set(conUbicacion.map((l) => l.estado))];
@@ -111,74 +144,86 @@ function Mapa() {
         />
       </div>
 
+      {/* ---------- El mapa ----------
+          `preferCanvas` dibuja los puntos en un canvas en vez de crear dos mil
+          elementos SVG. Con este volumen es la diferencia entre un mapa que se
+          mueve y uno que se traba al arrastrar. */}
       <div className="mapa-contenedor">
-        <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} className="mapa-svg" role="img" aria-label="Mapa de locales del padrón">
-          {/* Grilla de referencia, solo para dar sensación de escala. */}
-          <defs>
-            <pattern id="cuadricula" width="45" height="45" patternUnits="userSpaceOnUse">
-              <path d="M 45 0 L 0 0 0 45" fill="none" stroke="#e8eef4" strokeWidth="1" />
-            </pattern>
-          </defs>
-          <rect width={ANCHO} height={ALTO} fill="url(#cuadricula)" />
+        <MapContainer center={CENTRO} zoom={ZOOM} className="mapa-leaflet" preferCanvas scrollWheelZoom>
+          <TileLayer
+            attribution='&copy; colaboradores de <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxZoom={19}
+          />
 
-          {/* El ejido municipal: la referencia contra la que se valida toda
-              coordenada. Lo que cae afuera se descarta, no se guarda. */}
-          <polygon points={contorno} fill="rgba(25,118,210,0.06)" stroke="#1976d2" strokeWidth="2" strokeDasharray="6 4" />
-          <text x={MARGEN + 8} y={MARGEN + 20} className="mapa-etiqueta-ejido">
-            Ejido municipal (referencia: capa KML de la Dirección de Ambiente)
-          </text>
+          {/* El ejido municipal. Viene del backend, que es el mismo polígono
+              contra el que se valida cada coordenada: si el front dibujara su
+              propia copia, el día que se cargue el KML oficial el mapa mostraría
+              un límite y el sistema validaría contra otro. */}
+          {limiteMunicipal.length > 0 && (
+            <Polygon
+              positions={limiteMunicipal}
+              pathOptions={{ color: '#1565c0', weight: 2, fillOpacity: 0.04, dashArray: '6 4' }}
+            />
+          )}
 
-          {/* Un círculo por local. El radio crece un poco con la cantidad de
-              actuaciones: los locales con más historial se ven primero. */}
-          {conUbicacion.map((l) => {
-            const [x, y] = proyectar(l.latitud, l.longitud);
-            const r = 5 + Math.min(l.cantidadActuaciones, 6);
+          {conUbicacion.map((local) => {
+            const color = COLOR_HEX[colorEstado(local.estado)] ?? COLOR_HEX.gris;
             return (
-              <g key={l.id} onMouseEnter={() => setEncima(l)} onMouseLeave={() => setEncima(null)}>
-                <circle
-                  cx={x}
-                  cy={y}
-                  r={r}
-                  fill={COLOR_HEX[l.estadoColor] ?? COLOR_HEX.gris}
-                  fillOpacity="0.75"
-                  stroke="#fff"
-                  strokeWidth="1.5"
-                  className="mapa-punto"
-                />
-                {/* El bloqueo manual se marca con un anillo: si no, un local
-                    congelado parece uno normal. */}
-                {l.bloqueado && <circle cx={x} cy={y} r={r + 4} fill="none" stroke="#37474f" strokeWidth="1.5" />}
-              </g>
+              <CircleMarker
+                key={local.id}
+                center={[local.latitud, local.longitud]}
+                radius={RADIO}
+                pathOptions={{ color: '#fff', weight: 1, fillColor: color, fillOpacity: 0.9 }}
+              >
+                {/* El tooltip aparece al pasar por encima: permite barrer el
+                    mapa sin tener que hacer clic en cada punto. */}
+                <Tooltip direction="top" offset={[0, -4]}>
+                  <strong>{local.nombreLocal}</strong>
+                  <br />
+                  {etiquetaEstado(local.estado)}
+                </Tooltip>
+
+                <Popup>
+                  <div className="mapa-popup">
+                    <strong>{local.nombreLocal}</strong>
+                    <span>{local.razonSocial || 'Sin razón social'}</span>
+                    <span>{local.direccion}</span>
+                    <BadgeEstado codigo={local.estado} />
+                    {local.plazo && (
+                      <span className={local.plazo.vencido ? 'texto-vencido' : ''}>
+                        {local.plazo.vencido ? 'Plazo vencido' : `Vence en ${local.diasRestantes} día(s)`}
+                      </span>
+                    )}
+                    <Link to={`/locales/${local.id}`} className="link-local">
+                      Abrir la ficha del local →
+                    </Link>
+                  </div>
+                </Popup>
+              </CircleMarker>
             );
           })}
-        </svg>
-
-        {/* Ficha al pasar el mouse. No se hace con <title> del SVG porque el
-            tooltip nativo tarda un segundo en aparecer y no se puede estilar. */}
-        {encima && (
-          <div className="mapa-tooltip">
-            <strong>{encima.nombreLocal}</strong>
-            <span>{encima.direccion}</span>
-            <BadgeEstado codigo={encima.estado} />
-            <span className="texto-chico">
-              {encima.rubro || 'sin rubro'} · {encima.cantidadActuaciones} actuación(es)
-            </span>
-            <Link to={`/locales/${encima.id}`}>Abrir ficha</Link>
-          </div>
-        )}
+        </MapContainer>
       </div>
 
       {/* ---------- Leyenda ---------- */}
-      <div className="leyenda">
-        {estadosPresentes.map((codigo) => (
-          <span key={codigo}>
-            <BadgeEstado codigo={codigo} />
-            <small> {conUbicacion.filter((l) => l.estado === codigo).length}</small>
-          </span>
-        ))}
-      </div>
+      {estadosPresentes.length > 0 && (
+        <div className="leyenda">
+          {estadosPresentes.map((codigo) => (
+            <span key={codigo}>
+              <i
+                className="mapa-punto-leyenda"
+                style={{ background: COLOR_HEX[colorEstado(codigo)] ?? COLOR_HEX.gris }}
+              />
+              {etiquetaEstado(codigo)}
+            </span>
+          ))}
+        </div>
+      )}
 
-      {/* ---------- Los que no se pueden dibujar ---------- */}
+      
+
+      {/* ---------- Los que no se pudieron ubicar ---------- */}
       {sinUbicacion.length > 0 && (
         <>
           <Aviso tipo="alerta" titulo={`${sinUbicacion.length} local(es) no aparecen en el mapa`}>
@@ -186,17 +231,13 @@ function Mapa() {
             la coordenada del relevamiento. <Link to="/herramientas/geocodificacion">Corregir direcciones</Link>.
           </Aviso>
 
-          <ul className="lista-simple">
-            {sinUbicacion.map((l) => (
-              <li key={l.id}>
-                <Link to={`/locales/${l.id}`} className="link-local">
-                  {l.nombreLocal}
-                </Link>
-                <span className="texto-gris"> — {l.direccion}</span>
-                <Badge color="gris">{l.motivoSinGeo}</Badge>
-              </li>
-            ))}
-          </ul>
+          <Grilla
+            filas={sinUbicacion}
+            columnas={COLUMNAS_SIN_UBICACION}
+            nombreArchivo="locales-sin-ubicacion"
+            vacio="Todos los locales del filtro tienen ubicación."
+            alto="auto"
+          />
         </>
       )}
     </>

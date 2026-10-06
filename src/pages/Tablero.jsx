@@ -42,7 +42,7 @@ import PageHeader from '../components/ui/PageHeader';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import AccionesLocal from '../components/AccionesLocal';
-import Grilla from '../components/ui/Grilla';
+import Grilla, { anchoDeColumnas } from '../components/ui/Grilla';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { ORDENES_BANDEJA } from '../datos/vistas';
@@ -123,12 +123,17 @@ const COLUMNAS_BANDEJA = [
   },
 ];
 
+/* La tarjeta de la bandeja mide lo mismo que la tabla que contiene. Sin esto,
+   el encabezado de color ocupaba todo el ancho de la página y la tabla entraba
+   apenas en la mitad: quedaba un bloque azul vacío a la derecha. */
+const ANCHO_BANDEJA = anchoDeColumnas(COLUMNAS_BANDEJA);
+
 function Bandeja({ bandeja }) {
   // Arranca abierta si tiene algo: si está vacía no vale la pena el espacio.
   const [abierta, setAbierta] = useState(bandeja.locales.length > 0);
 
   return (
-    <section className="bandeja">
+    <section className="bandeja" style={{ maxWidth: ANCHO_BANDEJA }}>
       <button type="button" className="bandeja-cabecera" onClick={() => setAbierta((v) => !v)} aria-expanded={abierta}>
         <span className={`bandeja-contador bandeja-contador-${bandeja.color}`}>{bandeja.locales.length}</span>
         <span className="bandeja-titulo">

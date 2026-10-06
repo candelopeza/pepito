@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "test": "node pruebas/criterios.mjs",
     "humo": "node pruebas/humo-api.mjs",
-    "criterios": "node pruebas/criterios-estado.mjs"
+    "criterios": "node pruebas/criterios-estado.mjs",
+    "lector": "node pruebas/lector-informe.mjs",
+    "informe": "node pruebas/informe-9dj.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -18,8 +20,10 @@
     "@mui/icons-material": "^9.4.0",
     "@mui/material": "^9.4.0",
     "@mui/x-data-grid": "^9.12.0",
+    "leaflet": "^1.9.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-leaflet": "^5.0.0",
     "react-router-dom": "^6.26.1"
   },
   "devDependencies": {

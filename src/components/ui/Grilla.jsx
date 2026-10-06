@@ -73,6 +73,21 @@ const ALTO_FIJO = 170;
 const HOLGURA_FLEX = 60;
 const ANCHO_POR_DEFECTO = 150;
 
+/* CUÁNTO MIDE UNA TABLA segun sus columnas. Se exporta porque hay pantallas que
+   necesitan acompañar ese ancho con algo que va por fuera de la grilla: el
+   tablero envuelve cada tabla en una tarjeta con su encabezado de color, y si
+   la tarjeta es mucho más ancha que la tabla queda un bloque de color vacío al
+   costado.
+
+   Se suma lo que pide cada columna: su `width` si lo tiene, o su `minWidth` más
+   una holgura si es flexible. */
+export function anchoDeColumnas(columnas) {
+  return columnas.reduce(
+    (total, c) => total + (c.width ?? (c.minWidth ? c.minWidth + HOLGURA_FLEX : ANCHO_POR_DEFECTO)),
+    24, // los bordes de la tabla
+  );
+}
+
 function Grilla({
   filas,
   columnas,
@@ -135,19 +150,9 @@ function Grilla({
   /* CADA TABLA MIDE LO QUE NECESITAN SUS COLUMNAS, no todo el ancho de la
      pantalla. Una tabla de cuatro columnas estirada a 1800px deja columnas
      enormes y medio vacías, y obliga a barrer la vista de un borde al otro para
-     leer una fila.
-
-     Se suma lo que pide cada columna: su `width` si lo tiene, o su `minWidth`
-     más una holgura si es flexible. El resultado es el tope; si la pantalla es
-     más angosta, manda la pantalla. */
-  const anchoMaximo = useMemo(
-    () =>
-      columnas.reduce(
-        (total, c) => total + (c.width ?? (c.minWidth ? c.minWidth + HOLGURA_FLEX : ANCHO_POR_DEFECTO)),
-        24, // los bordes de la tabla
-      ),
-    [columnas],
-  );
+     leer una fila. El resultado es el tope; si la pantalla es más angosta,
+     manda la pantalla. */
+  const anchoMaximo = useMemo(() => anchoDeColumnas(columnas), [columnas]);
 
   return (
     <>

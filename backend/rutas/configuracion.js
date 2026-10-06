@@ -43,6 +43,7 @@ import { capacidades, tiene } from '../capacidades.js';
 import { modoGeocodificador } from '../geocodificador.js';
 import { estadoTareas } from '../tareas-programadas.js';
 import { MODULOS, NIVELES, esPermisoFijo } from '../../src/config/modulos.js';
+import { LIMITE_ES_OFICIAL, LIMITE_MUNICIPAL } from '../limite-municipal.js';
 
 const router = Router();
 
@@ -138,6 +139,16 @@ router.put('/parametros', requiereRol('direccion'), async (req, res, next) => {
   } catch (e) {
     next(e);
   }
+});
+
+/* GET /configuracion/limite-municipal  ->  el polígono del ejido.
+
+   Lo necesita el mapa para dibujarlo, y tiene que ser EL MISMO contra el que se
+   valida en el backend: si el front dibujara su propia copia, el día que se
+   cargue el KML oficial el mapa mostraría un límite y el sistema validaría
+   contra otro. */
+router.get('/limite-municipal', (_req, res) => {
+  res.json({ poligono: LIMITE_MUNICIPAL, oficial: LIMITE_ES_OFICIAL });
 });
 
 router.get('/plantilla', async (_req, res, next) => {

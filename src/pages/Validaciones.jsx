@@ -27,13 +27,18 @@ import Grilla from '../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import Confirmar from '../components/ui/Confirmar';
+import { CampoTexto } from '../components/ui/Campo';
+import ArchivoGuardado from '../components/ArchivoGuardado';
 import { useDatos } from '../datos/datosContexto';
 import { ETIQUETA_DOCUMENTO } from '../dominio/actuaciones';
 import { fmtFecha } from '../dominio/fechas';
 
 function Validaciones() {
-  const { presentacionesPendientes, localPorId, validarPresentacion } = useDatos();
+  const { presentacionesPendientes, localPorId, validarPresentacion, capacidades } = useDatos();
   const [decision, setDecision] = useState(null);
+  // El motivo del rechazo es obligatorio: el titular tiene que saber qué
+  // corregir, y queda en el historial del local.
+  const [motivo, setMotivo] = useState('');
 
   const pendientes = presentacionesPendientes();
 
@@ -70,8 +75,12 @@ function Validaciones() {
           <span className="celda-apilada">
             {ETIQUETA_DOCUMENTO[row.tipo]}
             <small className="celda-sub">
-              N° {row.numero} · {row.archivo ?? 'sin archivo'}
+              N° {row.numero}
+              {typeof row.archivo === 'string' && row.archivo ? ` · ${row.archivo}` : ''}
+              {!row.archivo ? ' · sin archivo' : ''}
             </small>
+            {/* El documento que adjuntó el titular, para ver qué se aprueba. */}
+            {row.archivo && typeof row.archivo === 'object' && <ArchivoGuardado archivo={row.archivo} etiqueta="Ver documento" />}
           </span>
         ),
       },
@@ -93,7 +102,7 @@ function Validaciones() {
         headerName: 'Estado del local',
         width: 210,
         valueGetter: (_v, row) => localPorId(row.localId)?.estado ?? '',
-        renderCell: ({ row }) => <BadgeEstado codigo={localPorId(row.localId)?.estado} />,
+        renderCell: ({ row }) => <BadgeEstado codigo={localPorId(row.localId)?.estado} sinColor />,
       },
       {
         field: 'plazoLocal',
@@ -122,14 +131,20 @@ function Validaciones() {
             <button
               type="button"
               className="btn-tabla"
-              onClick={() => setDecision({ p: row, local: localPorId(row.localId), aprobar: true })}
+              onClick={() => {
+                setMotivo('');
+                setDecision({ p: row, local: localPorId(row.localId), aprobar: true });
+              }}
             >
               Aprobar
             </button>
             <button
               type="button"
               className="btn-tabla"
-              onClick={() => setDecision({ p: row, local: localPorId(row.localId), aprobar: false })}
+              onClick={() => {
+                setMotivo('');
+                setDecision({ p: row, local: localPorId(row.localId), aprobar: false });
+              }}
             >
               Rechazar
             </button>
@@ -170,10 +185,11 @@ function Validaciones() {
         titulo={decision?.aprobar ? 'Aprobar la presentación' : 'Rechazar la presentación'}
         textoConfirmar={decision?.aprobar ? 'Aprobar' : 'Rechazar'}
         peligro={!decision?.aprobar}
+        deshabilitado={Boolean(decision) && !decision.aprobar && !motivo.trim()}
         onCancelar={() => setDecision(null)}
-        onConfirmar={() => {
-          validarPresentacion(decision.p.id, decision.aprobar);
-          setDecision(null);
+        onConfirmar={async () => {
+          // Se cierra solo si se guardó.
+          if (await validarPresentacion(decision.p.id, decision.aprobar, motivo.trim())) setDecision(null);
         }}
       >
         {decision?.aprobar ? (
@@ -183,10 +199,21 @@ function Validaciones() {
             y su notificación en curso queda sin efecto.
           </p>
         ) : (
-          <p>
-            Se descarta la presentación. El local sigue en <strong>{decision?.local?.estadoEtiqueta}</strong> y su plazo sigue
-            corriendo. Avisale al titular por qué se rechazó: desde el portal solo va a ver que ya no está.
-          </p>
+          <>
+            <p>
+              Se descarta la presentación. El local sigue en <strong>{decision?.local?.estadoEtiqueta}</strong> y su plazo sigue
+              corriendo.
+              {capacidades?.auditoria
+                ? ' El titular va a ver este motivo en su portal.'
+                : ' Avisale al titular por qué se rechazó: desde el portal solo va a ver que ya no está.'}
+            </p>
+            <CampoTexto
+              id="val-motivo"
+              etiqueta="Motivo del rechazo (obligatorio)"
+              valor={motivo}
+              onChange={setMotivo}
+            />
+          </>
         )}
       </Confirmar>
     </>

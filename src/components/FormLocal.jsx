@@ -35,6 +35,17 @@ import { useDatos } from '../datos/datosContexto';
    que hacer el backend contra la constancia de inscripción fiscal, no una
    expresión regular en el navegador. */
 const FORMATO_CUIT = /^\d{2}-?\d{8}-?\d$/;
+
+/* El CUIT (y el CUIL) se escribe DE CORRIDO: solo números, y los guiones se
+   ponen solos mientras se tipea. '30123456789' se ve como '30-12345678-9'.
+   Corta en 11 números, que es lo que tiene un CUIT: dos, ocho y uno. Así no
+   hace falta acordarse de dónde van los guiones, y un número de más no entra. */
+function formatearCuit(valor) {
+  const d = String(valor ?? '').replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 10) return `${d.slice(0, 2)}-${d.slice(2)}`;
+  return `${d.slice(0, 2)}-${d.slice(2, 10)}-${d.slice(10)}`;
+}
 const FORMATO_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onCancelar }) {
@@ -54,7 +65,7 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
     // El CUIT es opcional en el alta: el relevador no lo pide en la calle y la
     // oficina lo completa después. Pero si se carga, tiene que estar bien.
     if (datos.cuit?.trim() && !FORMATO_CUIT.test(datos.cuit.trim())) {
-      nuevos.cuit = 'El formato tiene que ser 30-12345678-9.';
+      nuevos.cuit = 'El CUIT tiene 11 números. Escribilo de corrido: los guiones se ponen solos.';
     }
     if (datos.email?.trim() && !FORMATO_EMAIL.test(datos.email.trim())) {
       nuevos.email = 'Ese correo no parece válido.';
@@ -121,9 +132,10 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           id="campo-cuit"
           etiqueta="CUIT"
           valor={datos.cuit}
-          onChange={(v) => cambiar('cuit', v)}
+          onChange={(v) => cambiar('cuit', formatearCuit(v))}
           error={errores.cuit}
           soloLectura={soloLectura}
+          teclado="numeric"
         />
         <CampoSelect
           id="campo-rubro"
@@ -182,8 +194,9 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           id="campo-cuil"
           etiqueta="CUIL del titular habilitado"
           valor={datos.titularCuil}
-          onChange={(v) => cambiar('titularCuil', v)}
+          onChange={(v) => cambiar('titularCuil', formatearCuit(v))}
           soloLectura={soloLectura}
+          teclado="numeric"
         />
 
         <CampoTexto

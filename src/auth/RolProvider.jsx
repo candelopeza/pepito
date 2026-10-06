@@ -9,6 +9,11 @@
      datosRol  el objeto completo del rol, con etiqueta y descripción
      usuario   la persona: { nombre, email, rol }
      setRol    PROVISORIO, cambia rol y usuario juntos
+     agente / elegirAgente  PROVISORIO: "firmar como" un usuario cargado en
+               la base (tabla `usuario`). Con eso el backend reconoce a la
+               persona por su legajo, toma el rol de la base y los actos quedan
+               a su nombre en la auditoría. Sin elegir, es el usuario de prueba
+               del rol (auth/usuarioActual.js), como antes.
 
    POR QUÉ EL USUARIO VIVE ACÁ Y NO EN EL STORE DE DATOS: porque el store lo
    necesita (firma la auditoría con el nombre del usuario), y si el usuario
@@ -32,6 +37,7 @@ import { usuarioDeRol } from './usuarioActual';
 
 function RolProvider({ children }) {
   const [rol, setRolInterno] = useState(ROL_POR_DEFECTO);
+  const [agente, setAgente] = useState(null);
 
   function setRol(nuevoRol) {
     if (!esRolValido(nuevoRol)) {
@@ -39,16 +45,29 @@ function RolProvider({ children }) {
       return;
     }
     setRolInterno(nuevoRol);
+    // Cambiar de rol vuelve al usuario de prueba: el agente elegido era de otro rol.
+    setAgente(null);
+  }
+
+  /* u = { id, nombre (el legajo), rol } de la lista de usuarios de la base, o
+     null para volver al usuario de prueba. */
+  function elegirAgente(u) {
+    if (u && esRolValido(u.rol)) setRolInterno(u.rol);
+    setAgente(u ?? null);
   }
 
   const valor = useMemo(
     () => ({
       rol,
       setRol,
+      agente,
+      elegirAgente,
       datosRol: ROLES[rol],
-      usuario: usuarioDeRol(rol),
+      usuario: agente
+        ? { id: agente.id, nombre: String(agente.nombre), email: agente.email ?? '', rol: agente.rol, deLaBase: true }
+        : usuarioDeRol(rol),
     }),
-    [rol],
+    [rol, agente],
   );
 
   return <RolContext.Provider value={valor}>{children}</RolContext.Provider>;

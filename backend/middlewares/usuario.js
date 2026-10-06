@@ -22,7 +22,25 @@
 import { consultar } from '../conexion-bd.js';
 import { ROL_POR_TUSUARIO } from '../mapeo.js';
 
-const ROLES_VALIDOS = ['relevador', 'notificador', 'administrativo', 'coordinacion', 'direccion', 'titular', 'sistema'];
+/* 'administrador' se sumó: es el perfil de control total que ya existía en el
+   front (src/auth/roles.js) y que el backend no reconocía, así que toda
+   escritura suya terminaba en 401. Ver también requiereRol() abajo. */
+const ROLES_VALIDOS = ['relevador', 'notificador', 'administrativo', 'coordinacion', 'direccion', 'administrador', 'titular', 'sistema'];
+
+/* >>> EL ROL DECLARADO POR UN USUARIO QUE NO ESTÁ EN LA BASE <<<
+   Mientras se prueba, hace falta poder entrar con cualquier rol aunque la
+   tabla `usuario` tenga tres filas: por eso, por defecto, se acepta el rol
+   que manda el navegador. En producción eso es inaceptable (cualquiera se
+   declara coordinación), así que se apaga con una línea en el .env:
+
+     ACEPTAR_ROL_DECLARADO=no
+
+   Con eso solo entran los agentes cargados en la tabla `usuario`, con el rol
+   de su tipo de usuario. Sigue sin ser un login (eso es CiDiTuc), pero ya no
+   alcanza con inventarse un rol. */
+export function aceptaRolDeclarado() {
+  return String(process.env.ACEPTAR_ROL_DECLARADO ?? 'si').trim().toLowerCase() !== 'no';
+}
 
 /* Caché de los usuarios de la base. Son tres filas hoy y no cambian entre
    pedido y pedido: consultarlas en cada request es latencia regalada. Se
@@ -36,6 +54,13 @@ async function usuariosDeLaBase() {
   const mapa = new Map(filas.map((u) => [String(u.idPersona).toLowerCase(), u]));
   cache = { usuarios: mapa, vence: Date.now() + DURACION_CACHE_MS };
   return mapa;
+}
+
+/* Se llama después de dar de alta, editar o dar de baja un usuario desde
+   Accesos → Usuarios: el cambio vale en el próximo pedido, sin esperar el
+   minuto de la caché. */
+export function olvidarUsuarios() {
+  cache = { usuarios: null, vence: 0 };
 }
 
 /* Se ejecuta en TODOS los pedidos (ver servidor.js). Deja en req.usuario
@@ -59,7 +84,7 @@ export async function identificarUsuario(req, _res, next) {
         nombre,
         rol: ROL_POR_TUSUARIO[registrado.idTusuario] ?? 'sistema',
       };
-    } else if (ROLES_VALIDOS.includes(cabeceraRol)) {
+    } else if (aceptaRolDeclarado() && ROLES_VALIDOS.includes(cabeceraRol)) {
       // No está cargado todavía: vale lo declarado, como antes.
       req.usuario = { id: null, nombre, rol: cabeceraRol };
     } else {
@@ -80,6 +105,9 @@ export async function identificarUsuario(req, _res, next) {
 export function requiereRol(...roles) {
   return (req, res, next) => {
     if (!req.usuario) return res.status(401).json({ error: 'Falta identificar al usuario' });
+    // El administrador es el perfil de control total (src/auth/roles.js):
+    // pasa por cualquier ruta, igual que en el front ve y ejecuta todo.
+    if (req.usuario.rol === 'administrador') return next();
     if (!roles.includes(req.usuario.rol)) {
       return res.status(403).json({ error: `El rol ${req.usuario.rol} no puede hacer esto` });
     }

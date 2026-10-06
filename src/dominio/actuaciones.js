@@ -96,11 +96,35 @@ export function completarNumeroCedula(entrada) {
 }
 
 /* ¿Son el mismo número? Compara la parte numérica: '1275', '001275' y
-   'CED-001275' son la misma cédula. Lo vacío no coincide con nada. */
+   'CED-001275' son la misma cédula. Lo vacío no coincide con nada.
+
+   Con el formato de la base del área (SERIE-CORRELATIVO, '0001-675') compara
+   el CORRELATIVO, lo que va después del guion: '675' y '0001-675' son la
+   misma cédula. Antes se juntaban todos los dígitos ('0001675' = 1675) y el
+   notificador que escribía 675 recibía "no coincide". */
+function correlativo(numero) {
+  const texto = String(numero ?? '');
+  const conSerie = texto.match(/-(\d+)\s*$/);
+  return conSerie ? conSerie[1] : digitosCedula(texto);
+}
+
 export function mismoNumeroCedula(a, b) {
-  const da = digitosCedula(a);
-  const db = digitosCedula(b);
+  const da = correlativo(a);
+  const db = correlativo(b);
   return Boolean(da) && Boolean(db) && Number(da) === Number(db);
+}
+
+/* Lo que escribió el notificador, armado con el MISMO formato que la cédula
+   de referencia, para mostrarle debajo del campo cómo quedó:
+     referencia '0001-675', escribe 675  -> '0001-675'
+     referencia 'CED-001275', escribe 1275 -> 'CED-001275'
+   Cadena vacía si no escribió ningún dígito. */
+export function armarNumeroCedula(entrada, referencia) {
+  const digitos = String(entrada ?? '').replace(/\D/g, '');
+  if (!digitos) return '';
+  const serie = String(referencia ?? '').match(/^(\d+)-\d+$/);
+  if (serie) return `${serie[1]}-${Number(digitos)}`;
+  return completarNumeroCedula(entrada);
 }
 
 export const ORIGENES_DOCUMENTO = [

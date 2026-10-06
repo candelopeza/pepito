@@ -28,7 +28,7 @@
    ============================================================================ */
 
 import { useState } from 'react';
-import Campo, { CampoSelect, CampoTexto } from './ui/Campo';
+import Campo, { CampoArchivo, CampoSelect, CampoTexto } from './ui/Campo';
 import Aviso from './ui/Aviso';
 import { useDatos } from '../datos/datosContexto';
 import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
@@ -36,7 +36,11 @@ import { fmtFecha, hoyISO } from '../dominio/fechas';
 import { vencimientoAnual } from '../dominio/vigencias';
 
 function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
-  const { parametros } = useDatos();
+  const { parametros, capacidades } = useDatos();
+  // Con la tabla `archivo` (backend/sql/08) el documento se adjunta de verdad
+  // (PDF o foto) y la oficina lo puede ver al validar. Sin ella, se escribe el
+  // nombre del archivo como antes.
+  const adjuntaArchivo = Boolean(capacidades?.archivos);
 
   const [datos, setDatos] = useState({
     tipo: 'DDJJ',
@@ -46,6 +50,8 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
     expedienteTramite: '',
     observaciones: '',
     archivo: '',
+    adjunto: '',
+    adjuntoNombre: '',
   });
   const [errores, setErrores] = useState({});
 
@@ -71,7 +77,11 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
     if (!datos.expedienteTramite.trim()) {
       e.expedienteTramite = 'Sin el número de expediente no se puede reconstruir el trámite que respalda la presentación.';
     }
-    if (!datos.archivo.trim()) e.archivo = 'Adjuntá el documento respaldatorio.';
+    if (adjuntaArchivo) {
+      if (!datos.adjunto) e.adjunto = 'Adjuntá el documento respaldatorio.';
+    } else if (!datos.archivo.trim()) {
+      e.archivo = 'Adjuntá el documento respaldatorio.';
+    }
     return e;
   }
 
@@ -168,15 +178,28 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
         {/* MAQUETA: no hay subida real de archivos, se escribe el nombre.
             Cuando exista el backend acá va un <input type="file"> y el archivo
             se guarda con su hash, para poder probar que no se cambió. */}
-        <Campo
-          id="doc-archivo"
-          etiqueta="Documento respaldatorio"
-          valor={datos.archivo}
-          onChange={(v) => cambiar('archivo', v)}
-          error={errores.archivo}
-          ayuda="Escribi el nombre del archivo."
-          ancho={2}
-        />
+        {adjuntaArchivo ? (
+          <CampoArchivo
+            id="doc-adjunto"
+            etiqueta="Documento respaldatorio"
+            valor={datos.adjunto}
+            nombre={datos.adjuntoNombre}
+            onChange={(contenido, nombre) => setDatos((p) => ({ ...p, adjunto: contenido, adjuntoNombre: nombre, archivo: nombre }))}
+            error={errores.adjunto}
+            ayuda="PDF o foto del documento."
+            ancho={2}
+          />
+        ) : (
+          <Campo
+            id="doc-archivo"
+            etiqueta="Documento respaldatorio"
+            valor={datos.archivo}
+            onChange={(v) => cambiar('archivo', v)}
+            error={errores.archivo}
+            ayuda="Escribi el nombre del archivo."
+            ancho={2}
+          />
+        )}
 
         <CampoTexto
           id="doc-obs"
@@ -187,7 +210,7 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
         />
       </div>
 
-      {vencimientoCalculado && (
+      {vencimientoCalculado && !desdePortal && (
         <Aviso tipo="ok" titulo={`Al registrarse, el local sale del circuito sancionatorio hasta el ${fmtFecha(vencimientoCalculado)}`}>
           La documentación vigente tiene prioridad sobre cualquier notificación en curso.
         </Aviso>

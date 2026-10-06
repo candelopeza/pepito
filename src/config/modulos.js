@@ -193,8 +193,10 @@ export const MODULOS = [
     descripcion: 'Cédulas asignadas y registro del resultado de la entrega',
     ruta: '/campo/entregas',
     grupo: 'campo',
-    roles: ['notificador', 'coordinacion'],
-    rolesEdicion: ['notificador', 'coordinacion'],
+    // El relevador también: coordinación le puede asignar cédulas, y la guía
+    // dice que suele ser el mismo agente (sección 7.2).
+    roles: ['notificador', 'relevador', 'coordinacion'],
+    rolesEdicion: ['notificador', 'relevador', 'coordinacion'],
   },
 
   /* ===================== ACCESOS ===================== */
@@ -391,6 +393,14 @@ export const ACCIONES_RAPIDAS = [
     roles: ['direccion', 'coordinacion'],
   },
   {
+    // Dirección da de alta y de baja a los agentes (sección 7.2).
+    id: 'gestionar-usuarios',
+    titulo: 'Usuarios del sistema',
+    descripcion: 'Alta, baja y rol de los agentes',
+    ruta: '/accesos/usuarios',
+    roles: ['direccion'],
+  },
+  {
     id: 'ver-mapa',
     titulo: 'Ver el mapa',
     descripcion: 'Los locales del padrón en el territorio, por estado',
@@ -508,5 +518,9 @@ export function puedeVerRuta(rol, ruta, permisos) {
    puede ver la pantalla de destino: si desde Accesos le quitaron el módulo, la
    tarjeta del Inicio desaparece con él. */
 export function accionesRapidasPara(rol, permisos) {
-  return ACCIONES_RAPIDAS.filter((a) => a.roles.includes(rol) && puedeVerRuta(rol, a.ruta.split('?')[0], permisos));
+  // El administrador ve las mismas acciones que los demás (ver el comentario
+  // de ACCIONES_RAPIDAS), menos la del portal, que es del titular. Antes no
+  // aparecía en ningún `roles` y entraba a un Inicio sin acciones.
+  const seLeOfrece = (a) => (rol === ROL_ADMINISTRADOR ? a.id !== 'mis-locales' : a.roles.includes(rol));
+  return ACCIONES_RAPIDAS.filter((a) => seLeOfrece(a) && puedeVerRuta(rol, a.ruta.split('?')[0], permisos));
 }

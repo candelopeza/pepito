@@ -93,8 +93,11 @@ function Sidebar({ onNavegar }) {
       s.modulos.some((m) => pathname.startsWith(m.ruta))
     );
     // Si no estamos parados en ningún módulo (por ejemplo, en el Inicio),
-    // se abre la primera para que el menú no arranque todo cerrado.
-    const inicial = laDeLaPantallaActual ?? secciones[0];
+    // se abre la primera para que el menú no arranque todo cerrado. Para los
+    // agentes de calle la primera es Campo: es donde está su trabajo del día
+    // (antes abría Oficina y "Relevar" quedaba a tres toques).
+    const deCampo = ['relevador', 'notificador'].includes(rol) ? secciones.find((s) => s.id === 'campo') : null;
+    const inicial = laDeLaPantallaActual ?? deCampo ?? secciones[0];
     return inicial ? [inicial.id] : [];
   });
 

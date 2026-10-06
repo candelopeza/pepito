@@ -15,16 +15,27 @@
      children        el texto que explica la consecuencia
      textoConfirmar  (opcional) por defecto 'Confirmar'
      peligro         (opcional) pinta el botón de rojo: actos irreversibles
+     deshabilitado   (opcional) el botón de confirmar no responde, por ejemplo
+                     mientras falta un dato obligatorio (el motivo de un rechazo)
    ============================================================================ */
 
 import Modal from './Modal';
 
-function Confirmar({ abierto, titulo, children, onConfirmar, onCancelar, textoConfirmar = 'Confirmar', peligro = false }) {
+function Confirmar({
+  abierto,
+  titulo,
+  children,
+  onConfirmar,
+  onCancelar,
+  textoConfirmar = 'Confirmar',
+  peligro = false,
+  deshabilitado = false,
+}) {
   return (
     <Modal abierto={abierto} titulo={titulo} onCerrar={onCancelar}>
       <div className="confirmar-cuerpo">{children}</div>
       <div className="form-acciones">
-        <button type="button" className={peligro ? 'btn-peligro' : 'btn-primario'} onClick={onConfirmar}>
+        <button type="button" className={peligro ? 'btn-peligro' : 'btn-primario'} onClick={onConfirmar} disabled={deshabilitado}>
           {textoConfirmar}
         </button>
         <button type="button" className="btn-secundario" onClick={onCancelar}>

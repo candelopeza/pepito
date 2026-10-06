@@ -40,8 +40,15 @@ export const PARAMETROS = {
   exigirDatosSiempre: true,
 
   /* Emisión de cédulas sin intervención humana. Apagado: hoy cada cédula la
-     emite una persona. */
+     emite una persona. Prendido, el sistema emite la cola todos los días
+     hábiles a las 7 (backend/tareas-programadas.js). */
   emisionAutomatica: false,
+
+  /* Respaldo de la emisión manual (sección 9.6): si a las 12 la cola sigue sin
+     emitir, la emite el sistema y queda anotado como suyo en el historial.
+     Solo cuenta con emisionAutomatica en false. Apagado hasta que la Dirección
+     lo decida: emitir es un acto administrativo. */
+  emisionRespaldo: false,
 
   /* Tope de días que puede otorgar una prórroga, y cuántas prórrogas admite un
      local por vuelta del circuito (nro_ciclo). */

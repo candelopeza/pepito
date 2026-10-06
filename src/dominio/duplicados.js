@@ -10,10 +10,20 @@
    registrada (qué ids se unificaron), porque después hay que poder rastrear
    una actuación histórica hasta el registro donde se cargó.
 
-   CRITERIOS, de más fuerte a más débil:
-     1. mismo CUIT normalizado ..................... coincidencia alta
-     2. nombre parecido + misma calle y altura ..... coincidencia media
-     3. nombre parecido a secas .................... coincidencia baja
+   >>> CUÁNDO ES DUPLICADO (criterio 'direccion', el que se usa) <<<
+   Solo si coinciden las TRES cosas: nombre comercial, nombre de calle y
+   altura (es lo que hace el sistema viejo, sección 9.4). El CUIT solo no
+   alcanza: un mismo titular tiene varios locales, y muchos locales se llaman
+   igual en distintas direcciones. Con el CUIT o el nombre solos, la pantalla
+   se llenaba de pares que no eran duplicados.
+     - nombre, calle, altura y además el mismo CUIT ... coincidencia alta
+     - nombre, calle y altura .......................... coincidencia media
+
+   El criterio anterior (mismo CUIT, o nombre parecido aunque cambie la
+   dirección) sigue disponible con { criterio: 'amplio' }: no se borró.
+
+   QUIÉN SE CONSERVA: el de mayor jerarquía legal (ver jerarquiaLegal),
+   porque es el que referencian los actos ya notificados o iniciados.
    ============================================================================ */
 
 /* Deja solo dígitos: '30-12345678-9' y '30123456789' son el mismo CUIT.
@@ -61,8 +71,93 @@ export function similitud(a, b) {
   return comunes / (A.size + B.size - comunes);
 }
 
-/* Devuelve los pares candidatos, del más probable al menos. */
-export function buscarDuplicados(locales, { umbralNombre = 0.6 } = {}) {
+/* Qué tan avanzado está el local en el circuito legal: cuanto más alto, más
+   actos con efecto sobre el titular tiene (un expediente iniciado pesa más que
+   una cédula, una cédula más que un relevamiento). Al unificar dos registros,
+   el historial va al de mayor jerarquía. */
+const JERARQUIA_POR_ESTADO = {
+  EXPEDIENTE: 6,
+  GENERAR_EXPEDIENTE: 5,
+  PRORROGA_VIGENTE: 5,
+  CONTRATO_VIGENTE: 4,
+  CONTRATO_9DJ: 4,
+  DDJJ_VIGENTE: 4,
+  DDJJ_RECICLAJE: 4,
+  COMPLETAR_DATOS: 3,
+};
+
+export function jerarquiaLegal(local) {
+  const estado = String(local?.estado ?? '');
+  if (JERARQUIA_POR_ESTADO[estado]) return JERARQUIA_POR_ESTADO[estado];
+  if (estado.startsWith('NOTIF2')) return 3;
+  if (estado.startsWith('NOTIF1')) return 2;
+  if (estado === 'EXENTO_CONFIRMADO' || estado === 'EXENTO_REVISION') return 0;
+  return 1;
+}
+
+/* [principal, duplicado]: primero la jerarquía legal; si empatan, el que tiene
+   más actuaciones, después el que tiene CUIT, y por último el más antiguo. */
+export function ordenarPorJerarquia(a, b) {
+  const criterios = [
+    (x) => jerarquiaLegal(x),
+    (x) => x.cantidadActuaciones ?? 0,
+    (x) => (normalizarCuit(x.cuit) ? 1 : 0),
+    (x) => -(Number(x.id) || 0),
+  ];
+  for (const c of criterios) {
+    if (c(a) !== c(b)) return c(a) > c(b) ? [a, b] : [b, a];
+  }
+  return [a, b];
+}
+
+/* Devuelve los pares candidatos, del más probable al menos.
+   criterio 'direccion' (por defecto): nombre + calle + altura.
+   criterio 'amplio': el de antes (también CUIT solo o nombre solo). */
+export function buscarDuplicados(locales, { umbralNombre = 0.6, criterio = 'direccion' } = {}) {
+  if (criterio === 'direccion') return porNombreYDireccion(locales, umbralNombre);
+  return amplio(locales, umbralNombre);
+}
+
+/* Agrupa por calle y altura antes de comparar nombres: con 2.200 locales,
+   comparar todos contra todos son 2,4 millones de pares; así solo se comparan
+   los que ya comparten la dirección. */
+function porNombreYDireccion(locales, umbralNombre) {
+  const porDireccion = new Map();
+  for (const local of locales) {
+    const { calle, altura } = partirDireccion(local.direccion);
+    if (!calle || !altura) continue; // sin altura no se puede afirmar que sea el mismo lugar
+    const clave = `${calle}|${altura}`;
+    if (!porDireccion.has(clave)) porDireccion.set(clave, []);
+    porDireccion.get(clave).push(local);
+  }
+
+  const pares = [];
+  for (const grupo of porDireccion.values()) {
+    for (let i = 0; i < grupo.length; i += 1) {
+      for (let j = i + 1; j < grupo.length; j += 1) {
+        const a = grupo[i];
+        const b = grupo[j];
+        const parecidoNombre = similitud(a.nombreLocal, b.nombreLocal);
+        if (parecidoNombre < umbralNombre) continue;
+        const cuitA = normalizarCuit(a.cuit);
+        const mismoCuit = Boolean(cuitA) && cuitA === normalizarCuit(b.cuit);
+        pares.push({
+          id: `${a.id}-${b.id}`,
+          principal: a,
+          duplicado: b,
+          nivel: mismoCuit ? 'alta' : 'media',
+          motivo: mismoCuit ? 'Mismo nombre, calle, altura y CUIT.' : 'Mismo nombre, calle y altura.',
+          parecido: Math.round(parecidoNombre * 100),
+        });
+      }
+    }
+  }
+  const orden = { alta: 0, media: 1 };
+  return pares.sort((x, y) => orden[x.nivel] - orden[y.nivel] || y.parecido - x.parecido);
+}
+
+/* El criterio anterior, sin cambios. */
+function amplio(locales, umbralNombre) {
   const pares = [];
 
   for (let i = 0; i < locales.length; i += 1) {

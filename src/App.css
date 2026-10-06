@@ -610,6 +610,8 @@
    de COLOR_ESTADO en pages/Tramite.jsx. */
 .badge-rojo { background: #ffebee; color: #c62828; }
 .badge-gris { background: #eceff1; color: #607d8b; }
+/* Sin color: el estado en las grillas se lee como texto común (ver ui/Badge.jsx). */
+.badge-neutro { background: transparent; color: #37474f; font-weight: 500; padding-left: 0; padding-right: 0; }
 
 /* ========== 10. FORMULARIOS ==========
    Usado en: components/FormLocal.jsx (adentro del modal de Locales).
@@ -1659,6 +1661,15 @@
    Al imprimir (cédula, hoja de ruta, reportes) hay que sacar de la hoja la
    navbar, el menú y los botones: si no, salen en el papel.
    .solo-impresion marca el bloque que SÍ tiene que salir. */
+@media print {
+  /* Con una cédula abierta (el modal se dibuja aparte, en el body): sale solo
+     el papel de la cédula, sin la pantalla de atrás ni el resto del modal. */
+  body:has(.modal-fondo .solo-impresion) > *:not(.modal-fondo) { display: none !important; }
+  .modal-fondo:has(.solo-impresion) .modal-cuerpo > *:not(.solo-impresion) { display: none !important; }
+  /* Hoja de ruta (Notificaciones): sin un modal abierto, sale solo la tabla
+     .solo-papel y no la pantalla entera con las grillas. */
+  body:has(.solo-papel):not(:has(.modal-fondo)) .main-content > *:not(.solo-papel) { display: none !important; }
+}
 
 /* ========== 14.11 ACCESOS ==========
    pages/accesos/TiposUsuario.jsx, pages/accesos/Usuarios.jsx y ui/hab/des.jsx (Interruptor) */
@@ -1770,3 +1781,126 @@
   border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
   font-size: 14px; color: #14599e;
 }
+
+/* ========== 14.17 FOTO DE LA ENTREGA Y TRABAJO SIN CONEXIÓN ==========
+   components/ui/Campo.jsx (CampoFoto), components/Navbar.jsx (indicador). */
+.campo-foto-previa { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.campo-foto-previa img { width: 96px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid #e0e0e0; }
+.navbar-conexion {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px;
+  font-size: 12px; font-weight: 600; background: #fff3e0; color: #e65100; white-space: nowrap;
+}
+.navbar-conexion-pendientes { background: #e3f2fd; color: #1565c0; cursor: pointer; border: none; }
+.hist-foto { max-width: 220px; max-height: 160px; border-radius: 6px; border: 1px solid #e0e0e0; display: block; }
+.portal-prueba { margin-bottom: 14px; }
+.portal-prueba input { min-width: 240px; }
+
+/* ========== 14.18 TABLAS SIN COLORES ==========
+   Pedido del área (2026-10-02): todas las tablas iguales, con las filas
+   blancas y sin pastillas de color. Todo lo que está adentro de una grilla
+   (ui/Grilla.jsx) o de una .tabla-datos se lee como texto común: estados,
+   resultados de entrega, vigencias, clasificaciones, "Sin asignar", días
+   vencidos. Quedan con color solo el encabezado azul, los links y los botones.
+
+   Los colores no se borraron: siguen definidos arriba (.badge-*) y se ven
+   fuera de las tablas (ficha del local, portal, mapa). Para volver a tener
+   color en las tablas, alcanza con borrar este bloque. */
+.grilla-contenedor .badge,
+.tabla-datos .badge {
+  background: transparent !important;
+  color: #37474f !important;
+  font-weight: 500;
+  padding-left: 0;
+  padding-right: 0;
+}
+.grilla-contenedor .texto-vencido,
+.grilla-contenedor .texto-ok,
+.grilla-contenedor .hist-pendiente,
+.grilla-contenedor .hist-vencido,
+.tabla-datos .texto-vencido,
+.tabla-datos .texto-ok,
+.tabla-datos .hist-pendiente,
+.tabla-datos .hist-vencido {
+  color: inherit;
+}
+/* El número de cada bandeja del tablero, todos del mismo azul del encabezado. */
+.bandeja-contador-azul,
+.bandeja-contador-verde,
+.bandeja-contador-naranja,
+.bandeja-contador-amarillo,
+.bandeja-contador-rojo {
+  color: #1976d2;
+}
+
+/* ========== 14.19 BUSCADOR DE LOCAL ==========
+   Elegir un local escribiendo (components/BuscadorLocal.jsx), en vez de un
+   desplegable con todo el padrón. Las coincidencias van debajo del campo; el
+   elegido queda en un recuadro con el botón "Cambiar". */
+.buscador-rotulo { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #555; }
+.buscador-elegido {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; background: #fafbfc;
+}
+.buscador-resultados {
+  list-style: none; margin: 6px 0 0; padding: 0;
+  border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background: white;
+}
+.buscador-resultados li + li { border-top: 1px solid #eef1f4; }
+.buscador-resultados button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+  padding: 10px 14px; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer;
+}
+.buscador-resultados button:hover,
+.buscador-resultados button:focus-visible { background: #e3f2fd; outline: none; }
+.buscador-resultados small { font-size: 12px; color: #78909c; }
+
+/* ========== 14.20 REPORTES: PERÍODO ==========
+   Las pastillas del período (pages/Reportes.jsx) reusan las del orden del
+   tablero; acá solo se les deja bajar de renglón en pantallas chicas. */
+.reporte-periodo { flex-wrap: wrap; margin: 4px 0 16px; border-radius: 16px; }
+.reporte-fechas { display: flex; flex-wrap: wrap; gap: 16px; max-width: 520px; }
+.reporte-fechas .form-grupo { flex: 1 1 200px; }
+@media print {
+  .reporte-periodo,
+  .reporte-fechas { display: none; }
+}
+
+/* ========== 14.21 IMPRESIÓN DE CÉDULAS POR LOTE ==========
+   Notificaciones → "Imprimir N cédulas": cada cédula en su hoja. El bloque
+   solo existe mientras se imprime (pages/Notificaciones.jsx). */
+@media print {
+  .lote-cedulas .cedula-papel { break-after: page; page-break-after: always; margin: 0; }
+  .lote-cedulas .cedula-papel:last-child { break-after: auto; page-break-after: auto; }
+}
+
+/* ========== 14.22 PADRÓN: FILTROS COMBINABLES ==========
+   pages/Local.jsx: estado, rubro y situación, arriba de la grilla. */
+.filtros-padron { align-items: flex-end; }
+.filtros-padron .form-grupo { min-width: 200px; flex: 0 1 240px; }
+.filtros-padron .filtros-limpiar { margin-bottom: 12px; }
+@media (max-width: 600px) {
+  .filtros-padron .form-grupo { flex: 1 1 100%; min-width: 0; }
+}
+
+/* ========== 14.23 BARRA SUPERIOR EN EL CELULAR ==========
+   El selector de PRUEBA (rol + "Firmar como") no entraba en 390px y toda la
+   página se podía arrastrar de costado (674px de ancho). En pantalla chica:
+   se esconde la palabra "CIUDAD", los selectores se achican y cortan el texto,
+   y la barra no puede ser más ancha que la pantalla. Se va con el selector
+   cuando haya login. */
+@media (max-width: 600px) {
+  .navbar { gap: 8px; padding: 0 10px; max-width: 100vw; overflow: hidden; }
+  .logo-icon { display: none; }
+  .ciudad { display: none; }
+  .smt { font-size: 20px; }
+  .navbar-derecha { gap: 8px; min-width: 0; }
+  .selector-rol { gap: 4px; min-width: 0; }
+  .selector-rol-aviso { display: none; }
+  .selector-rol-select { max-width: 112px; padding: 6px; font-size: 12px; text-overflow: ellipsis; }
+  .navbar-usuario-icono { display: none; }
+}
+
+/* El campo de PRUEBA del portal usa el estilo del selector de la barra azul,
+   pero está sobre fondo claro: con el texto blanco no se veía lo escrito. */
+.portal-prueba .selector-rol-select { color: #333; background: white; border-color: #cfd8dc; }
+.portal-prueba .selector-rol-select::placeholder { color: #90a4ae; }

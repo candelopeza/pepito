@@ -28,9 +28,15 @@
    grilla, así que solo las ven los roles que supervisan el trabajo de campo:
    ROLES_METRICAS_CAMPO, abajo. Se agrega o se saca un rol de ese array y la
    columna aparece o desaparece; no hay nada más que tocar.
+
+   >>> CADA ROL VE LO SUYO (2026-10-02) <<<
+   El relevador entra desde "Mis relevamientos": arranca viendo solo sus
+   cargas (un botón muestra las de todos). Los pendientes de control los ve
+   quien tiene algún acto de control en la tabla del dominio, y cada uno solo
+   los que puede resolver; Dirección los ve todos, para seguir la situación.
    ============================================================================ */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AddIcon from '@mui/icons-material/Add';
 import PageHeader from '../components/ui/PageHeader';
@@ -41,6 +47,8 @@ import AccionesLocal from '../components/AccionesLocal';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
+import { ACCIONES } from '../dominio/reglas';
+import { esTrabajoDe } from '../datos/vistas';
 import { colorClasificacion, etiquetaClasificacion } from '../config/catalogos';
 import { fmtFechaHora } from '../dominio/fechas';
 
@@ -49,13 +57,33 @@ import { fmtFechaHora } from '../dominio/fechas';
    cobertura territorial. Al resto le sobran. */
 const ROLES_METRICAS_CAMPO = ['coordinacion', 'direccion', 'administrador'];
 
+const ESTADOS_DE_CONTROL = ['REVISION_DATOS', 'EXENTO_REVISION'];
+
+/* ¿Este rol tiene algo que hacer en el control? Sale de la tabla de actos: si
+   mañana el administrativo confirma exenciones, aparece solo. */
+function tieneActosDeControl(rol) {
+  return ACCIONES.some(
+    (a) => (rol === 'administrador' || a.roles.includes(rol)) && a.estados.some((e) => ESTADOS_DE_CONTROL.includes(e)),
+  );
+}
+
 function Relevamiento() {
-  const { rol } = useRol();
-  const { relevamientos, localesConEstado, localPorId, permisos } = useDatos();
+  const { rol, usuario } = useRol();
+  const { relevamientos, localesConEstado, localPorId, permisos, usuarios } = useDatos();
 
   const veMetricasCampo = ROLES_METRICAS_CAMPO.includes(rol);
 
-  const pendientes = localesConEstado.filter((l) => ['REVISION_DATOS', 'EXENTO_REVISION'].includes(l.estado));
+  // Quién soy en la tabla de usuarios (igual que en Entregas).
+  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.nombre === usuario.nombre);
+  const esMio = (r) => (yo ? r.idUsuario === yo.id : r.usuario === usuario.nombre);
+  // El relevador arranca con lo suyo; el resto, con todo. El botón lo cambia.
+  const [verTodosElegido, setVerTodos] = useState(null);
+  const verTodos = verTodosElegido ?? rol !== 'relevador';
+
+  const veControl = rol === 'direccion' || tieneActosDeControl(rol);
+  const pendientes = veControl
+    ? localesConEstado.filter((l) => ESTADOS_DE_CONTROL.includes(l.estado) && esTrabajoDe(l, rol))
+    : [];
 
   const columnas = useMemo(
     () => [
@@ -65,14 +93,20 @@ function Relevamiento() {
         headerName: 'Local',
         flex: 1,
         minWidth: 180,
+        valueGetter: (_v, row) => row.nombreLocal ?? localPorId(row.localId)?.nombreLocal ?? '',
         renderCell: ({ row }) => (
           <Link to={`/locales/${row.localId}`} className="link-local">
-            {row.nombreLocal}
+            {row.nombreLocal ?? localPorId(row.localId)?.nombreLocal ?? `Local ${row.localId}`}
           </Link>
         ),
       },
       { field: 'direccionRelevada', headerName: 'Dirección relevada', flex: 1, minWidth: 190 },
-      { field: 'rubro', headerName: 'Rubro', width: 150 },
+      {
+        field: 'rubro',
+        headerName: 'Rubro',
+        width: 150,
+        valueGetter: (_v, row) => row.rubro ?? localPorId(row.localId)?.rubro ?? '',
+      },
       {
         field: 'clasificacion',
         headerName: 'Clasificación',
@@ -111,10 +145,10 @@ function Relevamiento() {
         field: 'control',
         headerName: 'Control',
         width: 175,
-        valueGetter: (_v, row) => (row.revisadoEn ? row.resultadoRevision : 'pendiente'),
+        valueGetter: (_v, row) => (row.revisadoEn ? 'controlado' : 'pendiente'),
         renderCell: ({ row }) =>
           row.revisadoEn ? (
-            <span title={`${row.revisadoPor} · ${fmtFechaHora(row.revisadoEn)}`}>
+            <span title={`Controlado el ${fmtFechaHora(row.revisadoEn)}`}>
               <Badge color="verde">Controlado</Badge>
             </span>
           ) : (
@@ -143,7 +177,7 @@ function Relevamiento() {
         headerName: 'Estado actual del local',
         width: 220,
         valueGetter: (_v, row) => localPorId(row.localId)?.estado ?? '',
-        renderCell: ({ row }) => <BadgeEstado codigo={localPorId(row.localId)?.estado} />,
+        renderCell: ({ row }) => <BadgeEstado codigo={localPorId(row.localId)?.estado} sinColor />,
       },
     ],
     [localPorId, veMetricasCampo],
@@ -153,7 +187,13 @@ function Relevamiento() {
      encima de la tabla, que hacía lo mismo que el buscador rápido del Data
      Grid. Con los dos puestos, el resultado salía de combinarlos y no había
      forma de entender por qué faltaba una fila. */
-  const filas = relevamientos;
+  const filas = verTodos ? relevamientos : relevamientos.filter(esMio);
+
+  const botonNuevo = puedeEditar(rol, 'relevar', permisos) && (
+    <Link to="/campo/relevar" className="btn-icono btn-icono-verde" title="Nuevo relevamiento">
+      <AddIcon fontSize="small" />
+    </Link>
+  );
 
   /* Las columnas necesitan la lista de relevamientos para mostrar quién
      clasificó cada local, así que se arman acá y no como constante del módulo. */
@@ -198,7 +238,7 @@ function Relevamiento() {
         field: 'estado',
         headerName: 'Estado',
         width: 210,
-        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} />,
+        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} sinColor />,
       },
       {
         field: 'acciones',
@@ -217,32 +257,43 @@ function Relevamiento() {
       <PageHeader
         etiqueta="RELEVAMIENTOS"
         titulo="RELEVAMIENTO Y CONTROL"
-        subtitulo={`${relevamientos.length} relevamiento(s) cargados · ${pendientes.length} pendiente(s) de control`}
+        subtitulo={
+          veControl
+            ? `${relevamientos.length} relevamiento(s) cargados · ${pendientes.length} pendiente(s) de control`
+            : `${filas.length} relevamiento(s) ${verTodos ? 'cargados' : 'tuyos'}`
+        }
         botonVolver
+        acciones={
+          rol === 'relevador' && (
+            <button type="button" className="btn-secundario" onClick={() => setVerTodos(!verTodos)}>
+              {verTodos ? 'Ver solo los míos' : 'Ver los de todos'}
+            </button>
+          )
+        }
       />
 
-      {/* ================= PENDIENTES DE CONTROL ================= */}
-      <div className="accesos-header">
-        <span>Pendientes de control de coordinación</span>
-      </div>
+      {/* ================= PENDIENTES DE CONTROL =================
+          Solo para quien controla: al relevador no le sirve una lista donde
+          no puede hacer nada. */}
+      {veControl && (
+        <>
+          <div className="accesos-header">
+            <span>Pendientes de control de coordinación</span>
+          </div>
 
-      {pendientes.length === 0 ? (
-        <Vacio titulo="Todo controlado">No hay relevamientos esperando el control administrativo.</Vacio>
-      ) : (
-        <Grilla
-          filas={pendientes}
-          columnas={columnasPendientes}
-          nombreArchivo="relevamientos-pendientes"
-          vacio="No hay relevamientos esperando control."
-          alto="auto"
-          botones={
-            puedeEditar(rol, 'relevar', permisos) && (
-              <Link to="/campo/relevar" className="btn-icono btn-icono-verde" title="Nuevo relevamiento">
-                <AddIcon fontSize="small" />
-              </Link>
-            )
-          }
-        />
+          {pendientes.length === 0 ? (
+            <Vacio titulo="Todo controlado">No hay relevamientos esperando el control administrativo.</Vacio>
+          ) : (
+            <Grilla
+              filas={pendientes}
+              columnas={columnasPendientes}
+              nombreArchivo="relevamientos-pendientes"
+              vacio="No hay relevamientos esperando control."
+              alto="auto"
+              botones={botonNuevo}
+            />
+          )}
+        </>
       )}
 
       {/* ================= LISTADO COMPLETO ================= */}
@@ -250,8 +301,9 @@ function Relevamiento() {
         filas={filas}
         columnas={columnas}
         nombreArchivo="relevamientos"
-        vacio="Todavía no hay relevamientos cargados."
+        vacio={verTodos ? 'Todavía no hay relevamientos cargados.' : 'Todavía no cargaste relevamientos.'}
         ordenInicial={[{ field: 'fechaHora', sort: 'desc' }]}
+        botones={botonNuevo}
       />
     </>
   );

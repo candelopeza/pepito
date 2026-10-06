@@ -40,7 +40,7 @@
    misma tabla de permisos que gobierna el menú y el bloqueo por URL.
    ============================================================================ */
 
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import PageHeader from '../components/ui/PageHeader';
 import Aviso, { Vacio } from '../components/ui/Aviso';
@@ -95,7 +95,12 @@ function pieDePlazos(locales) {
 
 function Home() {
   const { rol, datosRol, usuario } = useRol();
-  const { bandejasPara, presentacionesPendientes, indicadores, permisos } = useDatos();
+  const { bandejasPara, presentacionesPendientes, indicadores, permisos, usuarios } = useDatos();
+
+  // Quién soy en la tabla de usuarios, igual que en Entregas: las cédulas se
+  // asignan por id. Con un agente elegido en "Firmar como" es él; si no, se
+  // busca por nombre.
+  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.nombre === usuario.nombre);
 
   // Un tipo de usuario apagado desde Accesos entra y no ve nada. Se le avisa
   // en vez de mostrarle un Inicio vacío sin explicación.
@@ -111,7 +116,11 @@ function Home() {
      Inicio tiene que mostrar lo que hay para hacer, no el catálogo completo de
      situaciones posibles (para eso está el Tablero, que las lista todas
      siempre en el mismo lugar). */
-  const bandejasDelRol = habilitado ? bandejasPara(rol, 'prioridad') : [];
+  // Solo lo que ESTE usuario puede resolver: al administrativo no se le cuentan
+  // las exenciones que confirma coordinación, y al notificador solo sus cédulas.
+  const bandejasDelRol = habilitado
+    ? bandejasPara(rol, 'prioridad', { soloTrabajo: true, idUsuario: yo?.id ?? null })
+    : [];
   const bandejas = bandejasDelRol.filter((b) => b.locales.length > 0);
 
   /* La validación de presentaciones NO es una bandeja: no agrupa locales por
@@ -136,7 +145,10 @@ function Home() {
 
      En cambio un administrativo con las bandejas en cero SÍ tiene que ver el
      cartel: "hoy no hay nada" es información que estaba esperando. */
-  const leCorrespondenPendientes = bandejasDelRol.length > 0 || puedeValidar;
+  // El relevador ve la sección solo cuando le asignaron cédulas: entregar no
+  // es su tarea de todos los días.
+  const leCorrespondenPendientes =
+    (bandejasDelRol.length > 0 && (rol !== 'relevador' || bandejas.length > 0)) || puedeValidar;
 
   // ===== C. LOS NÚMEROS DEL MES =====
   /* Los indicadores son del conjunto del organismo, no del usuario: los ve
@@ -145,6 +157,12 @@ function Home() {
      Se decide con la misma tabla de permisos que todo lo demás. */
   const verIndicadores = puedeVerRuta(rol, '/tablero', permisos);
   const ind = verIndicadores ? indicadores() : null;
+
+  /* El titular entra directo a su portal: es lo único que tiene para hacer,
+     y el Inicio de oficina no le dice nada (sección 6.3). */
+  if (rol === 'titular' && habilitado && puedeVerRuta(rol, '/portal', permisos)) {
+    return <Navigate to="/portal" replace />;
+  }
 
   const fechaFormateada = new Date().toLocaleDateString('es-ES', {
     weekday: 'long',
@@ -164,9 +182,14 @@ function Home() {
              "no tenés nada esperando" sería contarles algo que no aplica. */
           !leCorrespondenPendientes
             ? datosRol.descripcion
-            : totalPendientes === 0
-              ? 'No tenés nada esperando. Podés iniciar algo nuevo desde las acciones de abajo.'
-              : `Tenés ${totalPendientes} caso(s) esperando una acción tuya.`
+            : rol === 'direccion'
+              ? /* Dirección tiene lectura total y no ejecuta actos del circuito
+                   (sección 7.2): las bandejas le muestran la situación del área,
+                   no trabajo suyo. */
+                `Situación del área: ${totalPendientes} caso(s) en las bandejas de trabajo.`
+              : totalPendientes === 0
+                ? 'No tenés nada esperando. Podés iniciar algo nuevo desde las acciones de abajo.'
+                : `Tenés ${totalPendientes} caso(s) esperando una acción tuya.`
         }
       />
 
@@ -239,11 +262,17 @@ function Home() {
           )}
         </div>
 
+        {/* Las cédulas se asignan por persona: sin saber quién es, el
+            notificador no tiene "suyas" para mostrar. */}
+
         {bandejas.length === 0 && aValidar.length === 0 ? (
-          <Vacio titulo="No hay nada pendiente">
-            Ninguna de tus bandejas tiene casos esperando. Cuando entre un relevamiento para controlar, una cédula para
-            emitir o documentación para validar, va a aparecer acá.
-          </Vacio>
+          ['notificador', 'relevador'].includes(rol) ? (
+            // El agente de campo solo tiene pendientes si le asignan cédulas.
+            <Vacio titulo="No tenés cédulas para entregar"></Vacio>
+          ) : (
+            <Vacio titulo="No hay nada pendiente">
+            </Vacio>
+          )
         ) : (
           <div className="grid-accesos">
             {bandejas.map((b) => (

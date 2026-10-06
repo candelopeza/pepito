@@ -191,11 +191,14 @@ function PermisosDeRol({ rol, permisos, soloLectura, guardarPermiso, restablecer
    --------------------------------------------------------------------------- */
 function TiposUsuario() {
   const { rol: rolActivo } = useRol();
-  const { permisos, usuarios, guardarPermiso, restablecerPermisosDeRol, habilitarRol } = useDatos();
+  const { permisos, usuarios, guardarPermiso, restablecerPermisosDeRol, habilitarRol, capacidades } = useDatos();
+  // Las llaves guardan si la base tiene las tablas de Accesos (backend/sql/07).
+  // Sin ellas se ven, pero quedan quietas: antes se movían y después daban error.
+  const sinTablas = capacidades?.accesos === false;
   const [params, setParams] = useSearchParams();
 
   // Quien llegue acá con acceso de consulta ve las llaves pero no las mueve.
-  const soloLectura = !puedeEditar(rolActivo, 'accesos-roles', permisos);
+  const soloLectura = !puedeEditar(rolActivo, 'accesos-roles', permisos) || sinTablas;
 
   const [buscar, setBuscar] = useState('');
 
@@ -293,6 +296,8 @@ function TiposUsuario() {
         subtitulo={`${LISTA_ROLES.length} tipos de usuario · ${prendidos} habilitado(s)`}
         botonVolver
       />
+
+      {sinTablas && <p className="texto-chico">Esta base todavía no guarda los permisos: rige el reparto por defecto.</p>}
 
       <Grilla
         filas={filas}

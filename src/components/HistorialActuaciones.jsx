@@ -21,9 +21,13 @@
    vigencia y expediente de trámite.
    ============================================================================ */
 
+import { useState } from 'react';
 import Badge from './ui/Badge';
 import { Vacio } from './ui/Aviso';
 import { Dato } from './ui/Campo';
+import { useDatos } from '../datos/datosContexto';
+import ArchivoGuardado from './ArchivoGuardado';
+import VistaCedula from './VistaCedula';
 import { ETIQUETA_DOCUMENTO, TIPOS_ACTUACION, resultadoEntrega } from '../dominio/actuaciones';
 import { fmtFecha, plazoVencido } from '../dominio/fechas';
 import { estaVigente } from '../dominio/vigencias';
@@ -35,7 +39,7 @@ import { estaVigente } from '../dominio/vigencias';
    padrón" en la ficha: etiqueta chica arriba, valor abajo, en grilla. Antes
    era texto corrido separado por espacios y no se distinguía qué era cada
    cosa; ahora el historial se lee igual que el resto de la ficha. */
-function Detalle({ a, usuarios }) {
+function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
   if (a.tipo === 'NOTIFICACION') {
     const res = resultadoEntrega(a.resultado);
     const notificador = usuarios.find((u) => u.id === a.notificadorId);
@@ -43,13 +47,27 @@ function Detalle({ a, usuarios }) {
     return (
       <>
         {/* Cada dato va con el componente Dato: la etiqueta arriba y el valor debajo, no a la par. */}
-        <Dato etiqueta="Cédula">{a.numeroCedula}</Dato>
+        <Dato etiqueta="Cédula">
+          {a.numeroCedula ?? <span className="hist-pendiente">Pendiente de emisión</span>}
+          {/* Toda cédula emitida se puede abrir desde la ficha (sección 9.6). */}
+          {a.numeroCedula && onVerCedula && (
+            <>
+              {' '}
+              <button type="button" className="btn-tabla" onClick={() => onVerCedula(a)}>
+                Ver
+              </button>
+            </>
+          )}
+        </Dato>
         <Dato etiqueta="Instancia">{a.instancia === 1 ? 'Primera notificación' : 'Segunda notificación'}</Dato>
         <Dato etiqueta="Plazo">{a.plazoDias} días hábiles</Dato>
         <Dato etiqueta="Notificador">{notificador?.nombre ?? 'sin asignar'}</Dato>
-        <Dato etiqueta="Impresión">
-          {a.impresaEn ? `Impresa por ${a.impresaPor}` : <span className="hist-pendiente">Sin imprimir</span>}
-        </Dato>
+        {/* Solo si la base guarda la constancia (backend/sql/04): si no, no se sabe. */}
+        {conImpresion && a.numeroCedula && (
+          <Dato etiqueta="Impresión">
+            {a.impresaEn ? `Impresa por ${a.impresaPor}` : <span className="hist-pendiente">Sin imprimir</span>}
+          </Dato>
+        )}
         <Dato etiqueta="Resultado de entrega">
           {a.resultado ? (
             <Badge color={res?.color ?? 'gris'}>{res?.etiqueta ?? a.resultado}</Badge>
@@ -77,7 +95,12 @@ function Detalle({ a, usuarios }) {
         )}
         {a.evidencia && (
           <Dato etiqueta="Evidencia" ancho={2}>
-            {a.evidencia}
+            {/* Una foto guardada llega como { id, nombre }. Un texto viejo, tal cual. */}
+            {typeof a.evidencia === 'object' ? (
+              <ArchivoGuardado archivo={a.evidencia} etiqueta="Ver foto" />
+            ) : (
+              a.evidencia
+            )}
           </Dato>
         )}
       </>
@@ -100,7 +123,8 @@ function Detalle({ a, usuarios }) {
         <Dato etiqueta="Fecha de vencimiento">{fmtFecha(a.fechaVencimiento)}</Dato>
         {/* El dato que el sistema viejo no guardaba (sección 4.5). */}
         <Dato etiqueta="Expediente de trámite">
-          {a.expedienteTramite ?? (a.origen === 'INFORME_9DJ' ? 'no aplica (informe de la prestataria)' : 'NO REGISTRADO')}
+          {a.expedienteTramite ??
+            (a.origen === 'INFORME_9DJ' ? 'no aplica (informe de la prestataria)' : 'NO REGISTRADO')}
         </Dato>
         {a.origen === 'INFORME_9DJ' && (
           <Dato etiqueta="Origen">
@@ -108,7 +132,16 @@ function Detalle({ a, usuarios }) {
             <span className="hist-nota">Su vigencia solo se modifica por esa misma vía.</span>
           </Dato>
         )}
-        {a.archivo && <Dato etiqueta="Archivo">{a.archivo}</Dato>}
+        {a.archivo && (
+          <Dato etiqueta="Documento respaldatorio">
+            {/* Guardado en el servidor llega como { id, nombre }; un nombre escrito a mano, tal cual. */}
+            {typeof a.archivo === 'object' ? (
+              <ArchivoGuardado archivo={a.archivo} etiqueta="Ver documento" />
+            ) : (
+              a.archivo
+            )}
+          </Dato>
+        )}
       </>
     );
   }
@@ -146,7 +179,15 @@ function Detalle({ a, usuarios }) {
   return null;
 }
 
-function HistorialActuaciones({ actuaciones, usuarios = [] }) {
+/* PROPS
+     actuaciones, usuarios
+     local        (opcional) el local: con él, cada cédula emitida tiene su
+                  botón "Ver" (la cédula tal como se imprime)
+     cedulaSoloLectura  (opcional) se ve la cédula pero no se imprime: el portal */
+function HistorialActuaciones({ actuaciones, usuarios = [], local = null, cedulaSoloLectura = false }) {
+  const { capacidades } = useDatos();
+  const conImpresion = Boolean(capacidades?.impresion);
+  const [viendo, setViendo] = useState(null);
   if (!actuaciones.length) {
     return <Vacio titulo="Sin actuaciones">Este local todavía no tiene ningún acto administrativo registrado.</Vacio>;
   }
@@ -155,28 +196,39 @@ function HistorialActuaciones({ actuaciones, usuarios = [] }) {
   const orden = [...actuaciones].reverse();
 
   return (
-    <ol className="historial">
-      {orden.map((a) => {
-        const tipo = TIPOS_ACTUACION[a.tipo] ?? { etiqueta: a.tipo, color: 'gris' };
-        return (
-          <li key={a.id} className={`historial-fila historial-${tipo.color}`}>
-            <div className="hist-cabecera">
-              <Badge color={tipo.color}>{tipo.etiqueta}</Badge>
-              <span className="hist-fecha">{fmtFecha(a.fecha)}</span>
-              <span className="hist-usuario">{a.usuario}</span>
-            </div>
-            <div className="hist-cuerpo">
-              <Detalle a={a} usuarios={usuarios} />
-              {a.observaciones && (
-                <Dato etiqueta="Observaciones" ancho={2}>
-                  <span className="hist-obs">{a.observaciones}</span>
-                </Dato>
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+    <>
+      <ol className="historial">
+        {orden.map((a) => {
+          const tipo = TIPOS_ACTUACION[a.tipo] ?? { etiqueta: a.tipo, color: 'gris' };
+          return (
+            <li key={a.id} className={`historial-fila historial-${tipo.color}`}>
+              <div className="hist-cabecera">
+                <Badge color={tipo.color}>{tipo.etiqueta}</Badge>
+                <span className="hist-fecha">{fmtFecha(a.fecha)}</span>
+                <span className="hist-usuario">{a.usuario}</span>
+              </div>
+              <div className="hist-cuerpo">
+                <Detalle a={a} usuarios={usuarios} conImpresion={conImpresion} onVerCedula={local ? setViendo : null} />
+                {a.observaciones && (
+                  <Dato etiqueta="Observaciones" ancho={2}>
+                    <span className="hist-obs">{a.observaciones}</span>
+                  </Dato>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {local && (
+        <VistaCedula
+          abierto={Boolean(viendo)}
+          cedula={viendo}
+          local={local}
+          soloLectura={cedulaSoloLectura}
+          onCerrar={() => setViendo(null)}
+        />
+      )}
+    </>
   );
 }
 

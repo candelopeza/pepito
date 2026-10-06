@@ -20,6 +20,13 @@
    Ciudadano Digital). La autenticación la resuelve CiDiTuc (capítulo 8): la
    aplicación no administra contraseñas propias.
 
+   >>> LO QUE GUARDA LA BASE DEL ÁREA <<<
+   La tabla `usuario` tiene el LEGAJO de la persona (id_persona, el mismo que
+   va a usar CiDiTuc), su tipo de usuario y si está activa. No tiene nombre ni
+   correo: hasta que esté CiDiTuc, la persona se identifica por el legajo. El
+   campo de correo sigue acá y aparece solo si el backend lo devuelve, para el
+   día que la base lo tenga.
+
    >>> POR QUÉ SE DA DE BAJA Y NO SE BORRA <<<
    Porque el usuario firmó actuaciones. La baja (activo: false) lo saca de los
    desplegables de asignación pero conserva la trazabilidad de lo que hizo. La
@@ -27,7 +34,7 @@
    Eliminar existe, pero avisa cuántas actuaciones quedarían sin autor.
    ============================================================================ */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GridActionsCellItem } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
@@ -63,6 +70,13 @@ function Usuarios() {
   const [errores, setErrores] = useState({});
   const [aEliminar, setAEliminar] = useState(null);
 
+  // ¿La base guarda correo? La del área no: entonces la persona es su legajo.
+  const hayCorreo = usuarios.some((u) => u.email);
+  const esElPropio = useCallback(
+    (u) => Boolean((usuario.id && u.id === usuario.id) || (u.email && u.email === usuario.email)),
+    [usuario.id, usuario.email],
+  );
+
   /* Cuántas actuaciones firmó. Es el dato que explica por qué conviene dar de
      baja y no borrar: eso quedaría sin autor. */
   const firmadas = (u) =>
@@ -74,32 +88,37 @@ function Usuarios() {
     const q = buscar.trim().toLowerCase();
     return usuarios
       .map((u) => ({ ...u, rolEtiqueta: ROLES[u.rol]?.etiqueta ?? u.rol }))
-      .filter((u) => !q || [u.nombre, u.email, u.rolEtiqueta].some((t) => t.toLowerCase().includes(q)))
-      .sort((a, b) => Number(b.activo) - Number(a.activo) || a.nombre.localeCompare(b.nombre));
+      .filter((u) => !q || [u.nombre, u.email, u.rolEtiqueta].some((t) => String(t ?? '').toLowerCase().includes(q)))
+      .sort((a, b) => Number(b.activo) - Number(a.activo) || String(a.nombre).localeCompare(String(b.nombre)));
   }, [usuarios, buscar]);
 
   /* ---------- Alta / edición ---------- */
-  function guardar() {
+  async function guardar() {
     const e = {};
-    if (!editando.nombre.trim()) e.nombre = 'El nombre es obligatorio.';
-    if (!editando.email.trim()) e.email = 'El correo es obligatorio.';
-    else if (editando.rol !== 'titular' && !editando.email.trim().toLowerCase().endsWith('@smt.gob.ar')) {
-      e.email = 'Tiene que ser un correo institucional @smt.gob.ar.';
+    const nombre = String(editando.nombre ?? '').trim();
+    const email = String(editando.email ?? '').trim();
+    if (!nombre) e.nombre = hayCorreo ? 'El nombre es obligatorio.' : 'El legajo es obligatorio.';
+    if (hayCorreo) {
+      if (!email) e.email = 'El correo es obligatorio.';
+      else if (editando.rol !== 'titular' && !email.toLowerCase().endsWith('@smt.gob.ar')) {
+        e.email = 'Tiene que ser un correo institucional @smt.gob.ar.';
+      }
     }
     if (!editando.rol) e.rol = 'Elegí el tipo de usuario.';
     setErrores(e);
     if (Object.keys(e).length) return;
 
-    guardarEnCatalogo('usuarios', { ...editando, nombre: editando.nombre.trim(), email: editando.email.trim() });
-    setEditando(null);
+    // Se cierra solo si se guardó: si el servidor lo rechaza (legajo repetido,
+    // por ejemplo), el formulario queda abierto con lo escrito.
+    if (await guardarEnCatalogo('usuarios', { ...editando, nombre, email })) setEditando(null);
   }
 
   /* ---------- Las columnas ---------- */
   const columnas = useMemo(
     () => [
       { field: 'id', headerName: 'ID', width: 70 },
-      { field: 'nombre', headerName: 'Nombre', flex: 1, minWidth: 200 },
-      { field: 'email', headerName: 'Correo', flex: 1, minWidth: 220 },
+      { field: 'nombre', headerName: hayCorreo ? 'Nombre' : 'Legajo', flex: 1, minWidth: 200 },
+      ...(hayCorreo ? [{ field: 'email', headerName: 'Correo', flex: 1, minWidth: 220 }] : []),
       {
         field: 'rolEtiqueta',
         headerName: 'Tipo de usuario',
@@ -120,11 +139,10 @@ function Usuarios() {
         renderCell: ({ row }) => {
           if (row.rol === 'sistema') return <Badge color="gris">Automático</Badge>;
           // Nadie se da de baja a sí mismo desde acá: quedaría adentro sin poder volver a entrar.
-          const esElPropio = row.email === usuario.email;
           return (
             <Interruptor
               activo={row.activo}
-              deshabilitado={soloLectura || esElPropio}
+              deshabilitado={soloLectura || esElPropio(row)}
               etiqueta={row.activo ? 'Activo' : 'De baja'}
               onChange={(v) => guardarEnCatalogo('usuarios', { ...row, activo: v })}
             />
@@ -138,7 +156,6 @@ function Usuarios() {
         width: 140,
         getActions: ({ row }) => {
           const esSistema = row.rol === 'sistema';
-          const esElPropio = row.email === usuario.email;
           const lista = [];
           if (!soloLectura && !esSistema) {
             lista.push(
@@ -155,7 +172,7 @@ function Usuarios() {
               />,
             );
           }
-          if (!soloLectura && !esSistema && !esElPropio) {
+          if (!soloLectura && !esSistema && !esElPropio(row)) {
             lista.push(
               <GridActionsCellItem
                 key="eliminar"
@@ -183,11 +200,11 @@ function Usuarios() {
         },
       },
     ],
-    [permisos, soloLectura, veTipos, usuario.email, guardarEnCatalogo, navegar],
+    [permisos, soloLectura, veTipos, esElPropio, hayCorreo, guardarEnCatalogo, navegar],
   );
 
   const sinCorreoInstitucional = usuarios.filter(
-    (u) => u.activo && !u.email.endsWith('@smt.gob.ar') && u.rol !== 'titular',
+    (u) => u.activo && u.email && !u.email.endsWith('@smt.gob.ar') && u.rol !== 'titular',
   );
   const usos = aEliminar ? firmadas(aEliminar) : 0;
 
@@ -235,20 +252,23 @@ function Usuarios() {
           <div className="formulario formulario-modal">
             <Campo
               id="usr-nombre"
-              etiqueta="Nombre y apellido"
+              etiqueta={hayCorreo ? 'Nombre y apellido' : 'Legajo'}
               valor={editando.nombre}
               onChange={(v) => setEditando({ ...editando, nombre: v })}
               error={errores.nombre}
+              teclado={hayCorreo ? undefined : 'numeric'}
             />
-            <Campo
-              id="usr-email"
-              etiqueta="Correo institucional"
-              tipo="email"
-              valor={editando.email}
-              onChange={(v) => setEditando({ ...editando, email: v })}
-              error={errores.email}
-              ayuda="Tiene que ser @smt.gob.ar."
-            />
+            {hayCorreo && (
+              <Campo
+                id="usr-email"
+                etiqueta="Correo institucional"
+                tipo="email"
+                valor={editando.email}
+                onChange={(v) => setEditando({ ...editando, email: v })}
+                error={errores.email}
+                ayuda="Tiene que ser @smt.gob.ar."
+              />
+            )}
             <CampoSelect
               id="usr-rol"
               etiqueta="Tipo de usuario"
@@ -266,7 +286,7 @@ function Usuarios() {
                   id="usr-activo"
                   type="checkbox"
                   checked={Boolean(editando.activo)}
-                  disabled={editando.email === usuario.email}
+                  disabled={esElPropio(editando)}
                   onChange={(e) => setEditando({ ...editando, activo: e.target.checked })}
                 />
                 Usuario activo
@@ -299,7 +319,8 @@ function Usuarios() {
         }}
       >
         <p>
-          Se elimina <strong>{aEliminar?.nombre}</strong> ({aEliminar?.email}).
+          Se elimina <strong>{aEliminar?.nombre}</strong>
+          {aEliminar?.email ? ` (${aEliminar.email})` : ''}.
         </p>
         {usos > 0 && (
           <Aviso tipo="alerta" titulo={`Firmó ${usos} actuación(es)`}>

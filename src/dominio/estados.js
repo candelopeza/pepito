@@ -54,6 +54,29 @@ export const CODIGOS_ESTADO = LISTA_ESTADOS.map((e) => e.codigo);
 /* Etiquetas para los desplegables y filtros de las grillas. */
 export const ETIQUETAS_ESTADO = LISTA_ESTADOS.map((e) => e.etiqueta);
 
+/* ---------------------------------------------------------------------------
+   LAS ETIQUETAS LAS PUEDE CAMBIAR EL ÁREA (sección 3.1)
+   ---------------------------------------------------------------------------
+   Configuración → Parámetros → "Nombres de los estados" guarda un objeto
+   { CODIGO: 'Texto nuevo' } en la tabla `parametro` (clave etiquetasEstado).
+   El store lo aplica al cargar con aplicarEtiquetas(), y desde ahí todas las
+   pantallas muestran el texto nuevo. El código no cambia nunca: las reglas
+   siguen comparando contra él. Sin nada guardado valen las de arriba. */
+const ETIQUETA_ORIGINAL = Object.fromEntries(Object.entries(ESTADOS).map(([codigo, e]) => [codigo, e.etiqueta]));
+
+export function etiquetaOriginal(codigo) {
+  return ETIQUETA_ORIGINAL[codigo] ?? codigo;
+}
+
+export function aplicarEtiquetas(mapa = {}) {
+  LISTA_ESTADOS.forEach((e, i) => {
+    const texto = typeof mapa?.[e.codigo] === 'string' && mapa[e.codigo].trim() ? mapa[e.codigo].trim() : ETIQUETA_ORIGINAL[e.codigo];
+    ESTADOS[e.codigo].etiqueta = texto;
+    e.etiqueta = texto;
+    ETIQUETAS_ESTADO[i] = texto;
+  });
+}
+
 export function estado(codigo) {
   return ESTADOS[codigo] ?? { etiqueta: codigo ?? '—', grupo: 'desconocido', color: 'gris' };
 }

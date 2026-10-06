@@ -19,9 +19,12 @@
      b) EMISIÓN AUTOMÁTICA CON VERIFICACIÓN POSTERIOR: se conserva el proceso
         diario y se puede consultar la cédula desde la ficha antes de imprimir.
 
-   Esta pantalla está armada para la opción (a), que es la que pide el control
-   previo, y el parámetro `emisionAutomatica` de Configuración muestra cómo
-   quedaría con la (b). Cambiar de una a otra no requiere rehacer nada.
+   Las dos funcionan: se elige en Configuración → Parámetros. Con la (b), el
+   backend emite la cola los días hábiles a las 7; con la (a) se puede prender
+   un respaldo que la emite a las 12 si nadie lo hizo. Lo que emite el sistema
+   queda en el historial como suyo (backend/tareas-programadas.js). Esta
+   pantalla sirve igual para las dos: con la (b) la cola suele estar vacía y
+   queda la revisión de lo emitido antes de imprimir.
 
    REQUISITOS VÁLIDOS PARA LAS DOS OPCIONES, y los tres están acá:
      - la cédula se puede abrir y consultar desde la ficha del local;
@@ -30,6 +33,7 @@
    ============================================================================ */
 
 import { useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link } from 'react-router-dom';
 import PageHeader from '../components/ui/PageHeader';
 import Grilla from '../components/ui/Grilla';
@@ -38,6 +42,7 @@ import Aviso, { Vacio } from '../components/ui/Aviso';
 import Confirmar from '../components/ui/Confirmar';
 import AccionesLocal from '../components/AccionesLocal';
 import VistaCedula from '../components/VistaCedula';
+import { textoDeCedula } from '../dominio/textoCedula';
 import { useDatos } from '../datos/datosContexto';
 import { resultadoEntrega } from '../dominio/actuaciones';
 import { faltantesRegistrales } from '../dominio/reglas';
@@ -77,7 +82,7 @@ const COLUMNAS_COLA = [
     field: 'estado',
     headerName: 'Estado',
     width: 210,
-    renderCell: ({ row }) => <BadgeEstado codigo={row.estado} />,
+    renderCell: ({ row }) => <BadgeEstado codigo={row.estado} sinColor />,
   },
   {
     field: 'acciones',
@@ -89,12 +94,30 @@ const COLUMNAS_COLA = [
   },
 ];
 
+/* Los estados en que la cédula en curso del local todavía espera la entrega. */
+const ESPERAN_ENTREGA = ['NOTIF1_GENERADA', 'NOTIF2_GENERADA', 'NOTIF1_NO_ENTREGADA', 'NOTIF2_NO_ENTREGADA'];
+
 function Notificaciones() {
-  const { localesConEstado, cedulas, localPorId, generarCedula } = useDatos();
+  const {
+    localesConEstado,
+    cedulas,
+    localPorId,
+    generarCedula,
+    capacidades,
+    plantillaCedula,
+    marcarImpresas,
+    parametros,
+  } = useDatos();
+  // Sin la constancia de impresión (sql/04) no se sabe qué se imprimió: no se
+  // muestra la columna ni el filtro, en vez de marcar todas como sin imprimir.
+  const hayImpresion = Boolean(capacidades?.impresion);
 
   const [soloSinImprimir, setSoloSinImprimir] = useState(false);
   const [viendo, setViendo] = useState(null);
   const [lote, setLote] = useState(false);
+  // Qué se está mandando a la impresora: la hoja de ruta (por defecto) o el
+  // lote de cédulas. Se imprime de a uno para que no salgan los dos juntos.
+  const [imprimiendo, setImprimiendo] = useState(null);
 
   const cola = localesConEstado.filter((l) => ['NOTIF1_PENDIENTE', 'NOTIF2_PENDIENTE'].includes(l.estado));
   const listos = cola.filter((l) => faltantesRegistrales(l).length === 0);
@@ -105,11 +128,37 @@ function Notificaciones() {
   /* La hoja de ruta: lo que está emitido, sin entregar y ordenado por
      proximidad. Es lo que se imprime y se le da al notificador. */
   const hojaDeRuta = useMemo(() => {
+    // Las sin entregar y las que constan como NO entregadas (hay que volver a
+    // llevarlas), siempre que sigan siendo la cédula en curso de su local.
     const pendientes = emitidas
-      .filter((c) => !c.resultado)
+      .filter((c) => (!c.resultado || c.resultado === 'NO_ENTREGADA') && ESPERAN_ENTREGA.includes(c.local?.estado))
       .map((c) => ({ ...c, latitud: c.local?.latitud ?? null, longitud: c.local?.longitud ?? null }));
     return ordenarPorProximidad(pendientes);
   }, [emitidas]);
+
+  /* EL LOTE DE CÉDULAS (sección 6.4: "impresión individual y por lote"). Con
+     la constancia de impresión (sql/04): las que nadie imprimió todavía. Sin
+     ella: las que están sin entregar. En el orden de la hoja de ruta. Las que
+     tienen datos sin completar NO van: imprimirlas sería emitir un acto
+     impugnable; se avisan aparte. */
+  const loteCedulas = useMemo(
+    () =>
+      hojaDeRuta
+        .filter((c) => !hayImpresion || !c.impresaEn)
+        .map((c) => ({ ...c, ...textoDeCedula(plantillaCedula, c, localPorId(c.localId)) })),
+    [hojaDeRuta, hayImpresion, plantillaCedula, localPorId],
+  );
+  const loteImprimible = loteCedulas.filter((c) => c.faltantes === 0);
+  const loteConFaltantes = loteCedulas.length - loteImprimible.length;
+
+  // flushSync dibuja el bloque elegido ANTES de abrir la impresora (si no,
+  // saldría la hoja anterior). Después se registra la constancia del lote.
+  function imprimir(que) {
+    flushSync(() => setImprimiendo(que));
+    window.print();
+    setImprimiendo(null);
+    if (que === 'lote') marcarImpresas(loteImprimible.filter((c) => !c.impresaEn).map((c) => c.id));
+  }
 
   const columnas = useMemo(
     () => [
@@ -191,8 +240,21 @@ function Notificaciones() {
           </button>
         ),
       },
-    ],
-    [],
+      {
+        field: 'acciones',
+        headerName: 'Acciones',
+        width: 200,
+        sortable: false,
+        filterable: false,
+        // Solo en la cédula en curso de cada local: regenerar, asignar y
+        // registrar la entrega operan sobre esa, no sobre las anteriores.
+        renderCell: ({ row }) => {
+          const local = localPorId(row.localId);
+          return local && local.cedulaEnCurso?.id === row.id ? <AccionesLocal local={local} compacto /> : null;
+        },
+      },
+    ].filter((c) => hayImpresion || c.field !== 'impresaEn'),
+    [hayImpresion, localPorId],
   );
 
   /* LA BÚSQUEDA ES LA DE LA GRILLA. Esta pantalla tenía su propio buscador
@@ -218,6 +280,15 @@ function Notificaciones() {
       {/* ================= 1. COLA DE EMISIÓN ================= */}
       <div className="accesos-header">
       </div>
+
+      {/* Cómo se emite, según Parámetros (sección 9.6). */}
+      {parametros?.emisionAutomatica ? (
+        <Aviso tipo="info" titulo="Emisión automática: el sistema emite la cola los días hábiles a las 7" />
+      ) : (
+        parametros?.emisionRespaldo && (
+          <Aviso tipo="info" titulo="Si a las 12 la cola sigue sin emitir, la emite el sistema" />
+        )
+      )}
 
       {trabados.length > 0 && (
         <Aviso tipo="bloqueo" titulo={`${trabados.length} local(es) no se pueden emitir: faltan datos registrales`}>
@@ -260,7 +331,7 @@ function Notificaciones() {
         vacio="Todavía no se emitió ninguna cédula."
         ordenInicial={[{ field: 'fecha', sort: 'desc' }]}
         botones={
-          <button
+          hayImpresion && <button
             type="button"
             className={`btn-icono ${soloSinImprimir ? 'btn-icono-verde' : 'btn-icono-azul'}`}
             title={soloSinImprimir ? 'Ver todas' : 'Ver solo las que faltan imprimir'}
@@ -287,42 +358,67 @@ function Notificaciones() {
       ) : (
         <>
           <div className="barra-lote">
-            <button type="button" className="btn-secundario" onClick={() => window.print()}>
+            <button type="button" className="btn-secundario" onClick={() => imprimir('hoja')}>
               Imprimir hoja de ruta ({hojaDeRuta.length} cédulas)
             </button>
+            {loteImprimible.length > 0 && (
+              <button type="button" className="btn-primario" onClick={() => imprimir('lote')}>
+                Imprimir {loteImprimible.length} cédula(s) {hayImpresion ? 'sin imprimir' : 'sin entregar'}
+              </button>
+            )}
           </div>
+          {loteConFaltantes > 0 && (
+            <Aviso
+              tipo="alerta"
+              titulo={`${loteConFaltantes} cédula(s) no entran en el lote: les faltan datos. Corregí el local y regenerala.`}
+            />
+          )}
 
-          <table className="tabla-datos solo-papel">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Cédula</th>
-                <th>Local</th>
-                <th>Dirección</th>
-                <th>Notificador</th>
-                <th>Resultado</th>
-                <th>Firma</th>
-              </tr>
-            </thead>
-            <tbody>
-              {hojaDeRuta.map((c, i) => (
-                <tr key={c.id}>
-                  <td>{i + 1}</td>
-                  <td>{c.numeroCedula}</td>
-                  <td>{c.local?.nombreLocal}</td>
-                  <td>
-                    {c.local?.direccion}
-                    {c.latitud === null && <small className="celda-sub">sin ubicación: ubicar a mano</small>}
-                  </td>
-                  <td>{c.notificador?.nombre ?? 'sin asignar'}</td>
-                  {/* Estas dos van vacías a propósito: se completan en papel
-                      durante el recorrido y después se cargan al sistema. */}
-                  <td className="celda-papel" />
-                  <td className="celda-papel" />
-                </tr>
+          {/* Las cédulas del lote, una por hoja. Solo existen mientras se
+              imprime: en pantalla no se ven. */}
+          {imprimiendo === 'lote' && (
+            <div className="solo-papel lote-cedulas">
+              {loteImprimible.map((c) => (
+                <pre key={c.id} className="cedula-papel">
+                  {c.texto}
+                </pre>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
+
+          {imprimiendo !== 'lote' && (
+            <table className="tabla-datos solo-papel">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Cédula</th>
+                  <th>Local</th>
+                  <th>Dirección</th>
+                  <th>Notificador</th>
+                  <th>Resultado</th>
+                  <th>Firma</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hojaDeRuta.map((c, i) => (
+                  <tr key={c.id}>
+                    <td>{i + 1}</td>
+                    <td>{c.numeroCedula}</td>
+                    <td>{c.local?.nombreLocal}</td>
+                    <td>
+                      {c.local?.direccion}
+                      {c.latitud === null && <small className="celda-sub">sin ubicación: ubicar a mano</small>}
+                    </td>
+                    <td>{c.notificador?.nombre ?? 'sin asignar'}</td>
+                    {/* Estas dos van vacías a propósito: se completan en papel
+                        durante el recorrido y después se cargan al sistema. */}
+                    <td className="celda-papel" />
+                    <td className="celda-papel" />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       )}
 
@@ -332,11 +428,14 @@ function Notificaciones() {
         titulo="Generar las cédulas de la cola"
         textoConfirmar={`Generar ${listos.length} cédulas`}
         onCancelar={() => setLote(false)}
-        onConfirmar={() => {
-          // Una por una: cada emisión consume su número de la secuencia y deja
-          // su propia entrada en la auditoría.
-          listos.forEach((l) => generarCedula(l.id));
+        onConfirmar={async () => {
+          // Una por una y en orden: cada emisión consume su número de la
+          // secuencia y deja su propia entrada en la auditoría. Antes salían
+          // todas juntas y los números quedaban en cualquier orden.
           setLote(false);
+          for (const l of listos) {
+            await generarCedula(l.id);
+          }
         }}
       >
         <p>

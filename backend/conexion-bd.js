@@ -29,6 +29,32 @@ export const pool = mysql.createPool({
   multipleStatements: false,
 });
 
+/* ---------------------------------------------------------------------------
+   CUANDO NO SE LLEGA A LA BASE
+   ---------------------------------------------------------------------------
+   Si la computadora no está en la red de la municipalidad, si MariaDB está
+   apagado o si la clave del .env es otra, TODOS los pedidos fallan igual.
+   Antes eso salía como una traza larga repetida por cada pedido y, en la
+   pantalla, como "Error interno del servidor". problemaDeConexion() traduce
+   el código del error a una frase que dice qué revisar; servidor.js la manda
+   a la pantalla (503) y la escribe UNA vez en la consola. Devuelve null si el
+   error no es de conexión. */
+const DONDE = `${process.env.DB_HOST || '127.0.0.1'}:${Number(process.env.DB_PUERTO) || 3306}`;
+const PROBLEMAS_DE_CONEXION = {
+  ETIMEDOUT: `No se llega a la base de datos (${DONDE}): no responde. ¿Esta computadora está conectada a la red de la municipalidad (o a la VPN)?`,
+  EHOSTUNREACH: `No se llega a la base de datos (${DONDE}): no hay camino de red. ¿Esta computadora está conectada a la red de la municipalidad (o a la VPN)?`,
+  ENETUNREACH: `No se llega a la base de datos (${DONDE}): no hay camino de red. ¿Esta computadora está conectada a la red de la municipalidad (o a la VPN)?`,
+  ENOTFOUND: `No se encuentra el servidor de la base (${DONDE}). Revisá DB_HOST en backend/.env.`,
+  ECONNREFUSED: `El servidor de la base (${DONDE}) rechazó la conexión: MariaDB está apagado o escucha en otro puerto (DB_PUERTO).`,
+  PROTOCOL_CONNECTION_LOST: `Se cortó la conexión con la base de datos (${DONDE}). Reintentá en unos segundos.`,
+  ER_ACCESS_DENIED_ERROR: 'La base rechazó el usuario o la clave: revisá DB_USUARIO y DB_CLAVE en backend/.env.',
+  ER_BAD_DB_ERROR: 'La base de datos indicada no existe en el servidor: revisá DB_NOMBRE en backend/.env.',
+};
+
+export function problemaDeConexion(error) {
+  return PROBLEMAS_DE_CONEXION[error?.code] ?? null;
+}
+
 /* Ejecuta una consulta con parámetros y devuelve las filas con las columnas en
    camelCase, que es como las espera el dominio y el front.
 
@@ -37,6 +63,17 @@ export const pool = mysql.createPool({
 */
 export async function consultar(sql, parametros = []) {
   const [filas] = await pool.execute(sql, parametros);
+  return Array.isArray(filas) ? filas.map(aCamel) : filas;
+}
+
+/* Igual que consultar() pero sobre una conexión puntual, la de una transacción
+   abierta con enTransaccion(). Hace falta para leer lo que la transacción
+   acaba de escribir y todavía no confirmó: por ejemplo, el estado del local
+   DESPUÉS de un acto, para anotarlo en la auditoría (ver backend/actos.js).
+   Si no se pasa conexión, se comporta exactamente como consultar(). */
+export async function consultarEn(cx, sql, parametros = []) {
+  if (!cx) return consultar(sql, parametros);
+  const [filas] = await cx.execute(sql, parametros);
   return Array.isArray(filas) ? filas.map(aCamel) : filas;
 }
 

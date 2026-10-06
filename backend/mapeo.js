@@ -99,7 +99,13 @@ export const ID_TDOC = {
 };
 
 /* tabla `tipo_usuario` -> los roles que usa el front (src/config/modulos.js).
-   'ADMINISTRADOR' se mapea a 'sistema', que es el rol técnico del front. */
+
+   El 8 ('ADMINISTRADOR' en la base) antes se mapeaba a 'sistema', que es el
+   actor técnico de los procesos automáticos y no puede hacer nada desde la
+   aplicación: un administrador real de la base quedaba sin acceso. Ahora es
+   'administrador', el perfil de control total que ya usa el front
+   (src/auth/roles.js) y que middlewares/usuario.js deja pasar en todas las
+   rutas. El 1 (SIN INFORMAR) sigue siendo 'sistema'. */
 export const ROL_POR_TUSUARIO = {
   1: 'sistema',
   2: 'relevador',
@@ -108,7 +114,7 @@ export const ROL_POR_TUSUARIO = {
   5: 'coordinacion',
   6: 'direccion',
   7: 'titular',
-  8: 'sistema',
+  8: 'administrador',
 };
 
 export const TUSUARIO_POR_ROL = Object.fromEntries(
@@ -266,6 +272,9 @@ export function aActuacionFront(fila, documentoPorTramite = new Map()) {
     ciclo: fila.nroCiclo,
     observaciones: fila.observaciones ?? '',
     usuario: fila.nombreUsuario ?? null,
+    // El id de quien lo registró: lo usa la corrección en el día del
+    // relevamiento (solo el autor puede corregir su carga).
+    idUsuario: fila.idUsuario ?? null,
     idEstado: fila.idEstado,
     estadoNombre: fila.nombreEstado ?? null,
   };
@@ -285,9 +294,12 @@ export function aActuacionFront(fila, documentoPorTramite = new Map()) {
         fechaVencimiento: soloFecha(fila.fechaVencimiento),
         resultado: RESULTADO_ENTREGA[fila.idEstado] ?? null,
         evidencia: null,
-        // La constancia de impresión (sección 9.6) necesitaría las columnas
-        // tramite.impresa_por e impresa_en, que no existen en la base. Cuando
-        // se agreguen, acá van: impresaPor y impresaEn.
+        // La constancia de impresión (sección 9.6) usa las columnas
+        // tramite.impresa_por e impresa_en de sql/04-columnas-opcionales.sql.
+        // `SELECT t.*` las trae solas cuando existen; si no se corrió el
+        // script, quedan en null y la pantalla no muestra "Sin imprimir".
+        impresaPor: fila.impresaPor ?? null,
+        impresaEn: fechaHora(fila.impresaEn),
       };
 
     case ID_TTRAMITE.PRESENTACION_DOCUMENTACION: {
@@ -404,17 +416,31 @@ function plazoVencido(fechaVencimiento, hoy) {
 }
 
 /* CUIT, razón social y rubro. Sin los tres, la cédula no individualiza al
-   sujeto obligado y la notificación es impugnable (sección 4.3). */
-function datosRegistralesCompletos(local) {
-  return Boolean(
-    local?.cuit?.trim() && local?.razonSocial?.trim() && local?.rubro?.trim() && local.rubro !== 'SIN INFORMAR',
-  );
+   sujeto obligado y la notificación es impugnable (sección 4.3).
+
+   Se exporta porque las rutas tienen que usar ESTA versión y no la de
+   src/dominio/reglas.js: en la base el rubro "vacío" no es una cadena vacía
+   sino la fila SIN INFORMAR del catálogo (id 1), y la del dominio la daría
+   por buena. */
+export function datosRegistralesCompletos(local) {
+  return faltantesRegistrales(local).length === 0;
+}
+
+export function faltantesRegistrales(local) {
+  const faltan = [];
+  if (!local?.cuit?.trim()) faltan.push('CUIT');
+  if (!local?.razonSocial?.trim()) faltan.push('razón social');
+  if (!local?.rubro?.trim() || local.rubro.trim().toUpperCase() === 'SIN INFORMAR') faltan.push('rubro');
+  return faltan;
 }
 
 export function estadoDeLocal(local, tramites = [], hoy = hoyISO()) {
   // ---- 0. Bloqueo manual (sección 3.4): coordinación excluyó el local del
   //         cálculo automático. Se queda con el estado que tenía.
-  if (local.bloqueado) return local.estadoInicial;
+  //         `estadoCongelado` es el estado que se anotó en la auditoría al
+  //         bloquearlo (lo agrega consultas.js). Sin auditoría no hay forma de
+  //         saberlo, y vale el estado guardado en local.id_estado, como antes.
+  if (local.bloqueado) return local.estadoCongelado ?? local.estadoInicial;
 
   // ---- Terminal: la exención confirmada es el único final del recorrido.
   if (local.estadoInicial === 'EXENTO_CONFIRMADO') return 'EXENTO_CONFIRMADO';
@@ -454,8 +480,13 @@ export function estadoDeLocal(local, tramites = [], hoy = hoyISO()) {
   //      Va ANTES del bloque de notificaciones a propósito: un local que
   //      presentó una DDJJ después de una segunda notificación y la dejó
   //      vencer arranca de nuevo en la PRIMERA, no en la segunda.
-  const ultimoDoc = documentos.length ? documentos[documentos.length - 1] : null;
-  if (ultimoDoc && ultimoDoc.idEstado !== ID_ESTADO.DOC_PENDIENTE_REVISION) {
+  //      Cuenta el último documento APROBADO. Una presentación del portal que
+  //      todavía espera validación no existe para el circuito: si se la tomara
+  //      como "último documento", taparía a una DDJJ aprobada que ya venció y
+  //      el local saltearía esta regla (es lo que pasaba antes).
+  const aprobados = documentos.filter((d) => d.idEstado !== ID_ESTADO.DOC_PENDIENTE_REVISION);
+  const ultimoDoc = aprobados.length ? aprobados[aprobados.length - 1] : null;
+  if (ultimoDoc) {
     const posterior = !ultimo || (ultimoDoc.fecha ?? '') > (ultimo.fecha ?? '') ||
       ((ultimoDoc.fecha ?? '') === (ultimo.fecha ?? '') && ultimoDoc.id > ultimo.id);
     // Solo reingresa si el documento TENÍA una vigencia que ya se cumplió. Los
@@ -485,9 +516,16 @@ export function estadoDeLocal(local, tramites = [], hoy = hoyISO()) {
     //      notificación fehaciente no hay avance (debido proceso).
     if (sufijo === 'NO_ENTREGADA') return `NOTIF${n}_NO_ENTREGADA`;
 
+    // Estado de notificación que este sistema no conoce (en el padrón hay
+    // trámites con estado SIN INFORMAR). Si tampoco tiene fecha de entrega, no
+    // consta ninguna entrega efectiva: se trata como emitida y no entregada,
+    // que es lo que protege al contribuyente (condición 5). Antes caía al
+    // bloque de abajo y podía avanzar, o mostrar el código "NOTIF1_undefined".
+    if (!sufijo && !ultimo.fechaEntrega) return `NOTIF${n}_GENERADA`;
+
     // Entregada de alguna de las tres formas que hacen correr el plazo.
     // Mientras el plazo no venció, se muestra el resultado de la entrega.
-    if (!plazoVencido(ultimo.fechaVencimiento, hoy)) return `NOTIF${n}_${sufijo}`;
+    if (!plazoVencido(ultimo.fechaVencimiento, hoy)) return `NOTIF${n}_${sufijo ?? 'ENTREGADA'}`;
 
     // ---- 7 a 9. El plazo venció sin presentación.
     if (n === 1) {

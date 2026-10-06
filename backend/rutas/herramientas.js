@@ -18,12 +18,13 @@
    ============================================================================ */
 
 import { Router } from 'express';
-import { consultar, consultarEn, ejecutar, enTransaccion } from '../conexion-bd.js';
-import { enFila, insertarTramite, localPorId, parametros, recortarObservacion, situacionDeLocal } from '../consultas.js';
-import { ID_ESTADO, ID_TDOC, ID_TTRAMITE } from '../mapeo.js';
+import { consultar, ejecutar, enTransaccion } from '../conexion-bd.js';
+import { enFila, localPorId, recortarObservacion, situacionDeLocal } from '../consultas.js';
+import { ID_ESTADO } from '../mapeo.js';
 import { requiereRol, firmante } from '../middlewares/usuario.js';
 import { geocodificadorConfigurado, geocodificarDireccion } from '../geocodificador.js';
-import { ErrorActo, registrarAlta } from '../actos.js';
+import { LIMITE_ES_OFICIAL, dentroDelMunicipio } from '../limite-municipal.js';
+import { ErrorActo } from '../actos.js';
 import { ponerAlDia, registrarCambio, registrarPasoDelTiempo } from '../auditoria.js';
 import { hoyISO } from '../../src/dominio/fechas.js';
 
@@ -200,157 +201,8 @@ router.post('/geocodificar', requiereRol('administrativo', 'coordinacion'), asyn
   }
 });
 
-/* POST /herramientas/informe-9dj  ->  carga del informe de la prestataria.
-
-   El pliego pide CARGA MANUAL ASISTIDA (sección 9.3): el sistema propone los
-   cambios y un agente confirma. Acá llegan las filas YA CONFIRMADAS, así que
-   se aplican sin volver a preguntar.
-
-   El contrato informado por la empresa entra con origen INFORME_9DJ, que es lo
-   que lo distingue del presentado por el titular: tienen distinto valor
-   probatorio (sección 4.6) y el front los muestra con estados distintos.
-
-   TODO O NADA: las filas se validan primero y se aplican en UNA transacción.
-   Antes, si fallaba la fila 30 de 40, quedaban 29 aplicadas y no había forma
-   de saber cuáles. Un contrato que ya está registrado para ese local (mismo
-   número, mismo origen) no se vuelve a cargar: cargar dos veces el mismo
-   informe no duplica nada. */
-router.post('/informe-9dj', requiereRol('administrativo', 'coordinacion'), async (req, res, next) => {
-  try {
-    const filas = Array.isArray(req.body?.filas) ? req.body.filas : null;
-    if (!filas?.length) return res.status(400).json({ error: 'No llegó ninguna fila del informe' });
-
-    const hoy = hoyISO();
-    const errores = [];
-    filas.forEach((fila, i) => {
-      const n = i + 1;
-      if (!esFechaISO(fila.vencimiento)) errores.push(`fila ${n}: el vencimiento no es una fecha válida`);
-      else if (fila.vencimiento <= hoy) errores.push(`fila ${n}: el contrato ya está vencido (${fila.vencimiento})`);
-      if (!fila.localId && !String(fila.razonSocial ?? '').trim() && !String(fila.direccion ?? '').trim()) {
-        errores.push(`fila ${n}: para dar de alta un local hace falta al menos la razón social o la dirección`);
-      }
-    });
-    if (errores.length) {
-      return res.status(400).json({ error: `El informe tiene errores, no se aplicó nada. ${errores.slice(0, 5).join('; ')}` });
-    }
-
-    const params = await parametros();
-    // Las direcciones de las altas se geocodifican antes de abrir la
-    // transacción: si algún día el servicio es remoto, no se mantiene la base
-    // esperando la red.
-    const geos = await Promise.all(filas.map((f) => (f.localId ? null : geocodificarDireccion(f.direccion ?? ''))));
-
-    const resultado = await enFila(() =>
-      enTransaccion(async (cx) => {
-        const creados = [];
-        const actualizados = [];
-        const omitidas = [];
-
-        for (const [i, fila] of filas.entries()) {
-          let idLocal = Number(fila.localId) || null;
-          const numeroContrato = fila.numeroContrato ? String(fila.numeroContrato).trim() : null;
-
-          if (idLocal) {
-            const antes = await situacionDeLocal(idLocal, cx);
-            if (!antes.local) throw new ErrorActo(400, `fila ${i + 1}: no existe el local N° ${idLocal}`);
-
-            if (numeroContrato) {
-              const [ya] = await consultarEn(
-                cx,
-                `SELECT d.id_tramite FROM documentacion d
-                   JOIN tramite t ON t.id_tramite = d.id_tramite
-                  WHERE t.id_local = ? AND t.habilita = 1 AND d.numero = ? AND d.origen = 'INFORME_9DJ'
-                  LIMIT 1`,
-                [idLocal, numeroContrato],
-              );
-              if (ya) {
-                omitidas.push(idLocal);
-                continue;
-              }
-            }
-
-            await ponerAlDia(cx, idLocal, antes.estado);
-            const idTramite = await registrarContrato(cx, req, idLocal, fila, numeroContrato, hoy);
-            const despues = await situacionDeLocal(idLocal, cx);
-            await registrarCambio(cx, req, {
-              idLocal,
-              anterior: antes.estado,
-              nuevo: despues.estado,
-              motivo: `Contrato ${numeroContrato ?? 's/n'} informado por la empresa 9 de Julio, vence el ${fila.vencimiento}`,
-              accion: 'informe-9dj',
-              idTramite,
-            });
-            actualizados.push(idLocal);
-          } else {
-            // Alta desde el informe. Lleva prefijo CON en el id original, igual
-            // que en el sistema viejo, para saber de dónde salió la ficha.
-            const geo = geos[i];
-            const [alta] = await cx.execute(
-              `INSERT INTO local
-                 (cuit, id_original, id_rubro, id_estado, razon_social, nombre_local, direccion_local,
-                  latitud_local, longitud_local, observacion, bloqueado, habilita)
-               VALUES (?, NULL, 1, ?, ?, ?, ?, ?, ?, 'Creado desde el informe de la prestataria.', 0, 1)`,
-              [
-                fila.cuit || null,
-                ID_ESTADO.REVISION_DATOS,
-                fila.razonSocial || null,
-                fila.razonSocial || 'SIN NOMBRE',
-                fila.direccion ?? '',
-                geo?.ok ? geo.latitud : null,
-                geo?.ok ? geo.longitud : null,
-              ],
-            );
-            idLocal = alta.insertId;
-            await cx.execute('UPDATE local SET id_original = ? WHERE id_local = ?', [
-              `CON-${String(idLocal).padStart(4, '0')}`,
-              idLocal,
-            ]);
-            await registrarContrato(cx, req, idLocal, fila, numeroContrato, hoy);
-            await registrarAlta(cx, req, idLocal, 'Alta desde el informe de la empresa 9 de Julio', 'informe-9dj');
-            creados.push(idLocal);
-          }
-        }
-
-        return { creados, actualizados, omitidas };
-      }),
-    );
-
-    res.json({
-      aplicadas: resultado.creados.length + resultado.actualizados.length,
-      ...resultado,
-      // Se devuelve para que la pantalla pueda mostrar con qué regla se calculó.
-      modoBisiesto: params.modoBisiesto,
-    });
-  } catch (e) {
-    next(e);
-  }
-});
-
-/* El contrato de una fila del informe: el trámite y su fila de documentación. */
-async function registrarContrato(cx, req, idLocal, fila, numeroContrato, hoy) {
-  const [ciclo] = await consultarEn(
-    cx,
-    'SELECT COALESCE(MAX(nro_ciclo), 1) AS ciclo FROM tramite WHERE id_local = ? AND habilita = 1',
-    [idLocal],
-  );
-  const idTramite = await insertarTramite(cx, {
-    idLocal,
-    idEstado: ID_ESTADO.DOC_VIGENTE,
-    idTtramite: ID_TTRAMITE.PRESENTACION_DOCUMENTACION,
-    idUsuario: req.usuario?.id ?? null,
-    nroCiclo: Number(ciclo?.ciclo) || 1,
-    fechaInicio: hoy,
-    fechaVencimiento: fila.vencimiento,
-    observaciones: 'Informado por la empresa 9 de Julio.',
-  });
-  await cx.execute(
-    `INSERT INTO documentacion
-       (id_tramite, id_tdocumentacion, numero, origen, fecha_emision, fecha_vencimiento, habilita)
-     VALUES (?, ?, ?, 'INFORME_9DJ', ?, ?, 1)`,
-    [idTramite, ID_TDOC.CONTRATO, numeroContrato, hoy, fila.vencimiento],
-  );
-  return idTramite;
-}
+/* El informe de la prestataria ya no entra por aca: tiene su modulo propio
+   con revision fila por fila en backend/rutas/informe-9dj.js. */
 
 /* POST /herramientas/recalcular-estados  ->  corre ahora la recorrida diaria.
 
@@ -361,6 +213,166 @@ async function registrarContrato(cx, req, idLocal, fila, numeroContrato, hoy) {
 router.post('/recalcular-estados', requiereRol('coordinacion', 'direccion'), async (_req, res, next) => {
   try {
     res.json(await registrarPasoDelTiempo());
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* GET /herramientas/coordenadas-fuera  ->  las ubicaciones sospechosas.
+
+   Locales cuya coordenada guardada NO cae dentro del ejido municipal. El pliego
+   pide descartar la que caiga fuera "en lugar de guardarla", pero estas ya
+   estaban guardadas cuando llegaron de la importación: borrarlas sin mirar
+   sería perder la única ubicación que tienen algunos.
+
+   Se listan para que la oficina las revise. Mientras el límite sea el polígono
+   provisorio, además, una coordenada de afuera puede ser un error del polígono:
+   por eso se informa `limiteOficial`. */
+router.get('/coordenadas-fuera', async (_req, res, next) => {
+  try {
+    const todos = await consultar(
+      `SELECT l.id_local, l.nombre_local, l.direccion_local, l.latitud_local, l.longitud_local, r.nombre_rubro
+         FROM local l
+         LEFT JOIN rubro r ON r.id_rubro = l.id_rubro
+        WHERE l.habilita = 1 AND l.latitud_local IS NOT NULL AND l.longitud_local IS NOT NULL`,
+    );
+
+    const fuera = todos
+      .filter((l) => !dentroDelMunicipio(Number(l.latitudLocal), Number(l.longitudLocal)))
+      .map((l) => ({
+        id: l.idLocal,
+        nombreLocal: l.nombreLocal,
+        direccion: l.direccionLocal,
+        rubro: l.nombreRubro,
+        latitud: Number(l.latitudLocal),
+        longitud: Number(l.longitudLocal),
+      }));
+
+    res.json({ total: fuera.length, limiteOficial: LIMITE_ES_OFICIAL, locales: fuera });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* El informe de la prestataria ya no entra por acá: tiene su módulo propio
+   con revisión fila por fila en backend/rutas/informe-9dj.js. */
+
+/* ============================================================================
+   RECÁLCULO DE COORDENADAS  —  carga manual asistida
+   ----------------------------------------------------------------------------
+   Para los locales cuya ubicación guardada no se corresponde con su dirección.
+   En el padrón real los hay a doce kilómetros de donde dicen estar.
+
+   >>> EL SISTEMA PROPONE, UNA PERSONA CONFIRMA <<<
+   Es el mismo criterio que el pliego pide para el informe de la prestataria
+   (sección 9.3): "que el sistema muestre una previsualización de los cambios
+   que produciría para que un agente confirme antes de aplicar".
+
+   Acá pesa todavía más: una coordenada es la ubicación oficial de un
+   establecimiento, alimenta el mapa y el ruteo de los notificadores. Pisar 68
+   de una sin que nadie las mire sería cambiar el mismo tipo de dato que se
+   quiere arreglar, nada más que en sentido contrario.
+
+   Por eso son DOS endpoints: uno propone sin tocar nada, el otro guarda
+   exactamente lo que el agente aprobó.
+   ============================================================================ */
+
+/* Cuántos locales se geocodifican por llamada. El geocodificador acepta una
+   consulta por segundo, así que un lote de 20 tarda unos 22 segundos: entra
+   cómodo en un pedido HTTP y da sensación de avance. */
+const LOTE_PROPUESTAS = 20;
+
+/* Distancia en kilómetros entre dos puntos (fórmula del semiverseno).
+   Es el dato que le dice al agente cuánto se va a mover el local: una
+   corrección de 50 metros es un ajuste, una de 12 km es otro domicilio. */
+function distanciaKm(latA, lngA, latB, lngB) {
+  const R = 6371;
+  const rad = Math.PI / 180;
+  const dLat = (latB - latA) * rad;
+  const dLng = (lngB - lngA) * rad;
+  const a =
+    Math.sin(dLat / 2) ** 2 + Math.cos(latA * rad) * Math.cos(latB * rad) * Math.sin(dLng / 2) ** 2;
+  return Number((2 * R * Math.asin(Math.sqrt(a))).toFixed(2));
+}
+
+/* POST /herramientas/coordenadas/propuestas   { ids: [1, 2, 3] }
+
+   Geocodifica las direcciones de esos locales y devuelve qué coordenada
+   pondría en cada uno. NO GUARDA NADA. */
+router.post('/coordenadas/propuestas', requiereRol('administrativo', 'coordinacion', 'direccion'), async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+    if (!ids.length) return res.status(400).json({ error: 'Hay que indicar qué locales revisar' });
+
+    const lote = ids.slice(0, LOTE_PROPUESTAS);
+    const marcadores = lote.map(() => '?').join(',');
+    const locales = await consultar(
+      `SELECT id_local, nombre_local, direccion_local, latitud_local, longitud_local
+         FROM local WHERE habilita = 1 AND id_local IN (${marcadores})`,
+      lote,
+    );
+
+    const propuestas = [];
+    for (const l of locales) {
+      const geo = await geocodificarDireccion(l.direccionLocal ?? '');
+      const actual =
+        l.latitudLocal !== null && l.longitudLocal !== null
+          ? { latitud: Number(l.latitudLocal), longitud: Number(l.longitudLocal) }
+          : null;
+
+      propuestas.push({
+        id: l.idLocal,
+        nombreLocal: l.nombreLocal,
+        direccion: l.direccionLocal,
+        actual,
+        propuesta: geo.ok ? { latitud: geo.latitud, longitud: geo.longitud } : null,
+        motivo: geo.ok ? null : geo.motivo,
+        distanciaKm: geo.ok && actual ? distanciaKm(actual.latitud, actual.longitud, geo.latitud, geo.longitud) : null,
+      });
+    }
+
+    res.json({ propuestas, procesados: lote.length, quedan: Math.max(ids.length - lote.length, 0) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* POST /herramientas/coordenadas/aplicar   { cambios: [{ id, latitud, longitud }] }
+
+   Guarda solo lo que el agente aprobó. Vuelve a validar cada coordenada contra
+   el ejido: lo que llega del navegador no se guarda sin revisar, aunque lo haya
+   propuesto este mismo sistema un minuto antes. */
+router.post('/coordenadas/aplicar', requiereRol('administrativo', 'coordinacion', 'direccion'), async (req, res, next) => {
+  try {
+    const cambios = Array.isArray(req.body?.cambios) ? req.body.cambios : [];
+    if (!cambios.length) return res.status(400).json({ error: 'No llegó ningún cambio para aplicar' });
+
+    const aplicados = [];
+    const rechazados = [];
+
+    for (const c of cambios) {
+      const id = Number(c.id);
+      const lat = Number(c.latitud);
+      const lng = Number(c.longitud);
+
+      if (!id || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        rechazados.push({ id: c.id, motivo: 'Coordenada mal formada.' });
+        continue;
+      }
+      if (!dentroDelMunicipio(lat, lng)) {
+        rechazados.push({ id, motivo: 'La coordenada cae fuera del ejido municipal.' });
+        continue;
+      }
+
+      const resultado = await ejecutar(
+        'UPDATE local SET latitud_local = ?, longitud_local = ? WHERE id_local = ? AND habilita = 1',
+        [lat, lng, id],
+      );
+      if (resultado.affectedRows) aplicados.push(id);
+      else rechazados.push({ id, motivo: 'No existe ese local o está dado de baja.' });
+    }
+
+    res.json({ aplicados: aplicados.length, rechazados, ids: aplicados });
   } catch (e) {
     next(e);
   }

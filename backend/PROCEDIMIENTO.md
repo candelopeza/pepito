@@ -625,3 +625,38 @@ muestra la última corrida y las próximas.
 Las dos opciones vienen **apagadas** (`emisionAutomatica` y `emisionRespaldo` en
 false): emitir es un acto administrativo y lo decide la Dirección de Ambiente.
 Probado en una sexta etapa de la prueba de punta a punta (14 verificaciones).
+
+## El módulo Informe 9 de Julio (modelo de foto)
+
+El informe que manda la prestataria es una **foto de su padrón de contratos**:
+la primera carga produjo las altas históricas (los 260 contratos con
+`origen = 'INFORME_9DJ'` que se cargaron a mano en la base); cada carga
+siguiente dice quién sigue, quién se suma y quién ya no está.
+
+Las piezas:
+
+| Pieza | Qué hace |
+| --- | --- |
+| `lector-informe-9dj.js` | archivo → filas normalizadas. CSV/XLSX/PDF con texto; dígito verificador de CUIT; OCR previsto, no implementado |
+| `rutas/informe-9dj.js` | cargas, decisión fila por fila, aplicar, descartar, anular |
+| `sql/09-tablas-informe-9dj.sql` | las dos tablas del módulo (`informe_9dj`, `informe_9dj_fila`), con su justificación en el encabezado |
+| `pruebas/lector-informe.mjs` | `npm run lector` — 45 pruebas de la lectura, sin base |
+| `pruebas/informe-9dj.mjs` | `npm run informe` — los 16 criterios de aceptación, contra la API; lo que aplica, lo anula |
+
+Reglas que el resto del backend respeta:
+
+- Un contrato `INFORME_9DJ` **no se rige por fecha**: está vigente mientras la
+  última foto lo sostenga (su trámite en VIGENTE). Lo implementa
+  `documentoVigente()` en `mapeo.js`.
+- Esos contratos **no se tocan desde la ficha del local**:
+  `rutas/documentacion.js` rechaza validarlos, rechazarlos o crear uno a mano
+  con ese origen. La única puerta es el informe siguiente o la anulación de la
+  carga.
+- **Nada se da de baja solo**: la foto propone las bajas con nombre y
+  dirección, y solo salen las que el agente tilda.
+
+TODO-DEFINICION pendientes del área (sección 7 de la especificación): el
+margen de la alarma de informe incompleto (hoy 20%), si la ausencia repetida
+debería sugerir baja sola, si el contrato cubre a la empresa o a cada
+establecimiento, y el formato real del archivo (ajustar el lector con el
+primer informe verdadero).

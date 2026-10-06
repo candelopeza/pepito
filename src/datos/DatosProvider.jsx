@@ -115,6 +115,8 @@ const BASE_VACIA = {
   auditoria: [],
   parametros: {},
   plantillaCedula: '',
+  limiteMunicipal: [],
+  limiteOficial: false,
   secuencias: { cedula: 0, expediente: 0 },
   permisos: PERMISOS_VACIOS,
   capacidades: CAPACIDADES_VACIAS,
@@ -166,6 +168,7 @@ function DatosProvider({ children }) {
       permisos,
       capacidades,
       solicitudesProrroga,
+      limite,
     ] = await Promise.all([
       api.locales(),
       api.actuaciones(),
@@ -183,6 +186,7 @@ function DatosProvider({ children }) {
       // Lo mismo con un servidor que todavía no sabe responder capacidades.
       api.capacidades().catch(() => CAPACIDADES_VACIAS),
       api.solicitudesProrroga().catch(() => []),
+      api.limiteMunicipal(),
     ]);
 
     /* `secuencias` ya no es una tabla: el último número de cédula se deduce de
@@ -210,6 +214,10 @@ function DatosProvider({ children }) {
       auditoria: [],
       parametros,
       plantillaCedula: plantilla?.texto ?? '',
+      /* El polígono del ejido, para que el mapa dibuje EL MISMO límite contra
+         el que valida el backend (sección 9.2 del pliego). */
+      limiteMunicipal: limite?.poligono ?? [],
+      limiteOficial: Boolean(limite?.oficial),
       secuencias: { cedula: ultimaCedula, expediente: 0 },
       capacidades: { ...CAPACIDADES_VACIAS, ...capacidades },
       solicitudesProrroga,
@@ -605,15 +613,9 @@ function DatosProvider({ children }) {
     [ejecutar],
   );
 
-  const aplicarInforme9DJ = useCallback(
-    (filas) =>
-      ejecutar(null, async () => {
-        const r = await api.informe9DJ(filas);
-        setAviso({ tipo: 'success', texto: `Informe aplicado: ${r.aplicadas} registro(s), ${r.creados.length} local(es) nuevo(s)` });
-        return r;
-      }),
-    [ejecutar],
-  );
+  /* El informe de la prestataria tiene su propio módulo con revisión fila por
+     fila: la pantalla Informe9DJ.jsx habla con api.informe9dj* directamente y
+     llama a recargar() cuando aplica o anula una carga. */
 
   /* ==========================================================================
      CONFIGURACIÓN
@@ -781,7 +783,6 @@ function DatosProvider({ children }) {
       numeroDefinitivoExpediente,
       reingresarAlCircuito,
       fusionarLocales,
-      aplicarInforme9DJ,
       guardarEnCatalogo,
       eliminarDeCatalogo,
       guardarParametros,
@@ -798,7 +799,7 @@ function DatosProvider({ children }) {
       guardarLocal, eliminarLocal, bloquearLocal, desbloquearLocal, geocodificarPendientes,
       crearRelevamiento, editarRelevamiento, revisarRelevamiento, generarCedula, regenerarCedula, asignarNotificador,
       marcarImpresa, marcarImpresas, registrarEntrega, corregirEntrega, registrarDocumento, validarPresentacion, otorgarProrroga, solicitarProrroga,
-      registrarExpediente, numeroDefinitivoExpediente, reingresarAlCircuito, fusionarLocales, aplicarInforme9DJ,
+      registrarExpediente, numeroDefinitivoExpediente, reingresarAlCircuito, fusionarLocales,
       guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla,
       guardarPermiso, restablecerPermisosDeRol, habilitarRol, reiniciarDemo, recalcularEstados,
     ],

@@ -472,14 +472,6 @@ export const ACTUACIONES_INICIALES = [
   doc({ id: 27, localId: 9, tipo: 'DDJJ', numero: 'DDJJ-00140', diasAtras: -1, expediente: 'EXP-2026-005001', validado: false }),
 ];
 
-/* Última fila del informe de la prestataria, para la pantalla de carga
-   asistida (sección 9.3). Simula el archivo que remite la empresa. */
-export const INFORME_9DJ_EJEMPLO = [
-  { cuit: '30-44556677-8', razonSocial: 'Plaza Hoteles S.A.', direccion: '24 de Septiembre 512', numeroContrato: '9DJ-2026-0201', vencimiento: dia(150) },
-  { cuit: '30-99001122-4', razonSocial: 'Frigorífico Tucumán S.A.', direccion: 'Av. Sáenz Peña 3100', numeroContrato: '9DJ-2026-0202', vencimiento: dia(150) },
-  { cuit: '30-19283746-5', razonSocial: 'Panificadora El Trigal S.R.L.', direccion: 'Av. Perón 1450', numeroContrato: '9DJ-2026-0203', vencimiento: dia(150) },
-  { cuit: '30-1122334-5', razonSocial: 'Centro Medico Belgrano', direccion: 'Belgrano 620', numeroContrato: '9DJ-2026-0204', vencimiento: dia(150) },
-];
 
 /* ============================================================================
    EL ESTADO INICIAL COMPLETO

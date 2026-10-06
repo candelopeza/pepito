@@ -121,6 +121,13 @@ router.post('/', async (req, res, next) => {
         error: 'Falta el número de expediente del trámite: sin él no se puede reconstruir qué respalda la presentación',
       });
     }
+    // El origen INFORME_9DJ lo pone únicamente el módulo del informe: es lo
+    // que da fe de que ese contrato salió de una carga concreta y auditable.
+    if (datos.origen === 'INFORME_9DJ') {
+      return res.status(400).json({
+        error: 'Los contratos informados por la prestataria se cargan desde Herramientas → Informe 9 de Julio, no desde acá.',
+      });
+    }
 
     const esTitular = req.usuario.rol === 'titular';
 
@@ -226,6 +233,19 @@ router.post('/:id/validacion', requiereRol('administrativo', 'coordinacion'), as
     if (!['DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO'].includes(tramite.tipo)) {
       return res.status(400).json({ error: 'La actuación indicada no es una presentación de documentación' });
     }
+    /* >>> LOS CONTRATOS DEL INFORME 9DJ NO SE TOCAN DESDE ACÁ <<<
+       Lo que dijo la foto de la prestataria solo lo cambia la foto siguiente o
+       la anulación de esa carga, desde el módulo del informe. Aprobarlo o
+       rechazarlo a mano acá rompería la trazabilidad de qué informe dijo qué
+       (especificación del módulo, regla de inmutabilidad). */
+    if (tramite.origen === 'INFORME_9DJ') {
+      return res.status(409).json({
+        error:
+          'Este contrato viene del informe de la prestataria 9 de Julio: no se valida ni se rechaza desde acá. ' +
+          'Se modifica cargando el informe siguiente o anulando su carga, en Herramientas → Informe 9 de Julio.',
+      });
+    }
+
     if (tramite.validado !== false) {
       return res.status(409).json({ error: 'Esa presentación ya fue validada' });
     }

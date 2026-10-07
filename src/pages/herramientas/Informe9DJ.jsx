@@ -299,13 +299,25 @@ function Informe9DJ() {
           </span>
         );
       }
+      /* Con coincidencias parecidas a la vista, lo primero es mirarlas: el
+         alta pasa a segundo plano para no crear un duplicado de un local que
+         ya existe con el CUIT mal escrito. */
+      const hayParecidos = fila.cruce === 'PARECIDO' && fila.candidatos.length > 0;
       return (
         <span className="acciones-fila">
-          <button type="button" className="btn-primario btn-chico" onClick={() => setDandoAlta(fila)}>
-            {fila.decision === 'ALTA' ? 'Revisar el alta…' : 'Dar de alta…'}
+          <button
+            type="button"
+            className={`${hayParecidos ? 'btn-primario' : 'btn-secundario'} btn-chico`}
+            onClick={() => setVinculando(fila)}
+          >
+            {hayParecidos ? 'Elegir cuál es…' : 'Vincular…'}
           </button>
-          <button type="button" className="btn-secundario btn-chico" onClick={() => setVinculando(fila)}>
-            Vincular…
+          <button
+            type="button"
+            className={`${hayParecidos ? 'btn-secundario' : 'btn-primario'} btn-chico`}
+            onClick={() => setDandoAlta(fila)}
+          >
+            {fila.decision === 'ALTA' ? 'Revisar el alta…' : 'Dar de alta…'}
           </button>
           {boton('PENDIENTE', 'Pendiente')}
           {boton('RECHAZADA', 'Rechazar')}
@@ -369,7 +381,11 @@ function Informe9DJ() {
             return <span title="El local se crea al aplicar el informe">se creará «{row.datosAlta?.nombreLocal ?? row.razonSocial}»</span>;
           }
           if (row.candidatos.length) {
-            return <Badge color="naranja">{row.candidatos.length} sucursales posibles</Badge>;
+            return (
+              <span title="El CUIT no cruzó solo, pero hay locales con la misma dirección o un nombre parecido. Tocá «Elegir cuál es…» para verlos.">
+                <Badge color="naranja">{row.candidatos.length} coincidencia(s) parecida(s)</Badge>
+              </span>
+            );
           }
           return <span className="texto-gris">no está en el padrón</span>;
         },
@@ -787,14 +803,19 @@ function Informe9DJ() {
           <>
             {candidatosDelVinculo.length > 0 && (
               <>
-                <p>El CUIT corresponde a varias sucursales. Elegí la que es:</p>
+                <p>
+                  {vinculando?.cuitValido && candidatosDelVinculo.every((l) => String(l.cuit ?? '').replace(/\D/g, '') === vinculando.cuit)
+                    ? 'El CUIT corresponde a varias sucursales. Elegí la que es:'
+                    : 'Estos locales del padrón se parecen (misma dirección o nombre parecido, aunque el CUIT no coincida). Compará y elegí:'}
+                </p>
                 <ul className="lista-candidatos">
                   {candidatosDelVinculo.map((l) => (
                     <li key={l.id}>
                       <button type="button" className="btn-secundario btn-chico" onClick={() => vincular(vinculando, l.id)}>
                         Vincular
                       </button>{' '}
-                      <strong>{l.nombreLocal}</strong> — {l.direccion} (N° {l.id})
+                      <strong>{l.nombreLocal}</strong> — {l.direccion || 'sin dirección'}
+                      {l.cuit ? ` · CUIT ${l.cuit}` : ''} (N° {l.id})
                     </li>
                   ))}
                 </ul>

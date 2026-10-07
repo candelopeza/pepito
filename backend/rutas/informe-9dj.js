@@ -58,76 +58,150 @@ const MARGEN_INFORME_INCOMPLETO = 0.8;
 /* ---------------------------------------------------------------------------
    EL CRUCE CONTRA EL PADRÓN
    ---------------------------------------------------------------------------
-   El CUIT solo no alcanza: en el padrón hay 120 CUIT con más de un local (las
-   sucursales). El criterio es CUIT + DIRECCIÓN:
-     - CUIT inválido          ->  NO_ENCONTRADO (primero lo corrige el agente)
-     - CUIT de ningún local   ->  NO_ENCONTRADO
-     - CUIT de UN local       ->  ENCONTRADO
-     - CUIT de varios locales ->  decide la dirección; si ninguna coincide,
-                                  NO_ENCONTRADO con los candidatos a la vista,
-                                  para que el agente vincule a mano.
-   NUNCA "el primero que aparezca": confirmarle el contrato a la sucursal
-   equivocada la saca del circuito de notificación sin que nadie lo decida.
+   Tres resultados posibles, del más seguro al menos:
+
+     ENCONTRADO     el CUIT es de UN local (o de varias sucursales y la
+                    dirección desambigua). Lo único que se ata solo.
+     PARECIDO       no cruzó por CUIT, pero HAY locales que se parecen: la
+                    misma razón social en la misma dirección con otro CUIT
+                    (error de tipeo, lectura de OCR, cambio de titularidad),
+                    la misma dirección, o las sucursales de un CUIT que la
+                    dirección no alcanzó a desambiguar. Los candidatos quedan
+                    A LA VISTA y el agente elige: el sistema NUNCA vincula
+                    solo una coincidencia parecida.
+     NO_ENCONTRADO  nada razonablemente parecido en el padrón.
+
+   El CUIT solo no alcanza (120 CUIT tienen más de un local) y el nombre solo
+   tampoco (hay 11 locales que se llaman igual): toda similitud exige que la
+   DIRECCIÓN participe, que es lo que el padrón ya enseñó con los duplicados.
    --------------------------------------------------------------------------- */
 const soloDigitos = (t) => String(t ?? '').replace(/\D/g, '');
 const normalizar = (t) =>
   String(t ?? '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .replace(/[^A-Z0-9 ]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-/* Dos direcciones coinciden si tienen la misma altura y comparten la calle
-   (los tokens no numéricos de una aparecen en la otra). "AV. SAN MARTIN 450"
-   coincide con "San Martín 450", no con "SAN MARTIN 1200". */
-function direccionesCoinciden(a, b) {
-  const na = normalizar(a);
-  const nb = normalizar(b);
-  if (!na || !nb) return false;
-  const alturaA = na.match(/\d+/)?.[0];
-  const alturaB = nb.match(/\d+/)?.[0];
-  if (alturaA !== alturaB) return false;
-  const palabras = (t) => t.replace(/\d+/g, ' ').split(' ').filter((p) => p.length > 2);
-  const pa = palabras(na);
-  const pb = palabras(nb);
-  if (!pa.length || !pb.length) return Boolean(alturaA);
-  const [cortas, largas] = pa.length <= pb.length ? [pa, pb] : [pb, pa];
+/* La dirección partida en calle (palabras) y altura, UNA sola vez por local:
+   el cruce compara cada fila contra todo el padrón y normalizar 2.200
+   direcciones por fila sería pagar el mismo trabajo quinientas veces. */
+function partirDireccion(texto) {
+  const n = normalizar(texto);
+  return {
+    altura: n.match(/\d+/)?.[0] ?? null,
+    calle: n.replace(/\d+/g, ' ').split(' ').filter((p) => p.length > 2),
+  };
+}
+
+const palabrasDeNombre = (t) => normalizar(t).split(' ').filter((p) => p.length > 3);
+
+/* ¿Es la misma calle? Los tokens de una aparecen en la otra: "AV. SAN MARTIN"
+   es "San Martín", no "SAN LORENZO". */
+function mismaCalle(a, b) {
+  if (!a.calle.length || !b.calle.length) return false;
+  const [cortas, largas] = a.calle.length <= b.calle.length ? [a.calle, b.calle] : [b.calle, a.calle];
   return cortas.every((p) => largas.includes(p));
 }
 
-/* Para corroborar un vínculo manual: la fila y el local se parecen si
-   coinciden en el CUIT, en la dirección, o los nombres comparten palabras
-   (PANADERIA ALBERTUS ~ ALBERTUS SRL). Es una red contra el número de local
-   equivocado, no un cruce automático: la decisión sigue siendo del agente. */
-function nombresParecidos(a, b) {
-  const pa = normalizar(a).split(' ').filter((p) => p.length > 3);
-  const pb = normalizar(b).split(' ').filter((p) => p.length > 3);
-  if (!pa.length || !pb.length) return false;
-  return pa.some((p) => pb.includes(p));
+/* Exacta: misma calle y la MISMA altura. */
+function direccionExacta(a, b) {
+  if (a.altura !== b.altura) return false;
+  if (!a.calle.length || !b.calle.length) return Boolean(a.altura);
+  return mismaCalle(a, b);
 }
 
+/* Cercana: misma calle con la altura corrida en pocos números ("San Martín
+   1500" contra "San Martin 1502": el mismo local con dos entradas, o el
+   número mal tipeado). Solo sirve para PROPONER, nunca para decidir. */
+const TOLERANCIA_ALTURA = 10;
+function direccionCercana(a, b) {
+  if (!a.altura || !b.altura) return false;
+  if (Math.abs(Number(a.altura) - Number(b.altura)) > TOLERANCIA_ALTURA) return false;
+  return mismaCalle(a, b);
+}
+
+/* ¿Los nombres comparten alguna palabra con peso? "PANADERIA ALBERTUS" se
+   parece a "ALBERTUS SRL"; los artículos y siglas cortas no cuentan. */
+function nombresParecidos(palabrasFila, palabrasLocal) {
+  if (!palabrasFila.length || !palabrasLocal.length) return false;
+  return palabrasFila.some((p) => palabrasLocal.includes(p));
+}
+
+/* El padrón preparado para comparar: CUIT normalizado, dirección partida y
+   las palabras del nombre comercial y la razón social juntas. */
+function indexarPadron(padron) {
+  const indexado = padron.map((l) => ({
+    id: l.id,
+    cuit: soloDigitos(l.cuit),
+    dir: partirDireccion(l.direccion),
+    nombre: palabrasDeNombre(`${l.nombreLocal ?? ''} ${l.razonSocial ?? ''}`),
+  }));
+  const porCuit = new Map();
+  for (const l of indexado) {
+    if (l.cuit.length !== 11) continue;
+    if (!porCuit.has(l.cuit)) porCuit.set(l.cuit, []);
+    porCuit.get(l.cuit).push(l);
+  }
+  return { indexado, porCuit };
+}
+
+/* Los parecidos de una fila, del más fuerte al más débil:
+     1  misma dirección y el nombre se parece (el caso típico: la misma
+        razón social en la misma dirección con otro CUIT)
+     2  misma dirección
+     3  misma calle con la altura corrida, y el nombre se parece
+   Se devuelven a lo sumo cinco, ordenados. */
+const MAXIMO_CANDIDATOS = 5;
+function candidatosParecidos(filaDir, filaNombre, indexado) {
+  const puntuados = [];
+  for (const l of indexado) {
+    const nombre = nombresParecidos(filaNombre, l.nombre);
+    if (direccionExacta(filaDir, l.dir)) puntuados.push({ id: l.id, orden: nombre ? 1 : 2 });
+    else if (nombre && direccionCercana(filaDir, l.dir)) puntuados.push({ id: l.id, orden: 3 });
+  }
+  return puntuados
+    .sort((a, b) => a.orden - b.orden)
+    .slice(0, MAXIMO_CANDIDATOS)
+    .map((c) => c.id);
+}
+
+function cruzarFila(fila, { indexado, porCuit }) {
+  const filaDir = partirDireccion(fila.direccion);
+  const filaNombre = palabrasDeNombre(fila.razonSocial);
+
+  // 1. Por CUIT, cuando el dígito verificador cierra.
+  if (fila.cuitValido) {
+    const mismos = porCuit.get(fila.cuit) ?? [];
+    if (mismos.length === 1) return { cruce: 'ENCONTRADO', idLocal: mismos[0].id, candidatos: null };
+    if (mismos.length > 1) {
+      const porDireccion = mismos.find((l) => direccionExacta(filaDir, l.dir));
+      if (porDireccion) return { cruce: 'ENCONTRADO', idLocal: porDireccion.id, candidatos: null };
+      // Sucursales que la dirección no desambiguó: todas a la vista.
+      return { cruce: 'PARECIDO', idLocal: null, candidatos: mismos.map((l) => l.id).join(',') };
+    }
+  }
+
+  // 2. Por similitud: también para el CUIT que no cierra (el error de OCR es
+  //    justamente cuando más sirve encontrar el local por otro camino).
+  const parecidos = candidatosParecidos(filaDir, filaNombre, indexado);
+  if (parecidos.length) return { cruce: 'PARECIDO', idLocal: null, candidatos: parecidos.join(',') };
+
+  return { cruce: 'NO_ENCONTRADO', idLocal: null, candidatos: null };
+}
+
+/* Para corroborar un vínculo manual: la fila y el local elegido se parecen si
+   coinciden en CUIT, en dirección (exacta o cercana) o en el nombre. Es una
+   red contra el número equivocado, no un cruce automático. */
 function seParecen(fila, local) {
   if (fila.cuit && soloDigitos(local.cuit) === fila.cuit) return true;
-  if (direccionesCoinciden(fila.direccion, local.direccion)) return true;
-  return (
-    nombresParecidos(fila.razonSocial, local.nombreLocal) ||
-    nombresParecidos(fila.razonSocial, local.razonSocial)
-  );
-}
-
-async function cruzarFila(fila, porCuit) {
-  if (!fila.cuitValido) return { cruce: 'NO_ENCONTRADO', idLocal: null, candidatos: null };
-
-  const candidatos = porCuit.get(fila.cuit) ?? [];
-  if (!candidatos.length) return { cruce: 'NO_ENCONTRADO', idLocal: null, candidatos: null };
-  if (candidatos.length === 1) return { cruce: 'ENCONTRADO', idLocal: candidatos[0].id, candidatos: null };
-
-  const porDireccion = candidatos.find((l) => direccionesCoinciden(l.direccion, fila.direccion));
-  if (porDireccion) return { cruce: 'ENCONTRADO', idLocal: porDireccion.id, candidatos: null };
-
-  return { cruce: 'NO_ENCONTRADO', idLocal: null, candidatos: candidatos.map((l) => l.id).join(',') };
+  const filaDir = partirDireccion(fila.direccion);
+  const localDir = partirDireccion(local.direccion);
+  if (direccionExacta(filaDir, localDir) || direccionCercana(filaDir, localDir)) return true;
+  const filaNombre = palabrasDeNombre(fila.razonSocial);
+  return nombresParecidos(filaNombre, palabrasDeNombre(`${local.nombreLocal ?? ''} ${local.razonSocial ?? ''}`));
 }
 
 /* ---------------------------------------------------------------------------
@@ -331,17 +405,12 @@ router.post('/cargas', async (req, res, next) => {
     }
     if (!lectura.filas.length) return res.status(400).json({ error: 'El archivo se leyó pero no tiene ninguna fila con datos.' });
 
-    // El cruce contra el padrón, con los locales agrupados por CUIT.
+    // El cruce contra el padrón: por CUIT y, si no cruza, por similitud de
+    // dirección y nombre (las coincidencias parecidas quedan como candidatos).
     const padron = await consultar(
-      'SELECT id_local id, cuit, direccion_local direccion FROM local WHERE habilita = 1',
+      'SELECT id_local id, cuit, direccion_local direccion, nombre_local nombreLocal, razon_social razonSocial FROM local WHERE habilita = 1',
     );
-    const porCuit = new Map();
-    for (const l of padron) {
-      const cuit = soloDigitos(l.cuit);
-      if (cuit.length !== 11) continue;
-      if (!porCuit.has(cuit)) porCuit.set(cuit, []);
-      porCuit.get(cuit).push(l);
-    }
+    const indice = indexarPadron(padron);
 
     const id = await enTransaccion(async (cx) => {
       const [r] = await cx.execute(
@@ -357,7 +426,7 @@ router.post('/cargas', async (req, res, next) => {
         ],
       );
       for (const fila of lectura.filas) {
-        const { cruce, idLocal, candidatos } = await cruzarFila(fila, porCuit);
+        const { cruce, idLocal, candidatos } = cruzarFila(fila, indice);
         await cx.execute(
           `INSERT INTO informe_9dj_fila
              (id_informe, nro_fila, cuit, cuit_valido, motivo_cuit, razon_social, direccion,

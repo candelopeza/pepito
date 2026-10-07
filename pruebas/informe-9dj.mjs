@@ -153,6 +153,8 @@ const CUIT_NUEVO = '20123456786';
 const CUIT_ROTO = '20123456785';
 /* 27-12345678-0 también cierra: suma 176, 176 % 11 = 0, verificador 0. */
 const CUIT_VENCIDO = '27123456780';
+/* 23-12345678-5 también: suma 160, 160 % 11 = 6, verificador 5. */
+const CUIT_DISTINTO = '23123456785';
 
 const csvPrincipal = Buffer.from(
   'CUIT;Razón Social;Domicilio;N° de Contrato;Vencimiento\n' +
@@ -160,6 +162,9 @@ const csvPrincipal = Buffer.from(
     `${CUIT_NUEVO};COMERCIO DE PRUEBA AUTOMATICA;CALLE DE PRUEBA 123;CON-PRUEBA-B;\n` +
     `${CUIT_ROTO};FILA CON CUIT QUE NO CIERRA;OTRA CALLE 45;;\n` +
     `${CUIT_VENCIDO};CONTRATO QUE YA VINO VENCIDO;CALLE VIEJA 1;CON-VENCIDO;01/01/2020\n` +
+    // El caso clave del cruce: el MISMO local real (nombre y dirección) pero
+    // con otro CUIT. Tiene que salir como coincidencia parecida, nunca sola.
+    `${CUIT_DISTINTO};"${(localA.razonSocial || localA.nombreLocal).replace(/"/g, '')}";"${(localA.direccion ?? '').replace(/"/g, '')}";CON-PARECIDO;\n` +
     (sucursales ? `${sucursales[0].cuit};${sucursales[0].razonSocial || 'SUCURSALES'};DIRECCION QUE NO COINCIDE 99999;;\n` : ''),
 );
 
@@ -212,7 +217,7 @@ seccion('3. El CUIT cuyo dígito no cierra queda marcado como lectura dudosa');
   verificar('la fila se conserva, no se descarta', Boolean(filaRota));
   verificar('viene marcada como CUIT inválido', filaRota?.cuitValido === false);
   verificar('con el motivo a la vista del agente', /verificador/.test(filaRota?.motivoCuit ?? ''));
-  verificar('y sin cruzar contra el padrón: nadie aplica una lectura dudosa', filaRota?.cruce === 'NO_ENCONTRADO');
+  verificar('y nunca atada sola a un local: nadie aplica una lectura dudosa', filaRota?.cruce !== 'ENCONTRADO' && filaRota?.idLocal === null);
 }
 
 seccion('10. Un CUIT con varias sucursales nunca se resuelve solo');
@@ -260,6 +265,26 @@ seccion('7. Cerrar y volver a abrir conserva lo decidido');
     verificar('vincularlo también', vinculo.estado === 409);
     const rechazo = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaVencida.id}`, { decision: 'RECHAZADA' });
     verificar('rechazarlo sí se puede: es justamente lo que corresponde', rechazo.estado === 200);
+  }
+
+  seccion('Corrección: las coincidencias parecidas se detectan y se proponen');
+  {
+    const filaParecida = carga.filas.find((f) => f.cuit === CUIT_DISTINTO);
+    verificar(
+      'la misma razón social en la misma dirección con OTRO CUIT sale como PARECIDO',
+      filaParecida?.cruce === 'PARECIDO',
+      `cruce: ${filaParecida?.cruce}`,
+    );
+    verificar('sin atarse sola a ningún local (propone, no decide)', filaParecida?.idLocal === null);
+    verificar(
+      'y el local verdadero está entre los candidatos',
+      filaParecida?.candidatos?.includes(localA.id),
+      `candidatos: ${JSON.stringify(filaParecida?.candidatos)} · esperaba incluir ${localA.id}`,
+    );
+    const vinculo = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaParecida.id}`, { decision: 'VINCULADA', idLocal: localA.id });
+    verificar('vincularla al candidato entra sin forzar (los datos sí se parecen)', vinculo.estado === 200, JSON.stringify(vinculo.cuerpo));
+    // Se rechaza para no interferir con la aritmética del aplicar de más abajo.
+    await put(`/informe-9dj/cargas/${carga.id}/filas/${filaParecida.id}`, { decision: 'RECHAZADA' });
   }
 
   seccion('Corrección: el vínculo manual se corrobora, no se cree');

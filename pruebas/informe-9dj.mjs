@@ -151,12 +151,15 @@ console.log(`CUIT con sucursales: ${sucursales ? `${sucursales[0].cuit} (${sucur
 /* CUIT inventados con verificador correcto, que no existen en el padrón. */
 const CUIT_NUEVO = '20123456786';
 const CUIT_ROTO = '20123456785';
+/* 27-12345678-0 también cierra: suma 176, 176 % 11 = 0, verificador 0. */
+const CUIT_VENCIDO = '27123456780';
 
 const csvPrincipal = Buffer.from(
   'CUIT;Razón Social;Domicilio;N° de Contrato;Vencimiento\n' +
     `${cuitA};${localA.razonSocial || localA.nombreLocal};${localA.direccion};CON-PRUEBA-A;31/12/2027\n` +
     `${CUIT_NUEVO};COMERCIO DE PRUEBA AUTOMATICA;CALLE DE PRUEBA 123;CON-PRUEBA-B;\n` +
     `${CUIT_ROTO};FILA CON CUIT QUE NO CIERRA;OTRA CALLE 45;;\n` +
+    `${CUIT_VENCIDO};CONTRATO QUE YA VINO VENCIDO;CALLE VIEJA 1;CON-VENCIDO;01/01/2020\n` +
     (sucursales ? `${sucursales[0].cuit};${sucursales[0].razonSocial || 'SUCURSALES'};DIRECCION QUE NO COINCIDE 99999;;\n` : ''),
 );
 
@@ -248,8 +251,45 @@ seccion('7. Cerrar y volver a abrir conserva lo decidido');
 
   verificar('la fila del local real cruzó sola (CUIT único)', filaA?.cruce === 'ENCONTRADO' && filaA?.idLocal === localA.id);
 
+  seccion('Corrección: un contrato que ya viene vencido no se puede cargar');
+  {
+    const filaVencida = carga.filas.find((f) => f.cuit === CUIT_VENCIDO);
+    const alta = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaVencida.id}`, { decision: 'ALTA' });
+    verificar('darlo de alta se rechaza nombrando el vencimiento', alta.estado === 409 && /vencido/.test(alta.cuerpo?.error ?? ''), JSON.stringify(alta.cuerpo));
+    const vinculo = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaVencida.id}`, { decision: 'VINCULADA', idLocal: localA.id });
+    verificar('vincularlo también', vinculo.estado === 409);
+    const rechazo = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaVencida.id}`, { decision: 'RECHAZADA' });
+    verificar('rechazarlo sí se puede: es justamente lo que corresponde', rechazo.estado === 200);
+  }
+
+  seccion('Corrección: el vínculo manual se corrobora, no se cree');
+  {
+    // La fila B no se parece en nada al local A: ni CUIT, ni dirección, ni nombre.
+    const dudoso = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaB.id}`, { decision: 'VINCULADA', idLocal: localA.id });
+    verificar('el vínculo sin ningún parecido se frena', dudoso.estado === 409, JSON.stringify(dudoso.cuerpo).slice(0, 200));
+    verificar('y la respuesta trae los dos lados para comparar', Boolean(dudoso.cuerpo?.comparacion?.fila && dudoso.cuerpo?.comparacion?.local));
+    const forzado = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaB.id}`, { decision: 'VINCULADA', idLocal: localA.id, forzar: true });
+    verificar('confirmado a propósito (forzar), el vínculo entra', forzado.estado === 200 && forzado.cuerpo?.idLocal === localA.id);
+  }
+
+  seccion('Corrección: una fila vinculada a mano se puede confirmar o rechazar');
+  {
+    const confirmada = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaB.id}`, { decision: 'CONFIRMADA' });
+    verificar('confirmar después de vincular funciona', confirmada.estado === 200 && confirmada.cuerpo?.idLocal === localA.id, JSON.stringify(confirmada.cuerpo));
+  }
+
+  seccion('Corrección: el alta guarda los datos revisados en el formulario');
+  {
+    const alta = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaB.id}`, {
+      decision: 'ALTA',
+      datosAlta: { nombreLocal: 'LOCAL CREADO POR LA PRUEBA', razonSocial: 'COMERCIO DE PRUEBA AUTOMATICA', cuit: CUIT_NUEVO, direccion: 'CALLE DE PRUEBA 123', telefono: '381-0000000' },
+    });
+    verificar('la decisión ALTA acepta los datos del formulario', alta.estado === 200 && alta.cuerpo?.datosAlta?.nombreLocal === 'LOCAL CREADO POR LA PRUEBA', JSON.stringify(alta.cuerpo));
+    const sinNombre = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaB.id}`, { decision: 'ALTA', datosAlta: { nombreLocal: '', direccion: 'X 1' } });
+    verificar('sin nombre o sin dirección, el alta se rechaza', sinNombre.estado === 400);
+  }
+
   await put(`/informe-9dj/cargas/${carga.id}/filas/${filaA.id}`, { decision: 'CONFIRMADA' });
-  await put(`/informe-9dj/cargas/${carga.id}/filas/${filaB.id}`, { decision: 'ALTA' });
   await put(`/informe-9dj/cargas/${carga.id}/filas/${filaRota.id}`, { decision: 'RECHAZADA' });
   if (filaSucursal) await put(`/informe-9dj/cargas/${carga.id}/filas/${filaSucursal.id}`, { decision: 'PENDIENTE' });
 
@@ -285,7 +325,10 @@ const estadoPrevioA = localA.estado;
 let idLocalNuevo = null;
 {
   // SIN confirmar ninguna baja: los locales reales conservan su contrato.
-  const { estado, cuerpo } = await post(`/informe-9dj/cargas/${carga.id}/aplicar`, { bajas: [] });
+  // confirmarIncompleto: el padron real puede tener informes aplicados mas
+  // grandes que este de prueba, y la alarma (que se prueba aparte, criterio 6)
+  // no tiene que frenar el resto de la suite.
+  const { estado, cuerpo } = await post(`/informe-9dj/cargas/${carga.id}/aplicar`, { bajas: [], confirmarIncompleto: true });
   verificar('la carga se aplicó', estado === 200 && cuerpo?.ok === true, JSON.stringify(cuerpo));
   verificar('con un alta y un contrato nuevo', cuerpo?.resumen?.altas === 1 && cuerpo?.resumen?.creados === 1, JSON.stringify(cuerpo?.resumen));
 
@@ -294,6 +337,11 @@ let idLocalNuevo = null;
 
   const { cuerpo: nuevo } = await get(`/locales/${idLocalNuevo}`);
   verificar('el comercio nuevo existe', Boolean(nuevo?.id));
+  verificar(
+    'con los datos revisados en el formulario, no los crudos de la fila',
+    nuevo?.nombreLocal === 'LOCAL CREADO POR LA PRUEBA',
+    `nombre: ${nuevo?.nombreLocal}`,
+  );
   verificar('con el prefijo CON en su identificador de origen', /^CON-/.test(nuevo?.idLegacy ?? nuevo?.idOriginal ?? ''), JSON.stringify(nuevo).slice(0, 200));
   verificar('y en estado CONTRATO_9DJ', nuevo?.estado === 'CONTRATO_9DJ', nuevo?.estado);
 

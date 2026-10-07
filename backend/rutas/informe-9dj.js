@@ -97,6 +97,26 @@ function direccionesCoinciden(a, b) {
   return cortas.every((p) => largas.includes(p));
 }
 
+/* Para corroborar un vínculo manual: la fila y el local se parecen si
+   coinciden en el CUIT, en la dirección, o los nombres comparten palabras
+   (PANADERIA ALBERTUS ~ ALBERTUS SRL). Es una red contra el número de local
+   equivocado, no un cruce automático: la decisión sigue siendo del agente. */
+function nombresParecidos(a, b) {
+  const pa = normalizar(a).split(' ').filter((p) => p.length > 3);
+  const pb = normalizar(b).split(' ').filter((p) => p.length > 3);
+  if (!pa.length || !pb.length) return false;
+  return pa.some((p) => pb.includes(p));
+}
+
+function seParecen(fila, local) {
+  if (fila.cuit && soloDigitos(local.cuit) === fila.cuit) return true;
+  if (direccionesCoinciden(fila.direccion, local.direccion)) return true;
+  return (
+    nombresParecidos(fila.razonSocial, local.nombreLocal) ||
+    nombresParecidos(fila.razonSocial, local.razonSocial)
+  );
+}
+
 async function cruzarFila(fila, porCuit) {
   if (!fila.cuitValido) return { cruce: 'NO_ENCONTRADO', idLocal: null, candidatos: null };
 
@@ -131,6 +151,14 @@ async function localesConContrato9dj() {
        AND d.id_tdocumentacion = ? AND t.id_estado = ?`,
     [ID_TDOC.CONTRATO, ID_ESTADO.DOC_VIGENTE],
   );
+}
+
+/* El rubro elegido en el formulario de alta, resuelto a su id. Si no existe
+   en el catálogo, el local queda SIN INFORMAR (id 1), que es el valor con el
+   que entra cualquier alta sin rubro. */
+async function idDeRubro(cx, nombre) {
+  const [filas] = await cx.query('SELECT id_rubro FROM rubro WHERE nombre_rubro = ? AND habilita = 1', [nombre]);
+  return filas[0]?.id_rubro ?? 1;
 }
 
 async function informePorId(id) {
@@ -213,6 +241,7 @@ function aFilaFront(f) {
     candidatos: f.candidatos ? f.candidatos.split(',').map(Number) : [],
     decision: f.decision,
     usuarioDecision: f.usuarioDecision,
+    datosAlta: f.datosAlta ? JSON.parse(f.datosAlta) : null,
     efecto: f.efecto,
   };
 }
@@ -387,30 +416,91 @@ router.put('/cargas/:id/filas/:idFila', async (req, res, next) => {
       return res.status(400).json({ error: `Decisión inválida. Valores posibles: ${DECISIONES.join(', ')}` });
     }
 
+    /* >>> UN CONTRATO QUE YA VIENE VENCIDO NO SE CARGA <<<
+       Si el informe trae un vencimiento pasado, confirmar esa fila metería al
+       padrón un contrato que nació vencido: el local saldría del circuito de
+       notificación sin ningún respaldo vigente. Se rechaza, queda pendiente, y
+       se le pide la aclaración a la prestataria. */
+    const vencimientoFila = fila.fechaVencimiento ? String(fila.fechaVencimiento).slice(0, 10) : null;
+    if (['CONFIRMADA', 'VINCULADA', 'ALTA'].includes(decision) && vencimientoFila && vencimientoFila < hoyISO()) {
+      return res.status(409).json({
+        error:
+          `El contrato de esta fila ya viene vencido (${vencimientoFila}): no se puede cargar. ` +
+          'Rechazala o dejala pendiente y pedí la aclaración a la prestataria.',
+      });
+    }
+
     // La decisión tiene que corresponder a lo que el cruce encontró.
     let idLocal = fila.idLocal;
-    // Confirmar exige un local: una fila que no cruzó no tiene a quién
-    // confirmarle el contrato. Rechazarla, en cambio, siempre se puede.
-    if (decision === 'CONFIRMADA' && fila.cruce !== 'ENCONTRADO') {
+    let datosAlta = fila.datosAlta ?? null;
+
+    // Confirmar exige un local: el que encontró el cruce o el que el agente
+    // vinculó a mano antes. Rechazar, en cambio, siempre se puede.
+    if (decision === 'CONFIRMADA' && !fila.idLocal) {
       return res.status(400).json({ error: 'Esta fila no cruzó con ningún local: vinculala, dala de alta o dejala pendiente.' });
     }
+
     if (decision === 'VINCULADA') {
       idLocal = Number(req.body?.idLocal);
-      const [existe] = await consultar('SELECT id_local FROM local WHERE id_local = ? AND habilita = 1', [idLocal]);
-      if (!existe) return res.status(400).json({ error: 'Para vincular hace falta un local existente del padrón.' });
+      const [local] = await consultar(
+        `SELECT id_local id, cuit, nombre_local nombreLocal, razon_social razonSocial, direccion_local direccion
+           FROM local WHERE id_local = ? AND habilita = 1`,
+        [idLocal],
+      );
+      if (!local) return res.status(400).json({ error: 'Para vincular hace falta un local existente del padrón.' });
+
+      /* >>> EL VÍNCULO SE CORROBORA, NO SE CREE <<<
+         Vincular ata el contrato de la prestataria a una ficha del padrón. Si
+         ni el CUIT, ni la dirección, ni el nombre se parecen, lo más probable
+         es un número equivocado: se avisa mostrando los dos lados, y solo se
+         vincula si el agente lo confirma a propósito (forzar). */
+      if (!seParecen(fila, local) && req.body?.forzar !== true) {
+        return res.status(409).json({
+          error:
+            'El local elegido no se parece en nada a la fila del informe: ni el CUIT, ni la dirección, ni el nombre coinciden. ' +
+            'Revisá que sea el correcto; si estás segura, confirmá el vínculo igual.',
+          comparacion: {
+            fila: { cuit: fila.cuit, razonSocial: fila.razonSocial, direccion: fila.direccion },
+            local: { id: local.id, cuit: local.cuit, nombreLocal: local.nombreLocal, razonSocial: local.razonSocial, direccion: local.direccion },
+          },
+        });
+      }
     }
-    if (decision === 'ALTA' && fila.cruce === 'ENCONTRADO') {
-      return res.status(400).json({ error: 'Esta fila ya cruzó con un local del padrón: no corresponde un alta.' });
+
+    if (decision === 'ALTA') {
+      if (fila.cruce === 'ENCONTRADO') {
+        return res.status(400).json({ error: 'Esta fila ya cruzó con un local del padrón: no corresponde un alta.' });
+      }
+      idLocal = null;
+      // Los datos revisados por el agente en el formulario de alta. El local
+      // NO se crea ahora: se crea al aplicar el informe, con estos datos.
+      if (req.body?.datosAlta && typeof req.body.datosAlta === 'object') {
+        const d = req.body.datosAlta;
+        if (!String(d.nombreLocal ?? '').trim() || !String(d.direccion ?? '').trim()) {
+          return res.status(400).json({ error: 'El alta necesita al menos el nombre del local y la dirección.' });
+        }
+        datosAlta = JSON.stringify({
+          nombreLocal: String(d.nombreLocal).trim(),
+          razonSocial: String(d.razonSocial ?? '').trim(),
+          cuit: soloDigitos(d.cuit) || null,
+          direccion: String(d.direccion).trim(),
+          domicilioFiscal: String(d.domicilioFiscal ?? '').trim() || null,
+          rubro: String(d.rubro ?? '').trim() || null,
+          email: String(d.email ?? '').trim() || null,
+          telefono: String(d.telefono ?? '').trim() || null,
+          observaciones: String(d.observaciones ?? '').trim() || null,
+        });
+      }
     }
-    if (['SIN_REVISAR', 'ALTA'].includes(decision)) idLocal = decision === 'ALTA' ? null : fila.idLocal;
+    if (decision === 'SIN_REVISAR') idLocal = fila.idLocal;
 
     await consultar(
       `UPDATE informe_9dj_fila
-          SET decision = ?, id_local = ?, usuario_decision = ?, fecha_decision = NOW()
+          SET decision = ?, id_local = ?, datos_alta = ?, usuario_decision = ?, fecha_decision = NOW()
         WHERE id_fila = ?`,
-      [decision, idLocal, req.usuario.nombre, fila.idFila],
+      [decision, idLocal, datosAlta, req.usuario.nombre, fila.idFila],
     );
-    res.json({ ok: true, id: fila.idFila, decision, idLocal });
+    res.json({ ok: true, id: fila.idFila, decision, idLocal, datosAlta: datosAlta ? JSON.parse(datosAlta) : null });
   } catch (e) {
     next(e);
   }
@@ -441,6 +531,24 @@ router.post('/cargas/:id/aplicar', async (req, res, next) => {
     if (sinRevisar) {
       return res.status(400).json({
         error: `Quedan ${sinRevisar} fila(s) sin revisar. Confirmá, rechazá o dejá pendiente cada una antes de aplicar.`,
+      });
+    }
+
+    /* Defensa en profundidad del bloqueo de contratos vencidos: la decisión
+       ya no se puede tomar (lo rechaza el PUT), pero una fila decidida antes
+       de esa regla podría haber quedado. Acá no pasa. */
+    const vencidas = filas.filter(
+      (f) =>
+        f.cruce !== 'BAJA' &&
+        ['CONFIRMADA', 'VINCULADA', 'ALTA'].includes(f.decision) &&
+        f.fechaVencimiento &&
+        String(f.fechaVencimiento).slice(0, 10) < hoyISO(),
+    );
+    if (vencidas.length) {
+      return res.status(400).json({
+        error:
+          `Hay ${vencidas.length} fila(s) confirmadas cuyo contrato ya viene vencido ` +
+          `(filas ${vencidas.map((f) => f.nroFila).join(', ')}): rechazalas o dejalas pendientes antes de aplicar.`,
       });
     }
 
@@ -538,21 +646,32 @@ router.post('/cargas/:id/aplicar', async (req, res, next) => {
           continue;
         }
         if (f.decision === 'ALTA') {
-          // El local nuevo entra SIN coordenada: la geocodificación tarda un
-          // segundo por dirección y acá puede haber decenas de altas. Después
-          // se geocodifican por lotes desde Herramientas, como el resto.
+          /* Si el agente revisó el alta en el formulario, mandan sus datos;
+             si no, los crudos de la fila, como siempre. El local entra SIN
+             coordenada: la geocodificación tarda un segundo por dirección y
+             acá puede haber decenas de altas. Después se geocodifican por
+             lotes desde Herramientas, como el resto. */
+          const alta = f.datosAlta ? JSON.parse(f.datosAlta) : {};
+          const idRubro = alta.rubro ? await idDeRubro(cx, alta.rubro) : 1;
           const [r] = await cx.execute(
             `INSERT INTO local
                (cuit, id_original, id_rubro, id_estado, razon_social, nombre_local, direccion_local,
+                domicilio_fiscal, email_local, telefono_local,
                 latitud_local, longitud_local, observacion, bloqueado, habilita)
-             VALUES (?, NULL, 1, ?, ?, ?, ?, NULL, NULL, ?, 0, 1)`,
+             VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 0, 1)`,
             [
-              f.cuit,
+              alta.cuit ?? f.cuit,
+              idRubro,
               ID_ESTADO.REVISION_DATOS,
-              f.razonSocial ?? null,
-              f.razonSocial ?? 'SIN NOMBRE',
-              f.direccion ?? '',
-              recortarObservacion(`Creado desde el informe de la prestataria (carga N° ${informe.idInforme}).`),
+              alta.razonSocial || (f.razonSocial ?? null),
+              alta.nombreLocal || f.razonSocial || 'SIN NOMBRE',
+              alta.direccion || (f.direccion ?? ''),
+              alta.domicilioFiscal ?? null,
+              alta.email ?? null,
+              alta.telefono ?? null,
+              recortarObservacion(
+                `${alta.observaciones ? `${alta.observaciones} · ` : ''}Creado desde el informe de la prestataria (carga N° ${informe.idInforme}).`,
+              ),
             ],
           );
           const idLocal = r.insertId;

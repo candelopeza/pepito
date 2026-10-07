@@ -49,10 +49,13 @@ function cabeceras() {
    detrás de un "Error 400".
    --------------------------------------------------------------------------- */
 export class ErrorApi extends Error {
-  constructor(mensaje, estado) {
+  constructor(mensaje, estado, cuerpo = null) {
     super(mensaje);
     this.name = 'ErrorApi';
     this.estado = estado;
+    // La respuesta completa del backend: algunos errores traen datos ademas
+    // del texto (la comparacion de un vinculo dudoso del informe 9DJ).
+    this.cuerpo = cuerpo;
   }
 }
 
@@ -78,7 +81,7 @@ async function pedir(ruta, opciones = {}) {
   }
 
   if (!respuesta.ok) {
-    throw new ErrorApi(cuerpo?.error ?? `Error ${respuesta.status} en ${ruta}`, respuesta.status);
+    throw new ErrorApi(cuerpo?.error ?? `Error ${respuesta.status} en ${ruta}`, respuesta.status, cuerpo);
   }
   return cuerpo;
 }
@@ -213,8 +216,8 @@ export const api = {
   informe9djCargas: () => get('/informe-9dj/cargas'),
   informe9djCarga: (id) => get(`/informe-9dj/cargas/${id}`),
   informe9djSubir: (datos) => post('/informe-9dj/cargas', datos),
-  informe9djDecidir: (idCarga, idFila, decision, idLocal) =>
-    put(`/informe-9dj/cargas/${idCarga}/filas/${idFila}`, { decision, idLocal }),
+  // `datos` es { decision, idLocal?, datosAlta?, forzar? }
+  informe9djDecidir: (idCarga, idFila, datos) => put(`/informe-9dj/cargas/${idCarga}/filas/${idFila}`, datos),
   informe9djAplicar: (id, datos) => post(`/informe-9dj/cargas/${id}/aplicar`, datos),
   informe9djDescartar: (id) => post(`/informe-9dj/cargas/${id}/descartar`),
   informe9djAnular: (id, motivo) => post(`/informe-9dj/cargas/${id}/anular`, { motivo }),

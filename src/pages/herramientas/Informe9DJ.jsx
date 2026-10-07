@@ -333,15 +333,23 @@ function Informe9DJ() {
       {
         field: 'cuit',
         headerName: 'CUIT',
-        width: 150,
-        renderCell: ({ row }) =>
-          row.cuitValido ? (
-            row.cuit
-          ) : (
-            <span title={row.motivoCuit ?? ''}>
-              <Badge color="rojo">{row.cuit || 'sin CUIT'} ⚠</Badge>
+        width: 210,
+        renderCell: ({ row }) => {
+          if (row.cuitValido) return row.cuit;
+          // El motivo va ESCRITO, no escondido en el hover: es lo que el
+          // agente tiene que leer antes de decidir qué hacer con la fila.
+          const motivo = !row.cuit
+            ? 'la fila vino sin CUIT'
+            : row.cuit.length !== 11
+              ? `tiene ${row.cuit.length} dígitos, deben ser 11`
+              : 'el dígito verificador no cierra';
+          return (
+            <span className="celda-advertencia" title={row.motivoCuit ?? ''}>
+              <strong>⚠ {row.cuit || 'SIN CUIT'}</strong>
+              <small>{motivo}</small>
             </span>
-          ),
+          );
+        },
       },
       { field: 'razonSocial', headerName: 'Razón social', flex: 1, minWidth: 180 },
       { field: 'direccion', headerName: 'Dirección', flex: 1, minWidth: 170 },
@@ -349,15 +357,19 @@ function Informe9DJ() {
       {
         field: 'vencimiento',
         headerName: 'Vencimiento',
-        width: 130,
+        width: 175,
         renderCell: ({ row }) => {
           if (!row.vencimiento) return <span className="texto-gris">—</span>;
           // Un contrato que YA viene vencido no se puede cargar (lo rechaza el
           // backend): se marca para que el agente lo vea antes de intentarlo.
           if (row.vencimiento < hoyISO()) {
             return (
-              <span title="Este contrato ya viene vencido: no se puede confirmar ni dar de alta. Rechazalo o dejalo pendiente.">
-                <Badge color="rojo">{fmtFecha(row.vencimiento)} ⚠</Badge>
+              <span
+                className="celda-advertencia"
+                title="Este contrato ya viene vencido: no se puede confirmar, vincular ni dar de alta. Rechazalo o dejalo pendiente y pedí la aclaración a la prestataria."
+              >
+                <strong>⚠ {fmtFecha(row.vencimiento)}</strong>
+                <small>ya venció: no se carga</small>
               </span>
             );
           }
@@ -801,6 +813,12 @@ function Informe9DJ() {
           </>
         ) : (
           <>
+            {vinculando && !vinculando.cuitValido && (
+              <Aviso tipo="alerta" titulo="Cuidado: el CUIT de esta fila no cierra">
+                {vinculando.motivoCuit ?? 'El CUIT vino mal en el archivo.'} Cotejá contra el archivo original (columna “Como vino en
+                el archivo”) antes de vincular: puede ser otro comercio.
+              </Aviso>
+            )}
             {candidatosDelVinculo.length > 0 && (
               <>
                 <p>
@@ -884,6 +902,12 @@ function Informe9DJ() {
           ancho="ancho"
           onCerrar={() => setDandoAlta(null)}
         >
+          {!dandoAlta.cuitValido && (
+            <Aviso tipo="alerta" titulo="Cuidado: el CUIT de esta fila no cierra">
+              {dandoAlta.motivoCuit ?? 'El CUIT vino mal en el archivo.'} Antes de crear un local nuevo, revisá que no sea uno que ya
+              existe con el CUIT bien escrito, y corregí el CUIT en el formulario si lo conseguís.
+            </Aviso>
+          )}
           <Aviso tipo="info" titulo="Los datos quedan guardados en la fila">
             Revisá y completá lo que falte. El local se crea recién al <strong>aplicar el informe</strong>, con su contrato de la
             prestataria; si la carga se descarta, no queda nada en el padrón.

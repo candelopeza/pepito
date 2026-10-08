@@ -347,6 +347,7 @@ function Local() {
         filas={filas}
         columnas={columnas}
         nombreArchivo="padron-locales"
+        tituloImpresion="Padrón de establecimientos"
         vacio="Ningún local coincide con la búsqueda."
         botones={
           puedeEditarLocales && (

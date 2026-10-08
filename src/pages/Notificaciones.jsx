@@ -43,6 +43,20 @@ import Confirmar from '../components/ui/Confirmar';
 import AccionesLocal from '../components/AccionesLocal';
 import VistaCedula from '../components/VistaCedula';
 import { textoDeCedula } from '../dominio/textoCedula';
+import {
+  descargarPdf,
+  imprimirPdf,
+  nombreHojaDeRuta,
+  nombreLote,
+  pdfCedulas,
+  pdfHojaDeRuta,
+  quienGenera,
+} from '../components/pdfCedulas';
+import { useRol } from '../auth/rolContexto';
+
+/* La hoja de ruta y el lote de cédulas salen en PDF (components/pdfCedulas.js).
+   En false vuelven a imprimirse desde el navegador, como antes. */
+const IMPRESION_EN_PDF = true;
 import { useDatos } from '../datos/datosContexto';
 import { resultadoEntrega } from '../dominio/actuaciones';
 import { faltantesRegistrales } from '../dominio/reglas';
@@ -69,11 +83,14 @@ const COLUMNAS_COLA = [
       </span>
     ),
   },
-  { field: 'direccion', headerName: 'Dirección', flex: 1.2, minWidth: 180 },
+  { field: 'direccion',
+    headerName: 'Dirección',
+    flex: 1.2,
+    minWidth: 300 },
   {
     field: 'instancia',
     headerName: 'Instancia',
-    width: 150,
+    width: 200,
     // Sale del estado, así que se calcula: sin valueGetter no se podría
     // ordenar ni filtrar por esta columna.
     valueGetter: (_v, row) => (row.estado.startsWith('NOTIF2') ? '2° notificación' : '1° notificación'),
@@ -108,6 +125,7 @@ function Notificaciones() {
     marcarImpresas,
     parametros,
   } = useDatos();
+  const { usuario } = useRol();
   // Sin la constancia de impresión (sql/04) no se sabe qué se imprimió: no se
   // muestra la columna ni el filtro, en vez de marcar todas como sin imprimir.
   const hayImpresion = Boolean(capacidades?.impresion);
@@ -130,11 +148,18 @@ function Notificaciones() {
   const hojaDeRuta = useMemo(() => {
     // Las sin entregar y las que constan como NO entregadas (hay que volver a
     // llevarlas), siempre que sigan siendo la cédula en curso de su local.
+    // Solo la cédula en curso de cada local: en el padrón real hay locales con
+    // cédulas viejas sin resultado cargado, y salían repetidos en la hoja.
     const pendientes = emitidas
-      .filter((c) => (!c.resultado || c.resultado === 'NO_ENTREGADA') && ESPERAN_ENTREGA.includes(c.local?.estado))
+      .filter(
+        (c) =>
+          (!c.resultado || c.resultado === 'NO_ENTREGADA') &&
+          ESPERAN_ENTREGA.includes(c.local?.estado) &&
+          localPorId(c.localId)?.cedulaEnCurso?.id === c.id,
+      )
       .map((c) => ({ ...c, latitud: c.local?.latitud ?? null, longitud: c.local?.longitud ?? null }));
     return ordenarPorProximidad(pendientes);
-  }, [emitidas]);
+  }, [emitidas, localPorId]);
 
   /* EL LOTE DE CÉDULAS (sección 6.4: "impresión individual y por lote"). Con
      la constancia de impresión (sql/04): las que nadie imprimió todavía. Sin
@@ -153,6 +178,23 @@ function Notificaciones() {
 
   // flushSync dibuja el bloque elegido ANTES de abrir la impresora (si no,
   // saldría la hoja anterior). Después se registra la constancia del lote.
+  /* En PDF: imprimir abre el PDF con el diálogo de impresión; descargar lo
+     guarda. Las dos dejan la constancia de impresión del lote. */
+  const itemsDelLote = () =>
+    loteImprimible.map((c) => ({ cedula: c, local: localPorId(c.localId), notificador: c.notificador?.nombre ?? null }));
+  const registrarLote = () => marcarImpresas(loteImprimible.filter((c) => !c.impresaEn).map((c) => c.id));
+  // Quién lo genera: va abajo a la izquierda de cada hoja del PDF.
+  const firma = { generadoPor: quienGenera(usuario) };
+  function hojaEnPdf(accion) {
+    if (accion === 'imprimir') imprimirPdf(() => pdfHojaDeRuta(hojaDeRuta, firma), nombreHojaDeRuta());
+    else pdfHojaDeRuta(hojaDeRuta, firma).then((doc) => descargarPdf(doc, nombreHojaDeRuta()));
+  }
+  function loteEnPdf(accion) {
+    if (accion === 'imprimir') imprimirPdf(() => pdfCedulas(itemsDelLote(), plantillaCedula, firma), nombreLote());
+    else pdfCedulas(itemsDelLote(), plantillaCedula, firma).then((doc) => descargarPdf(doc, nombreLote()));
+    registrarLote();
+  }
+
   function imprimir(que) {
     flushSync(() => setImprimiendo(que));
     window.print();
@@ -167,7 +209,7 @@ function Notificaciones() {
         field: 'local',
         headerName: 'Local',
         flex: 1,
-        minWidth: 190,
+        minWidth: 250,
         valueGetter: (_v, row) => row.local?.nombreLocal ?? '',
         renderCell: ({ row }) =>
           row.local ? (
@@ -182,7 +224,7 @@ function Notificaciones() {
         field: 'direccion',
         headerName: 'Dirección',
         flex: 1,
-        minWidth: 170,
+        minWidth: 300,
         valueGetter: (_v, row) => row.local?.direccion ?? '',
       },
       {
@@ -196,6 +238,8 @@ function Notificaciones() {
         field: 'impresaEn',
         headerName: 'Impresión',
         width: 150,
+        // El texto que va al PDF del botón Imprimir (la celda dibuja el badge).
+        valueFormatter: (value) => (value ? `Impresa ${fmtFechaHora(value)}` : 'Sin imprimir'),
         renderCell: ({ row }) =>
           row.impresaEn ? (
             <span title={`${row.impresaPor} · ${fmtFechaHora(row.impresaEn)}`}>
@@ -210,6 +254,7 @@ function Notificaciones() {
         headerName: 'Notificador',
         width: 160,
         valueGetter: (_v, row) => row.notificador?.nombre ?? '',
+        valueFormatter: (value) => value || 'Sin asignar',
         renderCell: ({ row }) =>
           row.notificador ? row.notificador.nombre : <Badge color="amarillo">Sin asignar</Badge>,
       },
@@ -217,6 +262,7 @@ function Notificaciones() {
         field: 'resultado',
         headerName: 'Entrega',
         width: 205,
+        valueFormatter: (value) => (value ? (resultadoEntrega(value)?.etiqueta ?? value) : 'Pendiente'),
         renderCell: ({ row }) => {
           if (!row.resultado) return <Badge color="azul">Pendiente · el plazo no corre</Badge>;
           const r = resultadoEntrega(row.resultado);
@@ -321,13 +367,14 @@ function Notificaciones() {
 
       {/* ================= 2. CÉDULAS EMITIDAS ================= */}
       <div className="accesos-header">
-    
+
       </div>
 
       <Grilla
         filas={filas}
         columnas={columnas}
         nombreArchivo="cedulas"
+        tituloImpresion="Cédulas emitidas"
         vacio="Todavía no se emitió ninguna cédula."
         ordenInicial={[{ field: 'fecha', sort: 'desc' }]}
         botones={
@@ -357,16 +404,37 @@ function Notificaciones() {
         <Vacio titulo="Nada para entregar">Todas las cédulas emitidas ya tienen resultado de entrega.</Vacio>
       ) : (
         <>
-          <div className="barra-lote">
-            <button type="button" className="btn-secundario" onClick={() => imprimir('hoja')}>
-              Imprimir hoja de ruta ({hojaDeRuta.length} cédulas)
-            </button>
-            {loteImprimible.length > 0 && (
-              <button type="button" className="btn-primario" onClick={() => imprimir('lote')}>
-                Imprimir {loteImprimible.length} cédula(s) {hayImpresion ? 'sin imprimir' : 'sin entregar'}
+          {IMPRESION_EN_PDF ? (
+            <div className="barra-lote">
+              <button type="button" className="btn-secundario" onClick={() => hojaEnPdf('imprimir')}>
+                Imprimir hoja de ruta ({hojaDeRuta.length})
               </button>
-            )}
-          </div>
+              <button type="button" className="btn-secundario" onClick={() => hojaEnPdf('descargar')}>
+                Hoja de ruta en PDF
+              </button>
+              {loteImprimible.length > 0 && (
+                <>
+                  <button type="button" className="btn-primario" onClick={() => loteEnPdf('imprimir')}>
+                    Imprimir {loteImprimible.length} cédula(s) {hayImpresion ? 'sin imprimir' : 'sin entregar'}
+                  </button>
+                  <button type="button" className="btn-secundario" onClick={() => loteEnPdf('descargar')}>
+                    Cédulas en PDF
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="barra-lote">
+              <button type="button" className="btn-secundario" onClick={() => imprimir('hoja')}>
+                Imprimir hoja de ruta ({hojaDeRuta.length} cédulas)
+              </button>
+              {loteImprimible.length > 0 && (
+                <button type="button" className="btn-primario" onClick={() => imprimir('lote')}>
+                  Imprimir {loteImprimible.length} cédula(s) {hayImpresion ? 'sin imprimir' : 'sin entregar'}
+                </button>
+              )}
+            </div>
+          )}
           {loteConFaltantes > 0 && (
             <Aviso
               tipo="alerta"

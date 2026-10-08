@@ -660,3 +660,47 @@ margen de la alarma de informe incompleto (hoy 20%), si la ausencia repetida
 debería sugerir baja sola, si el contrato cubre a la empresa o a cada
 establecimiento, y el formato real del archivo (ajustar el lector con el
 primer informe verdadero).
+
+## 12. Cédulas y hoja de ruta en PDF (sección 6.4), 7 de octubre de 2026
+
+La impresión ya no depende del navegador: se arma un PDF en el front con
+`jspdf` y `jspdf-autotable` (`src/components/pdfCedulas.js`). Después de traer
+este cambio hay que correr `npm install` en la carpeta del proyecto.
+
+- **Cédula** (una por hoja, A4): el texto de Configuración → Plantilla de
+  cédula, completado con los datos del local, y al pie la **constancia de
+  notificación** que llena el notificador en el domicilio: fecha y hora,
+  resultado (las mismas cuatro opciones que se cargan en el sistema), quién
+  recibió y su DNI, la relación con el local, las firmas y las observaciones.
+  Con `COPIAS_POR_CEDULA = 2` salen ORIGINAL y DUPLICADO.
+- **Hoja de ruta** (A4 vertical: apaisada, la impresora la cortaba del lado derecho; `HOJA_DE_RUTA_APAISADA` la vuelve a poner así): una hoja por notificador, con su recorrido
+  ordenado por cercanía (la última, las cédulas sin notificador, con el nombre
+  para completar a mano). Número de orden, cédula, instancia, local, dirección
+  y lugar para resultado y firma; el encabezado se repite en cada hoja.
+- **Pie de cada hoja:** abajo a la izquierda, "Generado el dd/mm/aaaa a las
+  hh:mm por …", con el usuario de la barra de arriba (con "Firmar como", su
+  legajo; con CiDiTuc, el de su inicio de sesión).
+- **Dónde:** en Notificaciones ("Imprimir hoja de ruta", "Hoja de ruta en
+  PDF", "Imprimir N cédula(s)", "Cédulas en PDF") y en la vista de cada cédula
+  ("Imprimir" y "Descargar PDF"). Imprimir abre el PDF en otra pestaña con el
+  diálogo de impresión; descargar lo guarda.
+- La constancia de impresión (quién y cuándo) se registra al imprimir o
+  descargar, solo para quien imprime: la oficina y el agente asignado.
+  Dirección y el titular pueden descargar la cédula sin que cuente como impresa.
+- Una cédula con datos sin completar no se imprime ni se descarga.
+- `IMPRESION_EN_PDF = false` en `VistaCedula.jsx` y `Notificaciones.jsx` vuelve
+  a la impresión del navegador.
+- `vite.config.js` deja afuera del build tres librerías que jsPDF solo usa para
+  convertir HTML a PDF (`html2canvas`, `canvg`, `dompurify`): ~380 KB menos.
+- **Papel:** los PDF salen en tamaño Carta (`PAPEL` en `pdfCedulas.js`: 'carta',
+  'a4' u 'oficio'), con todo el contenido dentro de la zona que comparten Carta
+  y A4 (210 x 279 mm). Armados en A4, en una impresora con papel Carta se
+  perdían casi 2 cm de abajo, justo donde está el pie con quién lo generó.
+- **El botón verde "Imprimir" de todas las tablas** también arma un PDF
+  (`pdfDeTabla`): las filas que quedaron después de buscar y filtrar, en el
+  orden de la tabla, con todas las columnas visibles menos los botones, los
+  estados y resultados con su nombre y el mismo pie con quién lo generó. Antes
+  salía la tabla del navegador, con la barra de herramientas y las columnas de
+  la derecha cortadas. El título lo da la prop `tituloImpresion` de la grilla
+  (si no está, sale del nombre del archivo). `IMPRESION_EN_PDF = false` en
+  `ui/Grilla.jsx` vuelve a la impresión del navegador.

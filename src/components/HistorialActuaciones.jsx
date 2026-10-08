@@ -60,7 +60,8 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
           )}
         </Dato>
         <Dato etiqueta="Instancia">{a.instancia === 1 ? 'Primera notificación' : 'Segunda notificación'}</Dato>
-        <Dato etiqueta="Plazo">{a.plazoDias} días hábiles</Dato>
+        {/* Una notificación todavía sin emitir no tiene plazo: se fija al emitirla. */}
+        <Dato etiqueta="Plazo">{a.plazoDias ? `${a.plazoDias} días hábiles` : 'Se fija al emitir la cédula'}</Dato>
         <Dato etiqueta="Notificador">{notificador?.nombre ?? 'sin asignar'}</Dato>
         {/* Solo si la base guarda la constancia (backend/sql/04): si no, no se sabe. */}
         {conImpresion && a.numeroCedula && (

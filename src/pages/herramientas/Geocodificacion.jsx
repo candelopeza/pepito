@@ -54,7 +54,7 @@ function Geocodificacion() {
         field: 'nombreLocal',
         headerName: 'Local',
         flex: 1,
-        minWidth: 200,
+        minWidth: 400,
         renderCell: ({ row }) => (
           <span className="celda-apilada">
             <Link to={`/locales/${row.id}`} className="link-local">
@@ -75,13 +75,13 @@ function Geocodificacion() {
       {
         field: 'coordenadaRelevamiento',
         headerName: 'Coordenada del relevamiento',
-        width: 240,
+        width: 450,
         sortable: false,
         filterable: false,
         /* Se muestra a propósito, con la advertencia: es el dato que en el
            sistema viejo se terminaba copiando al padrón. */
         renderCell: () => (
-          <span className="celda-apilada texto-gris">
+          <span className="celda-apilada texto">
             no se usa para el padrón
             <small className="celda-sub">aunque exista, no es la ubicación del establecimiento</small>
           </span>

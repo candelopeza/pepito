@@ -25,12 +25,18 @@ import { useDatos } from '../datos/datosContexto';
 import { useRol } from '../auth/rolContexto';
 import { fmtFechaHora } from '../dominio/fechas';
 import { textoDeCedula } from '../dominio/textoCedula';
+import { descargarPdf, imprimirPdf, nombreCedula, pdfCedulas, quienGenera } from './pdfCedulas';
+
+/* La cédula sale en PDF (components/pdfCedulas.js): igual en cualquier
+   navegador y con la constancia de notificación. En false vuelve a imprimirse
+   desde el navegador, como antes. */
+const IMPRESION_EN_PDF = true;
 
 /* soloLectura: se puede ver pero no imprimir (el titular, desde su portal:
    imprimirla marcaría como impresa una cédula que la oficina todavía no
    imprimió). */
 function VistaCedula({ abierto, cedula, local, onCerrar, soloLectura = false }) {
-  const { plantillaCedula, marcarImpresa, capacidades } = useDatos();
+  const { plantillaCedula, marcarImpresa, capacidades, usuarios } = useDatos();
   const { rol, usuario } = useRol();
   // Sin las columnas de sql/04 se imprime igual, pero no queda constancia.
   const registraImpresion = Boolean(capacidades?.impresion);
@@ -51,15 +57,49 @@ function VistaCedula({ abierto, cedula, local, onCerrar, soloLectura = false }) 
     window.print();
   }
 
+  // Lo que necesita el PDF. El notificador asignado sale impreso en la constancia.
+  const paraPdf = () => [
+    {
+      cedula,
+      local,
+      notificador: cedula.notificador?.nombre ?? usuarios.find((u) => u.id === cedula.notificadorId)?.nombre ?? null,
+    },
+  ];
+  // Imprimir o descargar para imprimir deja la constancia (solo quien imprime).
+  const registrar = () => {
+    if (imprime && registraImpresion) marcarImpresa(cedula.id);
+  };
+  function imprimirEnPdf() {
+    imprimirPdf(
+      () => pdfCedulas(paraPdf(), plantillaCedula, { generadoPor: quienGenera(usuario) }),
+      nombreCedula(cedula),
+    );
+    registrar();
+  }
+  async function descargarEnPdf() {
+    descargarPdf(
+      await pdfCedulas(paraPdf(), plantillaCedula, { generadoPor: quienGenera(usuario) }),
+      nombreCedula(cedula),
+    );
+    registrar();
+  }
+  const sinDatos = faltantes > 0 ? 'Faltan datos: corregí el local y regenerá la cédula' : undefined;
+
   return (
-    <Modal abierto={abierto} etiqueta="CÉDULA DE NOTIFICACIÓN" titulo={cedula.numeroCedula} ancho="ancho" onCerrar={onCerrar}>
+    <Modal
+      abierto={abierto}
+      etiqueta="CÉDULA DE NOTIFICACIÓN"
+      titulo={cedula.numeroCedula}
+      ancho="ancho"
+      onCerrar={onCerrar}
+    >
       {faltantes > 0 && (
         <div className="aviso aviso-bloqueo">
           <div className="aviso-cuerpo">
             <strong className="aviso-titulo">Hay {faltantes} dato(s) sin completar</strong>
             <span className="aviso-texto">
-              No imprimas esta cédula: corregí los datos del local y usá "Regenerar cédula". Una notificación que no individualiza
-              bien al sujeto obligado es impugnable.
+              No imprimas esta cédula: corregí los datos del local y usá "Regenerar cédula". Una notificación que no
+              individualiza bien al sujeto obligado es impugnable.
             </span>
           </div>
         </div>
@@ -83,10 +123,35 @@ function VistaCedula({ abierto, cedula, local, onCerrar, soloLectura = false }) 
       )}
 
       <div className="form-acciones">
-        {imprime && (
-          <button type="button" className="btn-primario" onClick={imprimir}>
-            {!registraImpresion ? 'Imprimir' : cedula.impresaEn ? 'Imprimir de nuevo' : 'Imprimir y registrar'}
-          </button>
+        {IMPRESION_EN_PDF ? (
+          <>
+            {imprime && (
+              <button
+                type="button"
+                className="btn-primario"
+                onClick={imprimirEnPdf}
+                disabled={faltantes > 0}
+                title={sinDatos}
+              >
+                {!registraImpresion ? 'Imprimir' : cedula.impresaEn ? 'Imprimir de nuevo' : 'Imprimir y registrar'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-secundario"
+              onClick={descargarEnPdf}
+              disabled={faltantes > 0}
+              title={sinDatos}
+            >
+              Descargar PDF
+            </button>
+          </>
+        ) : (
+          imprime && (
+            <button type="button" className="btn-primario" onClick={imprimir}>
+              {!registraImpresion ? 'Imprimir' : cedula.impresaEn ? 'Imprimir de nuevo' : 'Imprimir y registrar'}
+            </button>
+          )
         )}
         <button type="button" className="btn-secundario" onClick={onCerrar}>
           Cerrar

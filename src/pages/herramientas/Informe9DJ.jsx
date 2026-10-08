@@ -429,7 +429,6 @@ function Informe9DJ() {
       <PageHeader
         etiqueta="HERRAMIENTAS"
         titulo="INFORME 9 DE JULIO"
-        subtitulo="La foto del padrón de contratos de la prestataria: el sistema propone, una persona confirma"
         botonVolver
       />
 

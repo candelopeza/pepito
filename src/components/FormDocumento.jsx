@@ -74,9 +74,6 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
     if (esContrato && datos.fechaVencimiento && datos.fechaVencimiento <= datos.fechaEmision) {
       e.fechaVencimiento = 'El vencimiento tiene que ser posterior a la emisión.';
     }
-    if (!datos.expedienteTramite.trim()) {
-      e.expedienteTramite = 'Sin el número de expediente no se puede reconstruir el trámite que respalda la presentación.';
-    }
     if (adjuntaArchivo) {
       if (!datos.adjunto) e.adjunto = 'Adjuntá el documento respaldatorio.';
     } else if (!datos.archivo.trim()) {
@@ -136,14 +133,19 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
           error={errores.numero}
         />
 
-        <Campo
-          id="doc-expediente"
-          etiqueta="N° de expediente del trámite"
-          valor={datos.expedienteTramite}
-          onChange={(v) => cambiar('expedienteTramite', v)}
-          error={errores.expedienteTramite}
-          ayuda="El que asignó CiDiTuc a esta presentación. NO es el expediente de multa."
-        />
+        {/* El número lo asigna el sistema al guardar (TRAM-año-correlativo).
+            La oficina puede escribir uno si la presentación ya tiene número de
+            otro sistema; el titular no lo ve. */}
+        {!desdePortal && (
+          <Campo
+            id="doc-expediente"
+            etiqueta="N° de expediente del trámite (opcional)"
+            valor={datos.expedienteTramite}
+            onChange={(v) => cambiar('expedienteTramite', v)}
+            error={errores.expedienteTramite}
+            ayuda="Vacío: lo asigna el sistema al guardar (TRAM-2026-…). NO es el expediente de multa."
+          />
+        )}
 
         <Campo
           id="doc-emision"

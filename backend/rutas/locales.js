@@ -31,7 +31,7 @@ import { estadoDeLocal, ID_ESTADO } from '../mapeo.js';
 import { requiereRol } from '../middlewares/usuario.js';
 import { geocodificarDireccion } from '../geocodificador.js';
 import { ErrorActo, ejecutarActo, registrarAlta } from '../actos.js';
-import { historialDeLocal, solicitudesDeProrrogaPendientes } from '../auditoria.js';
+import { historialDeLocal, registrarCambio, solicitudesDeProrrogaPendientes } from '../auditoria.js';
 
 const router = Router();
 
@@ -166,42 +166,68 @@ router.put('/:id', requiereRol('administrativo', 'coordinacion'), async (req, re
     const datos = req.body ?? {};
     const campos = [];
     const valores = [];
+    // Cada dato que cambia, con lo que decía y lo que dice ahora: va al historial.
     const cambiados = [];
 
-    const asignar = (columna, valor, etiqueta) => {
+    const asignar = (columna, valor, etiqueta, viejo, nuevo) => {
       campos.push(`${columna} = ?`);
       valores.push(valor);
-      if (etiqueta) cambiados.push(etiqueta);
+      if (etiqueta) cambiados.push({ etiqueta, viejo, nuevo });
     };
 
     const distinto = (nuevo, viejo) => nuevo !== undefined && String(nuevo ?? '') !== String(viejo ?? '');
+    const cambio = (campo, columna, etiqueta, valor = (v) => v || null) => {
+      if (distinto(datos[campo], actual[campo])) asignar(columna, valor(datos[campo]), etiqueta, actual[campo], datos[campo]);
+    };
 
-    if (distinto(datos.cuit, actual.cuit)) asignar('cuit', datos.cuit || null, 'CUIT');
-    if (distinto(datos.razonSocial, actual.razonSocial)) asignar('razon_social', datos.razonSocial || null, 'razón social');
-    if (distinto(datos.nombreLocal, actual.nombreLocal)) asignar('nombre_local', datos.nombreLocal, 'nombre');
-    if (distinto(datos.domicilioFiscal, actual.domicilioFiscal)) asignar('domicilio_fiscal', datos.domicilioFiscal || null, 'domicilio fiscal');
-    if (distinto(datos.email, actual.email)) asignar('email_local', datos.email || null, 'correo');
-    if (distinto(datos.telefono, actual.telefono)) asignar('telefono_local', datos.telefono || null, 'teléfono');
-    if (distinto(datos.observaciones, actual.observaciones)) {
-      asignar('observacion', datos.observaciones ? recortarObservacion(datos.observaciones) : null, 'observaciones');
+    cambio('cuit', 'cuit', 'CUIT');
+    cambio('razonSocial', 'razon_social', 'razón social');
+    cambio('nombreLocal', 'nombre_local', 'nombre', (v) => v);
+    cambio('domicilioFiscal', 'domicilio_fiscal', 'domicilio fiscal');
+    cambio('email', 'email_local', 'correo');
+    cambio('telefono', 'telefono_local', 'teléfono');
+    cambio('observaciones', 'observacion', 'observaciones del padrón', (v) => (v ? recortarObservacion(v) : null));
+    if (distinto(datos.rubro, actual.rubro)) {
+      asignar('id_rubro', await idDeRubro(datos.rubro), 'rubro', actual.rubro, datos.rubro);
     }
-    if (distinto(datos.rubro, actual.rubro)) asignar('id_rubro', await idDeRubro(datos.rubro), 'rubro');
 
     if (distinto(datos.direccion, actual.direccion)) {
       const geo = await geocodificarDireccion(datos.direccion);
-      asignar('direccion_local', datos.direccion, 'dirección');
+      asignar('direccion_local', datos.direccion, 'dirección', actual.direccion, datos.direccion);
       asignar('latitud_local', geo.ok ? geo.latitud : null);
       asignar('longitud_local', geo.ok ? geo.longitud : null);
     }
 
     if (!campos.length) return res.json(actual);
 
+    /* EL HISTORIAL DE LA EDICIÓN. Una línea por dato cambiado, con lo que
+       decía y lo que dice ahora: el CUIT y la razón social identifican al
+       titular en la cédula, y tiene que poder reconstruirse qué figuraba en
+       cada momento. Se anota aunque el estado del local no cambie (antes solo
+       quedaba si cambiaba, y sin los valores). Sin la tabla `auditoria`
+       (sql/05), no se anota nada y la edición se hace igual. */
+    const corto = (v) => {
+      const t = String(v ?? '').trim();
+      if (!t) return '(vacío)';
+      return t.length > 95 ? `${t.slice(0, 94)}…` : t;
+    };
+
     await ejecutarActo(req, {
       idLocal: id,
       nombre: 'editar-local',
-      motivo: `Edición del padrón: ${cambiados.join(', ')}`,
-      trabajo: async (cx) => {
+      motivo: `Edición del padrón: ${cambiados.map((c) => c.etiqueta).join(', ')}`,
+      trabajo: async (cx, antes) => {
         await cx.execute(`UPDATE local SET ${campos.join(', ')} WHERE id_local = ?`, [...valores, id]);
+        for (const c of cambiados) {
+          await registrarCambio(cx, req, {
+            idLocal: id,
+            anterior: antes.estado,
+            nuevo: antes.estado,
+            motivo: `Padrón · ${c.etiqueta}: decía "${corto(c.viejo)}", ahora "${corto(c.nuevo)}"`,
+            accion: 'editar-local',
+            forzar: true,
+          });
+        }
         return {};
       },
     });

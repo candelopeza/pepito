@@ -185,6 +185,8 @@ export const api = {
   registrarEntrega: (id, datos) => post(`/notificaciones/${id}/entrega`, datos),
   // Corregir una entrega mal cargada: el agente en el día, o coordinación con motivo.
   corregirEntrega: (id, datos) => put(`/notificaciones/${id}/entrega`, datos),
+  // Corregir o borrar las observaciones de una actuación (queda en el historial).
+  editarObservaciones: (id, observaciones) => put(`/actuaciones/${id}/observaciones`, { observaciones }),
 
   // --- documentación --------------------------------------------------------
   registrarDocumento: (datos) => post('/documentacion', datos),

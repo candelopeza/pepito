@@ -704,3 +704,53 @@ este cambio hay que correr `npm install` en la carpeta del proyecto.
   la derecha cortadas. El título lo da la prop `tituloImpresion` de la grilla
   (si no está, sale del nombre del archivo). `IMPRESION_EN_PDF = false` en
   `ui/Grilla.jsx` vuelve a la impresión del navegador.
+
+## 13. Verificar la base y editar observaciones (8 de octubre de 2026)
+
+**`npm run verificar`** (en `backend/`): revisa la base del `.env` en **solo
+lectura** (cada conexión se abre con `SET SESSION TRANSACTION READ ONLY` y al
+empezar lo comprueba; si la base aceptara escribir, se detiene). Informa:
+scripts opcionales corridos; cantidades de locales, trámites y documentos (para
+comparar con el Excel de AppSheet); huérfanos; numeración de cédulas (repetidas,
+saltos y cuál sigue), de expedientes (sin número, PROV-, repetidos) y DDJJ
+repetidas; estados calculados; locales en expediente sin las dos entregas
+efectivas (error B-1); padrón sin CUIT, con CUIT inválido, sin razón social,
+sin rubro o sin ubicación, y posibles duplicados; cédulas no entregadas sin
+foto; y todo lo hecho desde la aplicación según el historial, para separar
+pruebas de datos reales. Opciones: `-- --desde=2026-08-01` y `-- --archivo`
+(guarda `verificacion-base-AAAA-MM-DD.txt`, que no se sube al repositorio).
+
+**Editar observaciones** (ficha del local → historial de actuaciones →
+"Editar observaciones"): solo coordinación (y administrador). Vacío las
+borra. Con la tabla `auditoria` (sql/05), en el historial de estados queda
+quién las cambió, cuándo y qué decían, y la actuación muestra "Observaciones
+editadas por … el …". Sin esa tabla se puede editar igual, pero lo anterior no
+queda guardado; para exigirla, `EXIGIR_HISTORIAL_OBSERVACIONES=si` en el `.env`. No se editan los contratos del informe 9 de Julio.
+Ruta: `PUT /actuaciones/:id/observaciones`.
+
+**Edición del padrón con historial** (9 de octubre): cada dato que se cambia
+desde "Editar datos" (CUIT, razón social, nombre, rubro, dirección, domicilio
+fiscal, correo, teléfono, observaciones) deja una línea en el historial de
+estados del local, con quién, cuándo, qué decía y qué dice ahora, por ejemplo
+`Padrón · CUIT: decía "30-99999999-9", ahora "30-71234567-1"`. Antes solo
+quedaba si la edición cambiaba el estado del local, y sin los valores. Usa la
+misma tabla `auditoria` (sql/05): sin ella, la edición se hace igual y no se
+anota. Los cambios de configuración que no son de un local (usuarios, permisos,
+parámetros, rubros, feriados) no entran en esa tabla: para registrarlos
+haría falta un script nuevo.
+
+## 14. Expediente de trámite numerado por la aplicación (9 de octubre de 2026)
+
+La guía (sección 4.5) supone que el número de expediente de cada presentación
+lo da CiDiTuc. CiDiTuc registra a las personas y no numera trámites, así que
+lo numera esta aplicación: **TRAM-<año>-<correlativo de 6 cifras>**
+(`TRAM-2026-000001`), que vuelve a 1 cada año. Sale de MAX + 1 dentro de la
+transacción del acto y con los actos en fila, igual que las cédulas: no se
+repite. Si una presentación ya trae número de otro sistema, se guarda ese.
+En el formulario de la oficina el campo quedó opcional (vacío = lo asigna el
+sistema); el titular no lo ve. Queda en el historial y en la ficha.
+Código: `siguienteExpedienteTramite` en `consultas.js`.
+
+**Campos obligatorios con aviso:** en bloqueo manual, reingreso al circuito y
+otorgar prórroga, el botón ya no se desactiva en silencio: el campo dice
+"(obligatorio)" y al confirmar sin completarlo aparece qué falta.

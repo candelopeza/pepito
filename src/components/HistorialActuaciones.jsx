@@ -24,12 +24,18 @@
 import { useState } from 'react';
 import Badge from './ui/Badge';
 import { Vacio } from './ui/Aviso';
-import { Dato } from './ui/Campo';
+import Modal from './ui/Modal';
+import { CampoTexto, Dato } from './ui/Campo';
 import { useDatos } from '../datos/datosContexto';
+import { useRol } from '../auth/rolContexto';
 import ArchivoGuardado from './ArchivoGuardado';
 import VistaCedula from './VistaCedula';
 import { ETIQUETA_DOCUMENTO, TIPOS_ACTUACION, resultadoEntrega } from '../dominio/actuaciones';
-import { fmtFecha, plazoVencido } from '../dominio/fechas';
+import { fmtFecha, fmtFechaHora, plazoVencido } from '../dominio/fechas';
+
+/* Quiénes corrigen observaciones: lo mismo que exige el servidor
+   (PUT /actuaciones/:id/observaciones). */
+const ROLES_EDITAN_OBSERVACIONES = ['coordinacion', 'administrador'];
 import { estaVigente } from '../dominio/vigencias';
 
 /* El detalle propio de cada tipo. Es un switch a propósito: son seis actos
@@ -184,11 +190,25 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
      actuaciones, usuarios
      local        (opcional) el local: con él, cada cédula emitida tiene su
                   botón "Ver" (la cédula tal como se imprime)
-     cedulaSoloLectura  (opcional) se ve la cédula pero no se imprime: el portal */
-function HistorialActuaciones({ actuaciones, usuarios = [], local = null, cedulaSoloLectura = false }) {
-  const { capacidades } = useDatos();
+     cedulaSoloLectura  (opcional) se ve la cédula pero no se imprime: el portal
+     ediciones    (opcional) las filas del historial de estados con
+                  accion 'editar-observaciones'. Con ellas, cada actuación
+                  editada muestra quién la editó y cuándo; y quien puede,
+                  ve el botón "Editar observaciones". Lo pasa la ficha. */
+function HistorialActuaciones({ actuaciones, usuarios = [], local = null, cedulaSoloLectura = false, ediciones = null }) {
+  const { capacidades, editarObservaciones } = useDatos();
+  const { rol } = useRol();
   const conImpresion = Boolean(capacidades?.impresion);
   const [viendo, setViendo] = useState(null);
+  const [editando, setEditando] = useState(null);
+  const [texto, setTexto] = useState('');
+  // Con el historial (sql/05) queda qué decían antes. Sin él se ofrece igual,
+  // salvo que el backend lo exija (EXIGIR_HISTORIAL_OBSERVACIONES=si).
+  const conHistorial = Boolean(capacidades?.auditoria);
+  const puedeEditar =
+    Boolean(ediciones) &&
+    (conHistorial || !capacidades?.exigeHistorialObservaciones) &&
+    ROLES_EDITAN_OBSERVACIONES.includes(rol);
   if (!actuaciones.length) {
     return <Vacio titulo="Sin actuaciones">Este local todavía no tiene ningún acto administrativo registrado.</Vacio>;
   }
@@ -215,11 +235,66 @@ function HistorialActuaciones({ actuaciones, usuarios = [], local = null, cedula
                     <span className="hist-obs">{a.observaciones}</span>
                   </Dato>
                 )}
+                {(() => {
+                  const ultima = ediciones?.filter((h) => h.idTramite === a.id).at(-1);
+                  return ultima ? (
+                    <Dato etiqueta="Observaciones editadas" ancho={2}>
+                      <span className="hist-nota">
+                        Por {ultima.actor} el {fmtFechaHora(ultima.momento)}. Lo que decían quedó en el historial de estados.
+                      </span>
+                    </Dato>
+                  ) : null;
+                })()}
+                {puedeEditar && a.origen !== 'INFORME_9DJ' && (
+                  <div className="hist-editar">
+                    <button
+                      type="button"
+                      className="btn-tabla"
+                      onClick={() => {
+                        setTexto(a.observaciones ?? '');
+                        setEditando(a);
+                      }}
+                    >
+                      {a.observaciones ? 'Editar observaciones' : 'Agregar observaciones'}
+                    </button>
+                  </div>
+                )}
               </div>
             </li>
           );
         })}
       </ol>
+      {editando && (
+        <Modal abierto etiqueta="ACTUACIÓN" titulo="Observaciones" onCerrar={() => setEditando(null)}>
+          <div className="formulario formulario-modal">
+            <CampoTexto
+              id="obs-actuacion"
+              etiqueta="Observaciones"
+              valor={texto}
+              onChange={setTexto}
+              ayuda={
+                conHistorial
+                  ? 'Para borrarlas, dejalo vacío. Queda en el historial quién las cambió y qué decían.'
+                  : 'Para borrarlas, dejalo vacío. Esta base no guarda el historial: lo que decían no queda registrado.'
+              }
+            />
+            <div className="form-acciones">
+              <button
+                type="button"
+                className="btn-primario"
+                onClick={async () => {
+                  if (await editarObservaciones(editando.id, texto.trim())) setEditando(null);
+                }}
+              >
+                Guardar
+              </button>
+              <button type="button" className="btn-secundario" onClick={() => setEditando(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {local && (
         <VistaCedula
           abierto={Boolean(viendo)}

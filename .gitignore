@@ -32,3 +32,6 @@ backend/revision/
 
 # Backend: fotos de entregas y documentos subidos (van en el respaldo del servidor, no al repo)
 backend/archivos/
+
+# Informes de npm run verificar (backend): pueden tener datos reales
+backend/verificacion-base-*.txt

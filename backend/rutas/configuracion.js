@@ -34,6 +34,7 @@
    ============================================================================ */
 
 import { Router } from 'express';
+import { exigeHistorialObservaciones } from './actuaciones.js';
 import { CODIGOS_ESTADO } from '../../src/dominio/estados.js';
 import { consultar, ejecutar } from '../conexion-bd.js';
 import { CLAVES_PARAMETRO, feriados, parametros } from '../consultas.js';
@@ -62,6 +63,8 @@ router.get('/capacidades', (_req, res) => {
     geocodificador: modoGeocodificador(),
     aceptaRolDeclarado: aceptaRolDeclarado(),
     tareaDiaria: estadoTareas(),
+    // Si "Editar observaciones" se ofrece sin el historial (sql/05).
+    exigeHistorialObservaciones: exigeHistorialObservaciones(),
   });
 });
 

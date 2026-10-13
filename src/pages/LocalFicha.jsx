@@ -273,7 +273,12 @@ function LocalFicha() {
       <div className="accesos-header">
         <span>Historial de actuaciones ({actuaciones.length})</span>
       </div>
-      <HistorialActuaciones actuaciones={actuaciones} usuarios={usuarios} local={local} />
+      <HistorialActuaciones
+        actuaciones={actuaciones}
+        usuarios={usuarios}
+        local={local}
+        ediciones={auditoriaDeLocal(local.id).filter((h) => h.accion === 'editar-observaciones')}
+      />
 
       {/* LA AUDITORÍA DE ESTADOS aparece solo si la base tiene la tabla
           `auditoria` (backend/sql/05-tabla-auditoria.sql). Sin ella no se

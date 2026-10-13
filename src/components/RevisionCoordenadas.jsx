@@ -146,7 +146,7 @@ function RevisionCoordenadas() {
         field: 'nombreLocal',
         headerName: 'Local',
         flex: 1,
-        minWidth: 190,
+        minWidth: 300,
         renderCell: ({ row }) => (
           <Link to={`/locales/${row.id}`} className="link-local">
             {row.nombreLocal}
@@ -199,7 +199,7 @@ function RevisionCoordenadas() {
         field: 'motivo',
         headerName: 'Observación',
         flex: 1,
-        minWidth: 200,
+        minWidth: 500,
         renderCell: ({ row }) => row.motivo ?? '',
       },
     ],
@@ -214,12 +214,6 @@ function RevisionCoordenadas() {
       <div className="accesos-header">
         <span>Ubicaciones que no se corresponden con su dirección</span>
       </div>
-
-      <Aviso tipo="alerta" titulo="Qué es esto">
-        Locales cuya coordenada guardada cae fuera del ejido municipal. El sistema vuelve a geocodificar su dirección y propone la
-        ubicación correcta, pero <strong>no cambia nada hasta que lo confirmes</strong>. La columna “Se mueve” dice cuánto se
-        desplazaría cada local: medio kilómetro es un ajuste, diez es otro domicilio.
-      </Aviso>
 
       {error && (
         <Aviso tipo="alerta" titulo="No se pudo completar">

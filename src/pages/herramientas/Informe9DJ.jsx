@@ -559,7 +559,6 @@ function Informe9DJ() {
       <PageHeader
         etiqueta="HERRAMIENTAS"
         titulo="INFORME 9 DE JULIO"
-        subtitulo="La foto del padrón de contratos de la prestataria: el sistema propone, una persona confirma"
         botonVolver
       />
 
@@ -617,10 +616,7 @@ function Informe9DJ() {
       {/* ================= CON CARGA ABIERTA: la revisión ================= */}
       {carga && (
         <>
-          <Aviso tipo="info" titulo={`Revisando "${carga.nombreArchivo}"${carga.periodo ? ` · ${carga.periodo}` : ''}`}>
-            Cargado por {carga.usuarioCarga}. {filas.length} fila(s): quedan <strong>{sinRevisar} sin revisar</strong>. Cada decisión
-            se guarda al momento: podés cerrar y seguir después.
-          </Aviso>
+
 
           {carga.advertencia && (
             <Aviso tipo="alerta" titulo="El archivo vino en PDF">

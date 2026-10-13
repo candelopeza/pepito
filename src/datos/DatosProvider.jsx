@@ -551,6 +551,13 @@ function DatosProvider({ children }) {
   /* Corregir una entrega ya registrada (sección 6.2). Necesita señal: es una
      corrección, no una carga de campo, y el servidor decide si todavía se
      puede (el mismo día para el agente; después, coordinación con motivo). */
+  /* Corregir o borrar las observaciones de una actuación. El servidor anota
+     en el historial quién lo hizo y qué decían antes. */
+  const editarObservaciones = useCallback(
+    (actuacionId, texto) => ejecutar('Observaciones guardadas', () => api.editarObservaciones(actuacionId, texto)),
+    [ejecutar],
+  );
+
   const corregirEntrega = useCallback(
     (actuacionId, datos) => ejecutar('Entrega corregida', () => api.corregirEntrega(actuacionId, datos)),
     [ejecutar],
@@ -775,6 +782,7 @@ function DatosProvider({ children }) {
       marcarImpresas,
       registrarEntrega,
       corregirEntrega,
+      editarObservaciones,
       registrarDocumento,
       validarPresentacion,
       otorgarProrroga,
@@ -798,7 +806,7 @@ function DatosProvider({ children }) {
       auditorias, cargarAuditoria, versionDatos, sinConexion, pendientes, sincronizar, descartarPendiente,
       guardarLocal, eliminarLocal, bloquearLocal, desbloquearLocal, geocodificarPendientes,
       crearRelevamiento, editarRelevamiento, revisarRelevamiento, generarCedula, regenerarCedula, asignarNotificador,
-      marcarImpresa, marcarImpresas, registrarEntrega, corregirEntrega, registrarDocumento, validarPresentacion, otorgarProrroga, solicitarProrroga,
+      marcarImpresa, marcarImpresas, registrarEntrega, corregirEntrega, editarObservaciones, registrarDocumento, validarPresentacion, otorgarProrroga, solicitarProrroga,
       registrarExpediente, numeroDefinitivoExpediente, reingresarAlCircuito, fusionarLocales,
       guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla,
       guardarPermiso, restablecerPermisosDeRol, habilitarRol, reiniciarDemo, recalcularEstados,

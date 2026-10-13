@@ -348,6 +348,32 @@ export async function siguienteNumeroCedula(cx) {
 }
 
 /* ---------------------------------------------------------------------------
+   NÚMERO DE EXPEDIENTE DE TRÁMITE  —  lo asigna esta aplicación
+   ---------------------------------------------------------------------------
+   Cada presentación de documentación (DDJJ, DDJJ de reciclaje, contrato) es un
+   trámite con su propio número de expediente (guía, sección 4.5). CiDiTuc no
+   lo genera: registra a las personas, no numera trámites. Por eso lo numera
+   el sistema: TRAM-<año>-<correlativo de 6 cifras>, que vuelve a 1 cada año.
+
+   Igual que las cédulas: MAX + 1 leído dentro de la transacción del acto y con
+   los actos en fila (enFila), así dos presentaciones simultáneas no pueden
+   sacar el mismo número. Si una presentación ya trae número de otro sistema,
+   se respeta ese y no se consume ninguno de la serie.
+   --------------------------------------------------------------------------- */
+export const PREFIJO_EXPEDIENTE_TRAMITE = 'TRAM';
+
+export async function siguienteExpedienteTramite(cx, anio) {
+  const prefijo = `${PREFIJO_EXPEDIENTE_TRAMITE}-${anio}-`;
+  const [filas] = await cx.execute(
+    `SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(numero_referencia, '-', -1) AS UNSIGNED)), 0) AS ultimo
+       FROM tramite
+      WHERE id_ttramite = ? AND numero_referencia LIKE ?`,
+    [ID_TTRAMITE.PRESENTACION_DOCUMENTACION, `${prefijo}%`],
+  );
+  return `${prefijo}${String(Number(filas[0].ultimo) + 1).padStart(6, '0')}`;
+}
+
+/* ---------------------------------------------------------------------------
    INSERTAR UN TRÁMITE
    ---------------------------------------------------------------------------
    Todas las acciones del circuito (emitir cédula, otorgar prórroga, registrar

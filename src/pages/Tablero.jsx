@@ -152,6 +152,7 @@ function Bandeja({ bandeja }) {
               filas={bandeja.locales}
               columnas={COLUMNAS_BANDEJA}
               nombreArchivo={`bandeja-${bandeja.id}`}
+              tituloImpresion={bandeja.titulo}
               vacio="Nada pendiente en esta bandeja."
               alto="auto"
             />

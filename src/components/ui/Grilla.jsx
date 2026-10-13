@@ -36,10 +36,47 @@
    ============================================================================ */
 
 import { useMemo } from 'react';
-import { DataGrid, GridToolbar, useGridApiRef } from '@mui/x-data-grid';
+import {
+  DataGrid,
+  GridToolbar,
+  gridFilteredSortedRowIdsSelector,
+  gridVisibleColumnDefinitionsSelector,
+  useGridApiRef,
+} from '@mui/x-data-grid';
 import { esES } from '@mui/x-data-grid/locales';
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
+import { useRol } from '../../auth/rolContexto';
+import { imprimirPdf, pdfDeTabla, quienGenera, textoParaPdf } from '../pdfCedulas';
+
+/* El botón verde "Imprimir" arma un PDF con lo que muestra la grilla (ver
+   pdfDeTabla en components/pdfCedulas.js). En false vuelve a la impresión del
+   navegador, que cortaba las columnas de la derecha. */
+const IMPRESION_EN_PDF = true;
+
+/* Las columnas que no van al papel: botones y acciones. */
+const SIN_IMPRIMIR = ['acciones', 'ver', '__check__'];
+
+/* "padron-locales" -> "Padrón locales": el título del PDF cuando la grilla no
+   trae uno propio (prop `tituloImpresion`). */
+const CON_TILDE = {
+  cedulas: 'cédulas',
+  emision: 'emisión',
+  correccion: 'corrección',
+  documentacion: 'documentación',
+  prorroga: 'prórroga',
+  prorrogas: 'prórrogas',
+  ubicacion: 'ubicación',
+  padron: 'padrón',
+  '9dj': '9 de Julio',
+};
+function tituloDesdeArchivo(nombre) {
+  const texto = String(nombre ?? 'listado')
+    .split('-')
+    .map((p) => CON_TILDE[p] ?? p)
+    .join(' ');
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
 
 /* El estilo de la grilla. Encabezado azul institucional, filas que se marcan
    al pasar el mouse, tipografía heredada del resto de la app.
@@ -102,10 +139,41 @@ function Grilla({
   compacta = false,
   sinExportar = false,
   filasPorPagina = 10,
+  tituloImpresion,
 }) {
   const apiRef = useGridApiRef();
+  const { usuario } = useRol();
 
-  const imprimir = () => apiRef.current?.exportDataAsPrint({ fileName: nombreArchivo });
+  /* El PDF lleva las filas que quedaron después de buscar y filtrar, en el
+     orden de la grilla, y las columnas visibles menos los botones. */
+  function datosParaPdf() {
+    const api = apiRef.current;
+    const columnas = gridVisibleColumnDefinitionsSelector(apiRef).filter(
+      (c) => c.type !== 'actions' && !c.disableExport && !SIN_IMPRIMIR.includes(c.field) && c.headerName,
+    );
+    const ids = gridFilteredSortedRowIdsSelector(apiRef);
+    const valor = (id, row, c) =>
+      typeof api.getRowFormattedValue === 'function'
+        ? api.getRowFormattedValue(row, c)
+        : api.getCellParams(id, c.field).formattedValue;
+    const filasPdf = ids.map((id) => {
+      const row = api.getRow(id);
+      return columnas.map((c) => textoParaPdf(valor(id, row, c)));
+    });
+    const filtrado = ids.length < filas.length ? ` de ${filas.length} (con filtros)` : '';
+    return {
+      titulo: tituloImpresion ?? tituloDesdeArchivo(nombreArchivo),
+      detalle: `${ids.length}${filtrado} registro(s)`,
+      encabezados: columnas.map((c) => c.headerName),
+      filas: filasPdf,
+      generadoPor: quienGenera(usuario),
+    };
+  }
+
+  const imprimir = () =>
+    IMPRESION_EN_PDF
+      ? imprimirPdf(() => pdfDeTabla(datosParaPdf()), nombreArchivo)
+      : apiRef.current?.exportDataAsPrint({ fileName: nombreArchivo });
   const descargar = () => apiRef.current?.exportDataAsCsv({ fileName: nombreArchivo, utf8WithBom: true });
 
   /* Con alto="auto" la grilla mide lo que necesita: una tabla de tres filas no

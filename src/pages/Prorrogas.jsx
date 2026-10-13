@@ -111,8 +111,8 @@ function Prorrogas() {
            para generar expediente. */
         renderCell: ({ row }) => <BadgeEstado codigo={row.local?.estado} sinColor />,
       },
-      { field: 'motivo', headerName: 'Motivo', flex: 1, minWidth: 200 },
-      { field: 'usuario', headerName: 'Otorgó', width: 150 },
+      { field: 'motivo', headerName: 'Motivo', flex: 1, minWidth: 400 },
+      { field: 'usuario', headerName: 'Otorgó', width: 300 },
     ],
     [],
   );

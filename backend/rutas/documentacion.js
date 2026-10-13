@@ -39,7 +39,14 @@
 
 import { Router } from 'express';
 import { consultar, consultarEn } from '../conexion-bd.js';
-import { insertarTramite, parametros, recortarObservacion, tramitePorId, tramitesPorTipo } from '../consultas.js';
+import {
+  insertarTramite,
+  parametros,
+  recortarObservacion,
+  siguienteExpedienteTramite,
+  tramitePorId,
+  tramitesPorTipo,
+} from '../consultas.js';
 import { ID_ESTADO, ID_TDOC, ID_TTRAMITE } from '../mapeo.js';
 import { requiereRol, firmante } from '../middlewares/usuario.js';
 import { ErrorActo, ejecutarActo } from '../actos.js';
@@ -116,11 +123,10 @@ router.post('/', async (req, res, next) => {
         return res.status(400).json({ error: 'El vencimiento del contrato tiene que ser posterior a su emisión' });
       }
     }
-    if (!String(datos.expedienteTramite ?? '').trim()) {
-      return res.status(400).json({
-        error: 'Falta el número de expediente del trámite: sin él no se puede reconstruir qué respalda la presentación',
-      });
-    }
+    // EL EXPEDIENTE DE TRÁMITE lo numera el sistema (consultas.js →
+    // siguienteExpedienteTramite). Si la presentación ya trae un número de
+    // otro sistema, se guarda ese.
+    const expedienteManual = String(datos.expedienteTramite ?? '').trim();
     // El origen INFORME_9DJ lo pone únicamente el módulo del informe: es lo
     // que da fe de que ese contrato salió de una carga concreta y auditable.
     if (datos.origen === 'INFORME_9DJ') {
@@ -186,16 +192,18 @@ router.post('/', async (req, res, next) => {
         }
         return null;
       },
-      motivo: `${etiqueta} N° ${numero} ${validado ? 'registrada' : 'presentada, pendiente de validación'}${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''}`,
+      motivo: (r) =>
+        `${etiqueta} N° ${numero} ${validado ? 'registrada' : 'presentada, pendiente de validación'}${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''} · expediente de trámite ${r.expediente}`,
       trabajo: async (cx, { actuaciones }) => {
         const ciclo = Math.max(1, ...actuaciones.map((a) => Number(a.ciclo) || 1));
+        const expediente = expedienteManual || (await siguienteExpedienteTramite(cx, hoy.slice(0, 4)));
         const id = await insertarTramite(cx, {
           idLocal,
           idEstado: validado ? ID_ESTADO.DOC_VIGENTE : ID_ESTADO.DOC_PENDIENTE_REVISION,
           idTtramite: ID_TTRAMITE.PRESENTACION_DOCUMENTACION,
           idUsuario: req.usuario?.id ?? null,
           nroCiclo: ciclo,
-          numeroReferencia: String(datos.expedienteTramite).trim(),
+          numeroReferencia: expediente,
           fechaInicio: hoy,
           fechaVencimiento: vencimiento || null,
           observaciones: datos.observaciones ?? '',
@@ -210,7 +218,7 @@ router.post('/', async (req, res, next) => {
         if (adjunto) {
           await guardarImagen(cx, req, { idTramite: id, imagen: adjunto, tipoArchivo: 'documento', nombreOriginal: datos.adjuntoNombre });
         }
-        return { idTramite: id };
+        return { idTramite: id, expediente };
       },
     });
 

@@ -1950,6 +1950,11 @@
 .acciones-fila { display: flex; gap: 6px; align-items: center; }
 .lista-candidatos { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 
+/* ========== 14.24 HISTORIAL: EDITAR OBSERVACIONES ==========
+   components/HistorialActuaciones.jsx: el botón va al pie de la actuación. */
+.hist-editar { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+@media print { .hist-editar { display: none; } }
+
 /* ---------------------------------------------------------------------------
    CELDAS DE ADVERTENCIA (Informe 9DJ)
    ---------------------------------------------------------------------------

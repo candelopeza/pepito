@@ -13,4 +13,11 @@ export default defineConfig({
     // CORS que sufren los módulos ES abiertos con doble clic.
     viteSingleFile(),
   ],
+  build: {
+    rollupOptions: {
+      // jsPDF (cédulas y hoja de ruta en PDF) las carga solo para pasar HTML
+      // o SVG a PDF, cosa que la app no hace: afuera, son ~800 KB menos.
+      external: ['html2canvas', 'canvg', 'dompurify'],
+    },
+  },
 })

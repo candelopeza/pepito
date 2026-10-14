@@ -36,6 +36,7 @@ export const ESTADOS = {
   NOTIF2_NO_ENTREGADA: { etiqueta: '2° Notificación no entregada',       grupo: 'entrega',       color: 'rojo' },
 
   PRORROGA_VIGENTE:    { etiqueta: 'Prórroga vigente',                   grupo: 'en_tramite',    color: 'amarillo' },
+  PRESENTACION_EN_REVISION: { etiqueta: 'Presentación en revisión',       grupo: 'cola_admin',    color: 'amarillo' },
   GENERAR_EXPEDIENTE:  { etiqueta: 'Generar expediente',                 grupo: 'cola_admin',    color: 'naranja' },
   EXPEDIENTE_SOLICITADO: { etiqueta: 'N° de expediente solicitado',      grupo: 'sancionatorio', color: 'naranja' },
   EXPEDIENTE:          { etiqueta: 'Expediente',                         grupo: 'sancionatorio', color: 'rojo' },

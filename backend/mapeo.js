@@ -538,6 +538,24 @@ export function estadoDeLocal(local, tramites = [], hoy = hoyISO()) {
   }
 
   if (ultimo?.tipo === 'NOTIFICACION') {
+    /* >>> PRESENTÓ EN TÉRMINO Y LA OFICINA TODAVÍA NO RESOLVIÓ <<<
+       Los días del plazo son para que el local presente la documentación. Si
+       presentó DENTRO del plazo y la presentación espera validación, el
+       circuito no avanza por la demora de la oficina: el local se muestra "en
+       revisión" y el vencimiento no se ejecuta. No es que la presentación
+       acredite por sí sola (sección 6.3: eso recién pasa al aprobarse): solo
+       congela el avance sancionatorio hasta que una persona resuelva. Si la
+       oficina rechaza, el documento se da de baja y el estado vuelve a
+       calcularse solo, con el plazo vencido si venció. Presentar FUERA de
+       término no congela nada. */
+    const presentoEnTermino = documentos.some(
+      (d) =>
+        d.idEstado === ID_ESTADO.DOC_PENDIENTE_REVISION &&
+        (d.fecha ?? '') >= (ultimo.fecha ?? '') &&
+        (!ultimo.fechaVencimiento || (d.fecha ?? '') <= ultimo.fechaVencimiento),
+    );
+    if (presentoEnTermino) return 'PRESENTACION_EN_REVISION';
+
     const n = ultimo.instancia;
     const sufijo = SUFIJO_NOTIFICACION[ultimo.idEstado];
 

@@ -24,16 +24,28 @@ function ArchivoGuardado({ archivo, etiqueta = 'Ver archivo' }) {
 
   if (abierto?.tipo?.startsWith('image/')) {
     return (
-      <a href={abierto.url} target="_blank" rel="noreferrer" title="Abrir en grande">
-        <img src={abierto.url} alt={archivo.nombre || 'Archivo guardado'} className="hist-foto" />
-      </a>
+      <span className="archivo-abierto">
+        <a href={abierto.url} target="_blank" rel="noreferrer" title="Abrir en grande">
+          <img src={abierto.url} alt={archivo.nombre || 'Archivo guardado'} className="hist-foto" />
+        </a>
+        {/* Sin esto, la imagen quedaba abierta para siempre: no había forma
+            de volver al botón. */}
+        <button type="button" className="btn-tabla" onClick={() => setAbierto(null)}>
+          Cerrar
+        </button>
+      </span>
     );
   }
   if (abierto) {
     return (
-      <a href={abierto.url} target="_blank" rel="noreferrer" className="btn-tabla">
-        Abrir {archivo.nombre || 'el documento'}
-      </a>
+      <span className="archivo-abierto">
+        <a href={abierto.url} target="_blank" rel="noreferrer" className="btn-tabla">
+          Abrir {archivo.nombre || 'el documento'}
+        </a>
+        <button type="button" className="btn-tabla" onClick={() => setAbierto(null)}>
+          Cerrar
+        </button>
+      </span>
     );
   }
   return (

@@ -178,10 +178,21 @@ router.post('/locales/:id/expedientes', requiereRol('administrativo', 'coordinac
   try {
     const idLocal = Number(req.params.id);
     const numeroManual = String(req.body?.numeroManual ?? '').trim();
-    if (numeroManual) {
-      const errorFormato = validarNumeroExpediente(numeroManual);
-      if (errorFormato) return res.status(400).json({ error: errorFormato });
+    /* >>> SIN NÚMERO NO HAY EXPEDIENTE <<<
+       Un expediente es un acto administrativo: no se inicia con un número de
+       prueba. Si el número todavía no llegó, el camino es la SOLICITUD
+       (queda la constancia de que se pidió, y la carga llega después). Los
+       provisorios PROV- que quedaron de antes se completan desde la vista de
+       Expedientes, pero no se crean más. */
+    if (!numeroManual) {
+      return res.status(400).json({
+        error:
+          'Falta el número del expediente. Si la mesa de entradas todavía no lo asignó, usá «Solicitar N° de expediente»: ' +
+          'queda la constancia del pedido y el número se carga cuando llega.',
+      });
     }
+    const errorFormato = validarNumeroExpediente(numeroManual);
+    if (errorFormato) return res.status(400).json({ error: errorFormato });
 
     const { idTramite } = await ejecutarActo(req, {
       idLocal,
@@ -210,26 +221,11 @@ router.post('/locales/:id/expedientes', requiereRol('administrativo', 'coordinac
         }
         return null;
       },
-      motivo: (r) => `Expediente de multa N° ${r.numero}${r.provisorio ? ' (provisorio)' : ''}`,
+      motivo: (r) => `Expediente de multa N° ${r.numero}`,
       trabajo: async (cx, { actuaciones }) => {
         const hoy = hoyISO();
-        const anio = hoy.slice(0, 4);
-        let numero = numeroManual;
-        if (!numero) {
-          // Los provisorios se numeran PROV-<anio>-NNNN. Se lee dentro de la
-          // misma transacción y con los actos en fila: dos pedidos simultáneos
-          // no pueden sacar el mismo número.
-          const [fila] = await consultarEn(
-            cx,
-            `SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(numero_referencia, '-', -1) AS UNSIGNED)), 0) AS ultimo
-               FROM tramite WHERE id_ttramite = ? AND numero_referencia LIKE ?`,
-            [ID_TTRAMITE.EXPEDIENTE_MULTA, `PROV-${anio}-%`],
-          );
-          numero = `PROV-${anio}-${String(Number(fila.ultimo) + 1).padStart(4, '0')}`;
-        }
-        const observaciones = numeroManual
-          ? 'Número de la mesa de entradas municipal.'
-          : 'PROVISORIO: falta reconciliar con el número de la mesa de entradas.';
+        const numero = numeroManual;
+        const observaciones = 'Número de la mesa de entradas municipal.';
 
         // Si el sistema anterior dejó un expediente PENDIENTE para este local
         // (estado 23 de la base), se completa ese mismo trámite en vez de
@@ -259,7 +255,7 @@ router.post('/locales/:id/expedientes', requiereRol('administrativo', 'coordinac
             idEstadoNuevo: ID_ESTADO.EXPEDIENTE_GENERADO,
             publica: true,
           });
-          return { idTramite: ultima.id, numero, provisorio: !numeroManual };
+          return { idTramite: ultima.id, numero };
         }
 
         const id = await insertarTramite(cx, {
@@ -274,11 +270,11 @@ router.post('/locales/:id/expedientes', requiereRol('administrativo', 'coordinac
         });
         await insertarNovedad(cx, req, {
           idTramite: id,
-          detalle: `Expediente iniciado con el N° ${numero}${numeroManual ? '' : ' (provisorio, falta el número de la mesa de entradas)'}.`,
+          detalle: `Expediente iniciado con el N° ${numero}.`,
           idEstadoNuevo: ID_ESTADO.EXPEDIENTE_GENERADO,
           publica: true,
         });
-        return { idTramite: id, numero, provisorio: !numeroManual };
+        return { idTramite: id, numero };
       },
     });
 

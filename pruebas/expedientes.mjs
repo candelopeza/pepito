@@ -191,6 +191,11 @@ if (!candidato) {
   // El formato es "número/año" (175079/2026), con el año en curso o el
   // anterior: en enero conviven expedientes de los dos años.
   const anio = Number(new Date().toISOString().slice(0, 4));
+  // Un expediente no se inicia con un número de prueba: sin número, el camino
+  // es la solicitud (que ya quedó registrada arriba).
+  const sinNumero = await pedir(`/locales/${candidato.id}/expedientes`, { metodo: 'POST', cuerpo: {} });
+  verificar('registrar sin número se rechaza apuntando a la solicitud', sinNumero.estado === 400 && /[Ss]olicitar/.test(sinNumero.cuerpo?.error ?? ''), JSON.stringify(sinNumero.cuerpo));
+
   const malFormato = await pedir(`/locales/${candidato.id}/expedientes`, { metodo: 'POST', cuerpo: { numeroManual: 'EXP-175079' } });
   verificar('un número sin el formato número/año se rechaza con el ejemplo a la vista', malFormato.estado === 400 && /número\/año|numero\/anio|175079/.test(malFormato.cuerpo?.error ?? ''), JSON.stringify(malFormato.cuerpo));
   const anioViejo = await pedir(`/locales/${candidato.id}/expedientes`, { metodo: 'POST', cuerpo: { numeroManual: `175079/${anio - 2}` } });

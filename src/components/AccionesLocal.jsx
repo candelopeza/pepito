@@ -740,25 +740,20 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
             <>
               <Campo
                 id="exp-numero"
-                etiqueta="N° de expediente"
+                etiqueta="N° de expediente (obligatorio)"
                 valor={form.numero ?? ''}
                 onChange={(v) => setForm({ ...form, numero: v })}
-                ayuda={`Formato número/año, por ejemplo 175079/${new Date().getFullYear()}. Si todavía no está, dejalo vacío: queda uno provisorio (PROV-…) para reemplazar después en Expedientes.`}
+                ayuda={`Formato número/año, por ejemplo 175079/${new Date().getFullYear()}. ¿Todavía no llegó? Usá «Solicitar N° de expediente»: un expediente no se inicia con un número de prueba.`}
               />
 
               <div className="form-acciones">
                 <button
                   type="button"
                   className="btn-peligro"
-                  disabled={faltan.length > 0 && parametros.exigirDatosSiempre}
-                  onClick={async () => {
-                    // Con número escrito se ratifica primero; el provisorio
-                    // (campo vacío) no tiene número que confirmar.
-                    if (form.numero?.trim()) setForm({ ...form, ratificando: true });
-                    else if (await registrarExpediente(local.id, '')) terminar();
-                  }}
+                  disabled={!form.numero?.trim() || (faltan.length > 0 && parametros.exigirDatosSiempre)}
+                  onClick={() => setForm({ ...form, ratificando: true })}
                 >
-                  {form.numero?.trim() ? 'Continuar' : 'Iniciar con número provisorio'}
+                  Continuar
                 </button>
                 <button type="button" className="btn-secundario" onClick={cerrar}>
                   Cancelar

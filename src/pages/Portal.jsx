@@ -56,6 +56,7 @@ import { useDatos } from '../datos/datosContexto';
 import { ETIQUETA_DOCUMENTO } from '../dominio/actuaciones';
 import { fmtFecha, fmtFechaHora } from '../dominio/fechas';
 import { normalizarCuit } from '../dominio/duplicados';
+import { ACCIONES } from '../dominio/reglas';
 
 /* Lo que el titular lee de cada estado del expediente. Sin jerga interna. */
 const SITUACION_PORTAL = {
@@ -109,8 +110,11 @@ function Portal() {
       .forEach((id) => cargarAuditoria(Number(id)));
   }, [idsMios, versionDatos, cargarAuditoria]);
 
-  const puedePedirProrroga = (l) =>
-    ['NOTIF2_ENTREGADA', 'NOTIF2_SIN_FIRMA', 'NOTIF2_FIJADA', 'GENERAR_EXPEDIENTE'].includes(l.estado);
+  // La misma lista que usa coordinación para OTORGAR (dominio/reglas.js):
+  // si el titular puede pedir, la oficina puede conceder. Incluye la primera
+  // notificación entregada y los plazos ya vencidos.
+  const estadosProrroga = ACCIONES.find((a) => a.id === 'otorgar-prorroga')?.estados ?? [];
+  const puedePedirProrroga = (l) => estadosProrroga.includes(l.estado);
 
   return (
     <>
@@ -217,9 +221,9 @@ function Portal() {
               )}
 
               {enValidacion.length > 0 && (
-                <Aviso tipo="alerta" titulo="Tu presentación está en revisión">
-                  {enValidacion.map((d) => `${ETIQUETA_DOCUMENTO[d.tipo]} N° ${d.numero}`).join(' · ')}. Ojo: el plazo sigue
-                  corriendo hasta que la oficina la apruebe.
+                <Aviso tipo="info" titulo="Tu presentación está en revisión">
+                  {enValidacion.map((d) => `${ETIQUETA_DOCUMENTO[d.tipo]} N° ${d.numero}`).join(' · ')}. Si la presentaste dentro
+                  del plazo, tu local no avanza en el circuito mientras la oficina la revisa.
                 </Aviso>
               )}
 

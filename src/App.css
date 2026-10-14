@@ -1986,3 +1986,6 @@
   font-weight: 600;
   white-space: normal;
 }
+
+/* El archivo abierto en el historial: la imagen con su botón de cerrar al lado. */
+.archivo-abierto { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }

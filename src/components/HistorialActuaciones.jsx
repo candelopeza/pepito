@@ -130,10 +130,7 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
         <Dato etiqueta="Fecha de vencimiento">{fmtFecha(a.fechaVencimiento)}</Dato>
         {/* El dato que el sistema viejo no guardaba (sección 4.5). */}
         <Dato etiqueta="Expediente de trámite">
-          {a.expedienteTramite === 'SIN REGISTRO'
-            ? 'sin expediente registrado (presentación histórica)'
-            : (a.expedienteTramite ??
-              (a.origen === 'INFORME_9DJ' ? 'no aplica (informe de la prestataria)' : 'NO REGISTRADO'))}
+          <ExpedienteDeTramite a={a} />
         </Dato>
         {a.origen === 'INFORME_9DJ' && (
           <Dato etiqueta="Origen">
@@ -200,18 +197,46 @@ const SITUACION_EXPEDIENTE = {
   27: { etiqueta: 'Cerrado', color: 'gris' },
 };
 
+/* El número del expediente de trámite de una presentación. En el portal se
+   muestra solo si la Dirección lo decidió (mismo parámetro que el de multa):
+   PENDIENTE — a favor de mostrarlo, el titular tiene derecho a saberlo y lo
+   necesita para hacer trámites; en contra, puede preferirse darlo en
+   ventanilla. */
+function ExpedienteDeTramite({ a }) {
+  const { parametros } = useDatos();
+  const { rol } = useRol();
+  if (rol === 'titular' && !parametros?.portalMuestraNumerosExpediente) {
+    return a.expedienteTramite || a.origen === 'INFORME_9DJ' ? 'registrado' : 'no registrado';
+  }
+  if (a.expedienteTramite === 'SIN REGISTRO') return 'sin expediente registrado (presentación histórica)';
+  return a.expedienteTramite ?? (a.origen === 'INFORME_9DJ' ? 'no aplica (informe de la prestataria)' : 'NO REGISTRADO');
+}
+
 function DetalleExpediente({ a }) {
-  const { novedadesExpedientes } = useDatos();
+  const { novedadesExpedientes, parametros } = useDatos();
+  const { rol } = useRol();
   const novedades = (novedadesExpedientes ?? []).filter((n) => n.idTramite === a.id);
   const situacion = SITUACION_EXPEDIENTE[a.idEstado] ?? SITUACION_EXPEDIENTE[24];
+  // En el portal, el número del expediente de multa se muestra solo si la
+  // Dirección lo decidió (parámetro): por defecto el titular ve el estado.
+  const ocultarNumero = rol === 'titular' && !parametros?.portalMuestraNumerosExpediente;
 
   return (
     <>
       <Dato etiqueta="Expediente de multa">
-        {a.numeroExpediente ? `N° ${a.numeroExpediente}` : 'sin número todavía'}
+        {ocultarNumero ? 'iniciado' : a.numeroExpediente ? `N° ${a.numeroExpediente}` : 'sin número todavía'}
       </Dato>
       <Dato etiqueta="Situación">
         <Badge color={situacion.color}>{situacion.etiqueta}</Badge>
+        {/* >>> EL REINGRESO, CON TODAS LAS LETRAS <<< Sin esto, un comercio
+            con expediente Y con una notificación nueva al lado parece un
+            error del sistema. */}
+        {a.quedoAtras && (
+          <span className="hist-nota">
+            Este expediente quedó atrás: coordinación devolvió el comercio al circuito y la intimación empezó de nuevo (ver la
+            notificación posterior y la bitácora).
+          </span>
+        )}
       </Dato>
       {novedades.length > 0 && (
         <Dato etiqueta="Bitácora" ancho={2}>

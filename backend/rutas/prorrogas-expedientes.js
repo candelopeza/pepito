@@ -178,6 +178,10 @@ router.post('/locales/:id/expedientes', requiereRol('administrativo', 'coordinac
   try {
     const idLocal = Number(req.params.id);
     const numeroManual = String(req.body?.numeroManual ?? '').trim();
+    if (numeroManual) {
+      const errorFormato = validarNumeroExpediente(numeroManual);
+      if (errorFormato) return res.status(400).json({ error: errorFormato });
+    }
 
     const { idTramite } = await ejecutarActo(req, {
       idLocal,
@@ -295,14 +299,31 @@ router.put('/expedientes/:id/numero', requiereRol('administrativo', 'coordinacio
   try {
     const tramite = await tramitePorId(Number(req.params.id));
     if (!tramite || tramite.tipo !== 'EXPEDIENTE') return res.status(404).json({ error: 'No existe ese expediente' });
-    const provisorio = String(tramite.numeroExpediente ?? '');
-    if (!provisorio.startsWith('PROV-')) {
-      return res.status(409).json({ error: `El expediente N° ${provisorio} ya tiene número de la mesa de entradas.` });
-    }
+    const anterior = String(tramite.numeroExpediente ?? '');
+    const eraProvisorio = anterior.startsWith('PROV-');
+
     const numero = String(req.body?.numero ?? '').trim();
     if (!numero) return res.status(400).json({ error: 'Escribí el número que asignó la mesa de entradas' });
     if (numero.toUpperCase().startsWith('PROV-')) {
       return res.status(400).json({ error: 'Ese es un número provisorio: escribí el de la mesa de entradas' });
+    }
+    const errorFormato = validarNumeroExpediente(numero);
+    if (errorFormato) return res.status(400).json({ error: errorFormato });
+
+    /* >>> EL NÚMERO GUARDADO NO SE EDITA: SE CORRIGE <<<
+       Completar un provisorio es lo normal. Cambiar un número ya definitivo es
+       una CORRECCIÓN: exige motivo y queda asentada en la bitácora con el
+       número anterior a la vista. Inmutable del todo sería peor: el día que
+       alguien se equivoque en un dígito, la única salida sería tocar la base
+       a mano. */
+    const motivo = String(req.body?.motivo ?? '').trim();
+    if (!eraProvisorio && !motivo) {
+      return res.status(400).json({
+        error: `El expediente ya tiene el N° ${anterior}: para corregirlo hace falta el motivo, que queda en la bitácora.`,
+      });
+    }
+    if (!eraProvisorio && numero === anterior) {
+      return res.status(400).json({ error: 'El número nuevo es igual al que ya tiene.' });
     }
 
     await ejecutarActo(req, {
@@ -319,13 +340,26 @@ router.put('/expedientes/:id/numero', requiereRol('administrativo', 'coordinacio
           ? new ErrorActo(409, `El expediente N° ${numero} ya está registrado en el local N° ${repetido.idLocal}.`)
           : null;
       },
-      motivo: `Expediente de multa: el provisorio ${provisorio} pasa a ser el N° ${numero} de la mesa de entradas`,
+      motivo: eraProvisorio
+        ? `Expediente de multa: el provisorio ${anterior} pasa a ser el N° ${numero} de la mesa de entradas`
+        : `Expediente de multa: corrección del N° ${anterior} por el N° ${numero}. Motivo: ${motivo}`,
       trabajo: async (cx) => {
         await cx.execute('UPDATE tramite SET numero_referencia = ?, observaciones = ? WHERE id_tramite = ?', [
           numero,
-          `Número de la mesa de entradas municipal (reemplazó al provisorio ${provisorio}).`,
+          eraProvisorio
+            ? `Número de la mesa de entradas municipal (reemplazó al provisorio ${anterior}).`
+            : recortarObservacion(`Número corregido (antes ${anterior}): ${motivo}`),
           tramite.id,
         ]);
+        await insertarNovedad(cx, req, {
+          idTramite: tramite.id,
+          detalle: eraProvisorio
+            ? `Llegó el número de la mesa de entradas: el provisorio ${anterior} pasa a ser el N° ${numero}.`
+            : `Se corrigió el número del expediente: era ${anterior}, queda ${numero}. Motivo: ${motivo}`,
+          // El cambio de un numero definitivo es cocina interna de la oficina;
+          // el numero nuevo le llega al titular por el estado del expediente.
+          publica: eraProvisorio,
+        });
         return { idTramite: tramite.id };
       },
     });
@@ -369,6 +403,25 @@ router.put('/expedientes/:id/numero', requiereRol('administrativo', 'coordinacio
    canal lo define la Dirección; el correo de destino es un parámetro
    administrable (correoSolicitudExpedientes), no un valor del código. */
 const CANALES_SOLICITUD = ['correo', 'telefono', 'presencial', 'otro'];
+
+/* El número de la mesa de entradas es "número/año": 175079/2026. El largo del
+   número NO se fija (hoy son seis dígitos, en unos meses pueden ser más: se
+   aceptan de 4 a 12). El año se valida contra el año en curso Y el anterior,
+   porque en enero conviven expedientes de los dos y el sistema no puede
+   rechazar ninguno. */
+function validarNumeroExpediente(numero) {
+  const m = /^(\d{4,12})\/(\d{4})$/.exec(numero);
+  if (!m) {
+    return `El número de expediente es "número/año", por ejemplo 175079/${hoyISO().slice(0, 4)}. Llegó: "${numero}".`;
+  }
+  const anio = Number(m[2]);
+  const actual = Number(hoyISO().slice(0, 4));
+  if (anio !== actual && anio !== actual - 1) {
+    return `El año del expediente (${anio}) tiene que ser ${actual} o ${actual - 1}.`;
+  }
+  return null;
+}
+
 
 async function insertarNovedad(cx, req, { idTramite, detalle, idEstadoNuevo = null, publica = false }) {
   const sql = `

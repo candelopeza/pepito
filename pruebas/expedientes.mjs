@@ -122,23 +122,14 @@ if (!idLocal) {
     JSON.stringify(sinNumero.cuerpo),
   );
 
-  const historica = await pedir('/documentacion', {
+  // La marca "sin expediente registrado" es SOLO para documentos que ya
+  // existían: en una carga nueva sería la puerta para saltearse la
+  // obligatoriedad (tildar y guardar sin número).
+  const conTilde = await pedir('/documentacion', {
     metodo: 'POST',
     cuerpo: { localId: idLocal, tipo: 'DDJJ', numero: 'DJ-PRUEBA-1', fechaEmision: '2026-10-14', sinExpediente: true },
   });
-  verificar('la oficina puede marcar una presentación histórica "sin expediente registrado"', historica.estado === 201, JSON.stringify(historica.cuerpo).slice(0, 150));
-  verificar(
-    'y queda la MARCA, no un número inventado',
-    historica.cuerpo?.expedienteTramite === 'SIN REGISTRO',
-    `expedienteTramite: ${historica.cuerpo?.expedienteTramite}`,
-  );
-
-  const titularSinMarca = await pedir('/documentacion', {
-    metodo: 'POST',
-    rol: 'titular',
-    cuerpo: { localId: idLocal, tipo: 'DDJJ', numero: 'DJ-PRUEBA-2', fechaEmision: '2026-10-14', sinExpediente: true },
-  });
-  verificar('el titular NO puede usar esa marca: su trámite tiene número', titularSinMarca.estado === 400, JSON.stringify(titularSinMarca.cuerpo));
+  verificar('la marca "sin expediente" NO sirve para saltearse la obligatoriedad en una carga nueva', conTilde.estado === 400, JSON.stringify(conTilde.cuerpo));
 
   const conNumero = await pedir('/documentacion', {
     metodo: 'POST',
@@ -197,8 +188,16 @@ if (!candidato) {
   });
   verificar('no se puede solicitar dos veces (el estado ya no lo permite)', repetida.estado === 409, JSON.stringify(repetida.cuerpo));
 
+  // El formato es "número/año" (175079/2026), con el año en curso o el
+  // anterior: en enero conviven expedientes de los dos años.
+  const anio = Number(new Date().toISOString().slice(0, 4));
+  const malFormato = await pedir(`/locales/${candidato.id}/expedientes`, { metodo: 'POST', cuerpo: { numeroManual: 'EXP-175079' } });
+  verificar('un número sin el formato número/año se rechaza con el ejemplo a la vista', malFormato.estado === 400 && /número\/año|numero\/anio|175079/.test(malFormato.cuerpo?.error ?? ''), JSON.stringify(malFormato.cuerpo));
+  const anioViejo = await pedir(`/locales/${candidato.id}/expedientes`, { metodo: 'POST', cuerpo: { numeroManual: `175079/${anio - 2}` } });
+  verificar('un año que no es el actual ni el anterior se rechaza', anioViejo.estado === 400, JSON.stringify(anioViejo.cuerpo));
+
   // Llega el número: la carga completa EL MISMO expediente.
-  const numero = `PRUEBA-${Date.now()}`;
+  const numero = `${900000 + Math.floor(Math.random() * 99999)}/${anio}`;
   const generado = await pedir(`/locales/${candidato.id}/expedientes`, { metodo: 'POST', cuerpo: { numeroManual: numero } });
   verificar('cuando llega el número, la carga completa el mismo expediente', generado.estado === 201 && generado.cuerpo?.id === idExpediente, JSON.stringify(generado.cuerpo).slice(0, 120));
   verificar('con el número puesto', generado.cuerpo?.numeroExpediente === numero);
@@ -231,6 +230,38 @@ if (!candidato) {
     JSON.stringify(vistasPorTitular).slice(0, 200),
   );
 
+  seccion('El número guardado no se edita: se corrige, con motivo y bitácora');
+  {
+    const numeroNuevo = `${900000 + Math.floor(Math.random() * 99999)}/${anio}`;
+    const sinMotivo = await pedir(`/expedientes/${idExpediente}/numero`, { metodo: 'PUT', cuerpo: { numero: numeroNuevo } });
+    verificar('corregir sin motivo se rechaza', sinMotivo.estado === 400, JSON.stringify(sinMotivo.cuerpo));
+
+    // El numero de OTRO expediente no se puede usar: es el error mas caro.
+    const { cuerpo: otros } = await pedir('/actuaciones');
+    const ajeno = otros.find((a) => a.tipo === 'EXPEDIENTE' && a.id !== idExpediente && /^\d+\/\d{4}$/.test(a.numeroExpediente ?? ''));
+    if (ajeno) {
+      const duplicado = await pedir(`/expedientes/${idExpediente}/numero`, {
+        metodo: 'PUT',
+        cuerpo: { numero: ajeno.numeroExpediente, motivo: 'prueba de duplicado' },
+      });
+      verificar('el número de OTRO comercio se rechaza (el error más caro)', duplicado.estado === 409, JSON.stringify(duplicado.cuerpo));
+    }
+
+    const corregido = await pedir(`/expedientes/${idExpediente}/numero`, {
+      metodo: 'PUT',
+      cuerpo: { numero: numeroNuevo, motivo: 'Error de tipeo en un dígito (prueba automática).' },
+    });
+    verificar('con motivo, la corrección entra', corregido.estado === 200 && corregido.cuerpo?.numeroExpediente === numeroNuevo, JSON.stringify(corregido.cuerpo).slice(0, 120));
+
+    const { cuerpo: bitacora } = await pedir('/expedientes/novedades');
+    const delCambio = (bitacora ?? []).filter((n) => n.idTramite === idExpediente && /corrigió|corrigio/i.test(n.detalle));
+    verificar(
+      'y la bitácora asienta el número anterior, el nuevo y el motivo, como interna',
+      delCambio.length === 1 && delCambio[0].detalle.includes(numero) && delCambio[0].detalle.includes(numeroNuevo) && !delCambio[0].publica,
+      JSON.stringify(delCambio).slice(0, 200),
+    );
+  }
+
   // El reingreso queda reflejado en la bitácora.
   const reingreso = await pedir(`/locales/${candidato.id}/reingreso`, { metodo: 'POST', cuerpo: { motivo: 'Prueba automática: se revierte enseguida.' } });
   verificar('coordinación reingresa el local al circuito', reingreso.estado === 200, JSON.stringify(reingreso.cuerpo).slice(0, 120));
@@ -251,6 +282,21 @@ if (!candidato) {
   await consultar('UPDATE local SET id_estado = ? WHERE id_local = ?', [estadoPrevio.idEstado, candidato.id]);
   const { cuerpo: restaurado } = await pedir(`/locales/${candidato.id}`);
   verificar('limpieza: el local volvió a su estado anterior', restaurado?.estado === candidato.estado, `quedó ${restaurado?.estado}, era ${candidato.estado}`);
+}
+
+seccion('La bandeja del tablero y la vista de Expedientes cuentan lo mismo');
+{
+  const { bandejas, conEstado } = await import('../src/datos/vistas.js');
+  const { cuerpo: locales } = await pedir('/locales');
+  const { cuerpo: actuacionesTodas } = await pedir('/actuaciones');
+  const todos = conEstado({ locales, actuaciones: actuacionesTodas, solicitudesProrroga: [] });
+  const bandeja = bandejas(todos, 'coordinacion').find((b) => b.id === 'expedientes-generar');
+  const vista = todos.filter((l) => l.estado === 'GENERAR_EXPEDIENTE');
+  verificar(
+    'mismo criterio, mismo número: nadie tiene que decidir a cuál creerle',
+    bandeja && bandeja.locales.length === vista.length,
+    `bandeja: ${bandeja?.locales?.length} · vista: ${vista.length}`,
+  );
 }
 
 /* ---- limpieza de la parte A ---- */

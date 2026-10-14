@@ -711,29 +711,61 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
             </Aviso>
           )}
 
-          <Campo
-            id="exp-numero"
-            etiqueta="N° de expediente"
-            valor={form.numero ?? ''}
-            onChange={(v) => setForm({ ...form, numero: v })}
-            ayuda="El número que dio la mesa de entradas. Si todavía no está, dejalo vacío: queda uno provisorio (PROV-…) para reemplazar después en Expedientes."
-          />
+          {form.ratificando ? (
+            /* >>> LA RATIFICACIÓN <<< El número se muestra tal como se va a
+               guardar: asignarle a un comercio el expediente de otro es el
+               error más caro que puede cometerse acá. */
+            <>
+              <Aviso tipo="alerta" titulo="Revisá antes de guardar">
+                El expediente de <strong>{local.nombreLocal}</strong> queda con el número{' '}
+                <strong style={{ fontSize: '1.2rem' }}>{form.numero?.trim()}</strong>. ¿Es correcto?
+              </Aviso>
+              <div className="form-acciones">
+                <button
+                  type="button"
+                  className="btn-peligro"
+                  onClick={async () => {
+                    if (await registrarExpediente(local.id, form.numero?.trim())) terminar();
+                    else setForm({ ...form, ratificando: false });
+                  }}
+                >
+                  Sí, iniciar con el {form.numero?.trim()}
+                </button>
+                <button type="button" className="btn-secundario" onClick={() => setForm({ ...form, ratificando: false })}>
+                  No, volver
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Campo
+                id="exp-numero"
+                etiqueta="N° de expediente"
+                valor={form.numero ?? ''}
+                onChange={(v) => setForm({ ...form, numero: v })}
+                ayuda={`Formato número/año, por ejemplo 175079/${new Date().getFullYear()}. Si todavía no está, dejalo vacío: queda uno provisorio (PROV-…) para reemplazar después en Expedientes.`}
+              />
 
-          <div className="form-acciones">
-            <button
-              type="button"
-              className="btn-peligro"
-              disabled={faltan.length > 0 && parametros.exigirDatosSiempre}
-              onClick={async () => {
-                if (await registrarExpediente(local.id, form.numero?.trim())) terminar();
-              }}
-            >
-              Iniciar expediente
-            </button>
-            <button type="button" className="btn-secundario" onClick={cerrar}>
-              Cancelar
-            </button>
-          </div>
+              <div className="form-acciones">
+                <button
+                  type="button"
+                  className="btn-peligro"
+                  disabled={faltan.length > 0 && parametros.exigirDatosSiempre}
+                  onClick={async () => {
+                    // Con número escrito se ratifica primero; el provisorio
+                    // (campo vacío) no tiene número que confirmar.
+                    if (form.numero?.trim()) setForm({ ...form, ratificando: true });
+                    else if (await registrarExpediente(local.id, '')) terminar();
+                  }}
+                >
+                  {form.numero?.trim() ? 'Continuar' : 'Iniciar con número provisorio'}
+                </button>
+                <button type="button" className="btn-secundario" onClick={cerrar}>
+                  Cancelar
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
 

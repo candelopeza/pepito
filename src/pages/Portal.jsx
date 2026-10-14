@@ -70,6 +70,7 @@ function Portal() {
   const { usuario } = useRol();
   const {
     novedadesExpedientes,
+    parametros,
     localesConEstado,
     actuacionesDeLocal,
     usuarios,
@@ -261,7 +262,13 @@ function Portal() {
                       {documentos.map((d) => (
                         <li key={d.id}>
                           {ETIQUETA_DOCUMENTO[d.tipo]} N° {d.numero} — expediente{' '}
-                          <strong>{d.expedienteTramite ?? 'no registrado'}</strong>
+                          <strong>
+                            {parametros?.portalMuestraNumerosExpediente
+                              ? (d.expedienteTramite ?? 'no registrado')
+                              : d.expedienteTramite
+                                ? 'registrado'
+                                : 'no registrado'}
+                          </strong>
                           {d.validado === false ? (
                             <Badge color="amarillo">En revisión</Badge>
                           ) : (
@@ -286,8 +293,16 @@ function Portal() {
                         const propias = (novedadesExpedientes ?? []).filter((n) => n.idTramite === e.id);
                         return (
                           <li key={e.id}>
-                            N° <strong>{e.numeroExpediente || 'sin número todavía'}</strong> — {situacion.toLowerCase()} ·{' '}
-                            {fmtFecha(e.fecha)}
+                            {/* El número se muestra solo si la Dirección lo decidió
+                                (PENDIENTE): por defecto, estado y desde cuándo. */}
+                            {parametros?.portalMuestraNumerosExpediente ? (
+                              <>
+                                N° <strong>{e.numeroExpediente || 'sin número todavía'}</strong> —{' '}
+                              </>
+                            ) : (
+                              <>Expediente de multa — </>
+                            )}
+                            <strong>{situacion.toLowerCase()}</strong> · {fmtFecha(e.fecha)}
                             {propias.length > 0 && (
                               <ul className="lista-simple">
                                 {propias.map((n) => (

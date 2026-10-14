@@ -186,6 +186,19 @@ function Parametros() {
             />
 
             <CampoSelect
+              id="par-portal-numeros"
+              etiqueta="¿El portal del titular muestra los números de expediente?"
+              valor={String(Boolean(form.portalMuestraNumerosExpediente))}
+              onChange={(v) => cambiar('portalMuestraNumerosExpediente', v === 'true')}
+              opciones={[
+                { id: 'false', etiqueta: 'No: ve el estado y desde cuándo (en ventanilla se le da el número)' },
+                { id: 'true', etiqueta: 'Sí: ve el número del expediente de multa y el de cada trámite' },
+              ]}
+              vacio={null}
+              ayuda="PENDIENTE: decisión de la Dirección. A favor: tiene derecho a saberlo y lo necesita para trámites. En contra: es información del circuito sancionatorio."
+            />
+
+            <CampoSelect
               id="par-bisiesto"
               etiqueta="Una DDJJ emitida un 29 de febrero, ¿cuándo vence?"
               valor={form.modoBisiesto}

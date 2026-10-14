@@ -60,6 +60,11 @@ function Expediente() {
   // El expediente provisorio al que se le está cargando el número definitivo.
   const [definitivo, setDefinitivo] = useState(null);
   const [numero, setNumero] = useState('');
+  const [motivoCorreccion, setMotivoCorreccion] = useState('');
+  // El paso de ratificación: el número se muestra y se pide confirmarlo antes
+  // de guardar. Asignarle a un comercio el expediente de otro es el error más
+  // caro de esta pantalla.
+  const [ratificando, setRatificando] = useState(false);
 
   const [novedadDe, setNovedadDe] = useState(null); // el expediente del modal de novedad
   const [novedad, setNovedad] = useState({ detalle: '', publica: false, nuevoEstado: '' });
@@ -75,6 +80,8 @@ function Expediente() {
     }
     return porTramite;
   }, [novedadesExpedientes]);
+
+  const esCorreccion = Boolean(definitivo) && !String(definitivo.numeroExpediente ?? '').startsWith('PROV-');
 
   const expedientes = actuaciones
     .filter((a) => a.tipo === 'EXPEDIENTE')
@@ -152,11 +159,6 @@ function Expediente() {
     [entregasFehacientes],
   );
 
-  /* A partir de cuántos días sin respuesta la espera se marca en rojo.
-     TODO-DEFINICION: el umbral real lo fija la Dirección cuando se sepa cómo
-     trabaja la dependencia; mientras tanto, dos semanas. */
-  const DIAS_SIN_RESPUESTA = 15;
-
   const columnasSolicitados = useMemo(
     () => [
       {
@@ -179,15 +181,13 @@ function Expediente() {
         field: 'espera',
         headerName: 'Esperando hace',
         width: 150,
+        /* Sin umbral ni color A PROPÓSITO: todavía no se sabe cuánto tarda de
+           verdad la dependencia, así que inventar un límite sería un juicio
+           sin fundamento. El dato pelado alcanza: quien lee "23 días" saca su
+           conclusión. Cuando haya movimientos reales acumulados se va a poder
+           calcular el promedio y recién ahí definir un umbral. */
         valueGetter: (_v, row) => diasEntre(String(row.fecha ?? '').slice(0, 10), hoyISO()),
-        renderCell: ({ row }) => {
-          const dias = diasEntre(String(row.fecha ?? '').slice(0, 10), hoyISO());
-          return dias >= DIAS_SIN_RESPUESTA ? (
-            <Badge color="rojo">{dias} día(s)</Badge>
-          ) : (
-            <span>{dias} día(s)</span>
-          );
-        },
+        renderCell: ({ row }) => <span>{diasEntre(String(row.fecha ?? '').slice(0, 10), hoyISO())} día(s)</span>,
       },
       { field: 'usuario', headerName: 'Pidió', width: 140 },
       {
@@ -219,7 +219,14 @@ function Expediente() {
       {
         field: 'numeroExpediente',
         headerName: 'N° de expediente',
-        width: 180,
+        width: 190,
+        /* El número es "175079/2026": para que el orden sea año y después
+           número (y no alfabético, donde 9999/2026 va después de 10000/2027),
+           se ordena por una clave derivada. Los provisorios van al final. */
+        valueGetter: (_v, row) => {
+          const m = /^(\d+)\/(\d{4})$/.exec(String(row.numeroExpediente ?? ''));
+          return m ? Number(m[2]) * 10_000_000_000 + Number(m[1]) : Number.MAX_SAFE_INTEGER;
+        },
         renderCell: ({ row }) =>
           String(row.numeroExpediente ?? '').startsWith('PROV-') ? (
             <span className="celda-apilada">
@@ -230,6 +237,8 @@ function Expediente() {
                   className="btn-tabla"
                   onClick={() => {
                     setNumero('');
+                    setMotivoCorreccion('');
+                    setRatificando(false);
                     setDefinitivo(row);
                   }}
                 >
@@ -240,7 +249,25 @@ function Expediente() {
               )}
             </span>
           ) : (
-            <strong>{row.numeroExpediente}</strong>
+            <span className="celda-apilada">
+              <strong>{row.numeroExpediente}</strong>
+              {/* El número guardado no se edita: se CORRIGE, con motivo que
+                  queda en la bitácora. */}
+              {puedeCargarNumero && (
+                <button
+                  type="button"
+                  className="btn-tabla"
+                  onClick={() => {
+                    setNumero('');
+                    setMotivoCorreccion('');
+                    setRatificando(false);
+                    setDefinitivo(row);
+                  }}
+                >
+                  Corregir número
+                </button>
+              )}
+            </span>
           ),
       },
       {
@@ -473,33 +500,82 @@ function Expediente() {
       )}
 
       {definitivo && (
-        <Modal abierto etiqueta="EXPEDIENTE" titulo="Número definitivo" onCerrar={() => setDefinitivo(null)}>
+        <Modal
+          abierto
+          etiqueta="EXPEDIENTE"
+          titulo={esCorreccion ? 'Corregir el número' : 'Número definitivo'}
+          onCerrar={() => setDefinitivo(null)}
+        >
           <div className="formulario formulario-modal">
             <div className="bloque-info">
               <strong>{definitivo.local?.nombreLocal ?? `Local ${definitivo.localId}`}</strong>
-              <span>Provisorio {definitivo.numeroExpediente}</span>
+              <span>
+                {esCorreccion ? 'Número actual' : 'Provisorio'} {definitivo.numeroExpediente}
+              </span>
             </div>
-            <Campo
-              id="exp-definitivo"
-              etiqueta="N° de la mesa de entradas"
-              valor={numero}
-              onChange={setNumero}
-            />
-            <div className="form-acciones">
-              <button
-                type="button"
-                className="btn-primario"
-                disabled={!numero.trim()}
-                onClick={async () => {
-                  if (await numeroDefinitivoExpediente(definitivo.id, numero.trim())) setDefinitivo(null);
-                }}
-              >
-                Guardar
-              </button>
-              <button type="button" className="btn-secundario" onClick={() => setDefinitivo(null)}>
-                Cancelar
-              </button>
-            </div>
+
+            {ratificando ? (
+              /* >>> LA RATIFICACIÓN <<< El número se muestra tal como se va a
+                 guardar. Asignarle a un comercio el expediente de otro es el
+                 error más caro que puede cometerse acá. */
+              <>
+                <Aviso tipo="alerta" titulo="Revisá antes de guardar">
+                  El expediente de <strong>{definitivo.local?.nombreLocal ?? `local ${definitivo.localId}`}</strong> queda con el
+                  número <strong style={{ fontSize: '1.2rem' }}>{numero.trim()}</strong>
+                  {esCorreccion ? ` (antes ${definitivo.numeroExpediente})` : ''}. ¿Es correcto?
+                </Aviso>
+                <div className="form-acciones">
+                  <button
+                    type="button"
+                    className="btn-primario"
+                    onClick={async () => {
+                      if (await numeroDefinitivoExpediente(definitivo.id, numero.trim(), motivoCorreccion.trim())) {
+                        setDefinitivo(null);
+                      } else {
+                        setRatificando(false);
+                      }
+                    }}
+                  >
+                    Sí, guardar {numero.trim()}
+                  </button>
+                  <button type="button" className="btn-secundario" onClick={() => setRatificando(false)}>
+                    No, volver
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Campo
+                  id="exp-definitivo"
+                  etiqueta="N° de la mesa de entradas"
+                  valor={numero}
+                  onChange={setNumero}
+                  ayuda={`Formato número/año, por ejemplo 175079/${new Date().getFullYear()}.`}
+                />
+                {esCorreccion && (
+                  <CampoTexto
+                    id="exp-motivo-correccion"
+                    etiqueta="Motivo de la corrección (obligatorio)"
+                    valor={motivoCorreccion}
+                    onChange={setMotivoCorreccion}
+                    ayuda="Queda asentado en la bitácora, junto con el número anterior."
+                  />
+                )}
+                <div className="form-acciones">
+                  <button
+                    type="button"
+                    className="btn-primario"
+                    disabled={!numero.trim() || (esCorreccion && !motivoCorreccion.trim())}
+                    onClick={() => setRatificando(true)}
+                  >
+                    Continuar
+                  </button>
+                  <button type="button" className="btn-secundario" onClick={() => setDefinitivo(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </Modal>
       )}

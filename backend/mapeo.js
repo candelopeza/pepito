@@ -333,6 +333,11 @@ export function aActuacionFront(fila, documentoPorTramite = new Map()) {
         ...comun,
         tipo: 'EXPEDIENTE',
         numeroExpediente: fila.numeroReferencia ?? null,
+        // Con fecha de cierre, el expediente QUEDÓ ATRÁS: coordinación
+        // reingresó el comercio al circuito y la intimación arrancó de nuevo.
+        // La ficha lo dice con todas las letras para que expediente y
+        // notificación nueva no parezcan un error del sistema.
+        quedoAtras: Boolean(fila.fechaCierre),
       };
 
     case ID_TTRAMITE.RELEVAMIENTO:

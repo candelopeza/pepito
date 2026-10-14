@@ -60,6 +60,14 @@ export const PARAMETROS = {
      (TODO-DEFINICION: lo confirma la Dirección) y porque puede cambiar. La
      Dirección lo edita desde Configuración → Parámetros sin tocar código. */
   correoSolicitudExpedientes: '',
+
+  /* ¿El portal del titular muestra los NÚMEROS de expediente (el de multa y el
+     del trámite de cada presentación)? PENDIENTE: decisión de la Dirección.
+     A favor de mostrarlos: el titular tiene derecho a saber qué expediente se
+     le inició, y lo va a necesitar para un trámite. En contra: es información
+     del circuito sancionatorio y puede preferirse darla en ventanilla. Por
+     defecto NO se muestran: el titular ve el estado y desde cuándo. */
+  portalMuestraNumerosExpediente: false,
 };
 
 /* El texto de la cédula. Los {marcadores} los reemplaza el front al imprimir

@@ -208,7 +208,7 @@ export const api = {
   novedadesExpedientes: () => get('/expedientes/novedades'),
   novedadExpediente: (idTramite, datos) => post(`/expedientes/${idTramite}/novedades`, datos),
   // Reemplaza un expediente PROV- por el número de la mesa de entradas.
-  numeroDefinitivoExpediente: (id, numero) => put(`/expedientes/${id}/numero`, { numero }),
+  numeroDefinitivoExpediente: (id, numero, motivo) => put(`/expedientes/${id}/numero`, { numero, motivo }),
   reingresar: (localId, motivo) => post(`/locales/${localId}/reingreso`, { motivo }),
 
   // --- herramientas ---------------------------------------------------------

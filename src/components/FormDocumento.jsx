@@ -48,7 +48,6 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
     fechaEmision: hoyISO(),
     fechaVencimiento: '',
     expedienteTramite: '',
-    sinExpediente: false,
     observaciones: '',
     archivo: '',
     adjunto: '',
@@ -69,12 +68,14 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
     const e = {};
     if (!datos.numero.trim()) e.numero = 'El número del documento es obligatorio.';
     // El expediente del trámite es OBLIGATORIO: sin él no se puede reconstruir
-    // qué trámite respalda la acreditación. La única salida es la marca "sin
-    // expediente registrado", para las presentaciones históricas (solo oficina).
-    if (!datos.expedienteTramite.trim() && !(datos.sinExpediente && !desdePortal)) {
+    // qué trámite respalda la acreditación. Acá no hay excepción: la marca
+    // "sin expediente registrado" es SOLO para documentos que ya existían de
+    // antes, nunca para una carga nueva (sería la puerta para saltearse la
+    // obligatoriedad tildando y guardando sin número).
+    if (!datos.expedienteTramite.trim()) {
       e.expedienteTramite = desdePortal
         ? 'Indicá el número de expediente de tu trámite: te lo dieron al iniciarlo.'
-        : 'Es el número del trámite que inició la presentación. Si es una presentación histórica sin número, marcá la casilla.';
+        : 'Es el número del trámite que inició la presentación. Toda presentación nueva lo tiene.';
     }
     if (!datos.fechaEmision) e.fechaEmision = 'La fecha de emisión es obligatoria.';
     if (esContrato && !datos.fechaVencimiento) {
@@ -101,7 +102,6 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
       ...datos,
       numero: datos.numero.trim(),
       expedienteTramite: datos.expedienteTramite.trim(),
-      sinExpediente: Boolean(datos.sinExpediente && !desdePortal),
       // Lo que entra por el portal NO cuenta hasta que un agente lo apruebe.
       validado: !desdePortal,
       origen: 'PRESENTADO_TITULAR',
@@ -156,29 +156,12 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
           valor={datos.expedienteTramite}
           onChange={(v) => cambiar('expedienteTramite', v)}
           error={errores.expedienteTramite}
-          soloLectura={datos.sinExpediente}
           ayuda={
             desdePortal
               ? 'Es el número que te dieron al iniciar el trámite de tu presentación en el municipio.'
               : 'El número que recibió el titular al iniciar el trámite de la presentación. NO es el expediente de multa.'
           }
         />
-        {!desdePortal && (
-          <label className="campo" htmlFor="doc-sin-expediente">
-            <span>
-              <input
-                id="doc-sin-expediente"
-                type="checkbox"
-                checked={datos.sinExpediente}
-                onChange={(e) => setDatos((p) => ({ ...p, sinExpediente: e.target.checked, expedienteTramite: '' }))}
-              />{' '}
-              Sin expediente registrado (presentación histórica)
-            </span>
-            <small className="texto-gris">
-              Solo para papeles viejos que nunca tuvieron número: queda la marca, no un número inventado.
-            </small>
-          </label>
-        )}
 
         <Campo
           id="doc-emision"

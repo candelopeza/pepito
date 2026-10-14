@@ -619,8 +619,8 @@ function DatosProvider({ children }) {
 
   /* El número definitivo de un expediente provisorio (sección 8.3). */
   const numeroDefinitivoExpediente = useCallback(
-    (actuacionId, numero) =>
-      ejecutar('Número de expediente registrado', () => api.numeroDefinitivoExpediente(actuacionId, numero)),
+    (actuacionId, numero, motivo) =>
+      ejecutar('Número de expediente registrado', () => api.numeroDefinitivoExpediente(actuacionId, numero, motivo)),
     [ejecutar],
   );
 

@@ -754,3 +754,30 @@ Código: `siguienteExpedienteTramite` en `consultas.js`.
 **Campos obligatorios con aviso:** en bloqueo manual, reingreso al circuito y
 otorgar prórroga, el botón ya no se desactiva en silencio: el campo dice
 "(obligatorio)" y al confirmar sin completarlo aparece qué falta.
+
+## Los dos expedientes
+
+Significan cosas opuestas y por eso van en campos y tipos de actuación
+separados: el **de trámite** documenta que el titular presentó (cumple); el
+**de multa**, que no cumplió y se lo sanciona.
+
+**De trámite**: obligatorio en cada presentación documental
+(`tramite.numero_referencia`). El sistema NO lo autogenera ni inicia trámites:
+el trámite se constituye por fuera y acá solo se registra. Las presentaciones
+históricas sin número llevan la marca `SIN REGISTRO`. PENDIENTE con la
+Dirección (corrección al pliego 4.5): CiDiTuc no asigna números ni cobra
+timbrado; falta saber qué pasa realmente al presentar. No hay medios de pago.
+
+**De multa**: la secuencia es habilitado (lo decide el sistema al recalcular,
+sin trámite) → SOLICITADO (un agente pidió el número: fecha, agente y canal) →
+GENERADO (llegó y se cargó) → EN TRÁMITE / CERRADO (PENDIENTE confirmar los
+estados reales de la dependencia). Cada movimiento queda en
+`expediente_novedad` (sql/10) con su marca `publica`: el titular ve el estado y
+las novedades públicas, nunca las observaciones internas ni los autores. El
+reingreso al circuito deja su novedad para que expediente e intimación nueva
+convivan con explicación visible. El correo de la dependencia es el parámetro
+`correoSolicitudExpedientes` (PENDIENTE: a quién se le pide). La regla que no
+se puede violar: la carga manual del número funciona SIEMPRE; una integración
+futura solo puede sumarse como camino alternativo.
+
+Pruebas: `npm run expedientes` (24 verificaciones, limpia lo que toca).

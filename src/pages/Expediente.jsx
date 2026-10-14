@@ -33,28 +33,58 @@ import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import AccionesLocal from '../components/AccionesLocal';
 import Modal from '../components/ui/Modal';
-import Campo from '../components/ui/Campo';
+import Campo, { CampoSelect, CampoTexto } from '../components/ui/Campo';
 import { useDatos } from '../datos/datosContexto';
 import { useRol } from '../auth/rolContexto';
 import { puedeEditar } from '../config/modulos';
 import { correPlazo } from '../dominio/actuaciones';
-import { fmtFecha } from '../dominio/fechas';
+import { diasEntre, fmtFecha, fmtFechaHora, hoyISO } from '../dominio/fechas';
 import { faltantesRegistrales } from '../dominio/reglas';
 
+/* Cómo se muestra cada estado del trámite de expediente (objeto 7 de la tabla
+   `estado`). "Habilitado" no aparece acá: es la ausencia de trámite (el local
+   en Generar expediente). */
+const SITUACION_EXPEDIENTE = {
+  24: { etiqueta: 'Generado', color: 'azul' },
+  26: { etiqueta: 'En trámite', color: 'amarillo' },
+  27: { etiqueta: 'Cerrado', color: 'gris' },
+};
+
 function Expediente() {
-  const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, parametros, permisos, numeroDefinitivoExpediente } =
-    useDatos();
+  const {
+    actuaciones, localesConEstado, localPorId, actuacionesDeLocal, parametros, permisos,
+    numeroDefinitivoExpediente, novedadesExpedientes, novedadExpediente,
+  } = useDatos();
   const { rol } = useRol();
   const puedeCargarNumero = puedeEditar(rol, 'expedientes', permisos);
   // El expediente provisorio al que se le está cargando el número definitivo.
   const [definitivo, setDefinitivo] = useState(null);
   const [numero, setNumero] = useState('');
 
+  const [novedadDe, setNovedadDe] = useState(null); // el expediente del modal de novedad
+  const [novedad, setNovedad] = useState({ detalle: '', publica: false, nuevoEstado: '' });
+
   const paraGenerar = localesConEstado.filter((l) => l.estado === 'GENERAR_EXPEDIENTE');
-  const iniciados = actuaciones
+
+  /* La bitácora agrupada por trámite, para la columna "última novedad". */
+  const novedadesPorTramite = useMemo(() => {
+    const porTramite = new Map();
+    for (const n of novedadesExpedientes) {
+      if (!porTramite.has(n.idTramite)) porTramite.set(n.idTramite, []);
+      porTramite.get(n.idTramite).push(n);
+    }
+    return porTramite;
+  }, [novedadesExpedientes]);
+
+  const expedientes = actuaciones
     .filter((a) => a.tipo === 'EXPEDIENTE')
-    .map((a) => ({ ...a, local: localPorId(a.localId) }))
-    .reverse();
+    .map((a) => ({ ...a, local: localPorId(a.localId), novedades: novedadesPorTramite.get(a.id) ?? [] }));
+
+  /* Los que una persona ya pidió y la dependencia todavía no respondió (estado
+     25, SOLICITADO). Se separan de los habilitados A PROPÓSITO: habilitado lo
+     decide el sistema al recalcular, solicitado lo decidió un agente. */
+  const solicitados = expedientes.filter((a) => a.idEstado === 25);
+  const iniciados = expedientes.filter((a) => a.idEstado !== 25).reverse();
 
   /* Cuántas entregas FEHACIENTES tiene el local. Es el control de debido
      proceso: dos entregas efectivas son la condición para el expediente. */
@@ -122,6 +152,66 @@ function Expediente() {
     [entregasFehacientes],
   );
 
+  /* A partir de cuántos días sin respuesta la espera se marca en rojo.
+     TODO-DEFINICION: el umbral real lo fija la Dirección cuando se sepa cómo
+     trabaja la dependencia; mientras tanto, dos semanas. */
+  const DIAS_SIN_RESPUESTA = 15;
+
+  const columnasSolicitados = useMemo(
+    () => [
+      {
+        field: 'local',
+        headerName: 'Local',
+        flex: 1,
+        minWidth: 200,
+        valueGetter: (_v, row) => row.local?.nombreLocal ?? `Local ${row.localId}`,
+        renderCell: ({ row }) => (
+          <span className="celda-apilada">
+            <Link to={`/locales/${row.localId}`} className="link-local">
+              {row.local?.nombreLocal ?? `Local ${row.localId}`}
+            </Link>
+            <small className="celda-sub">{row.local?.razonSocial || 'SIN RAZÓN SOCIAL'}</small>
+          </span>
+        ),
+      },
+      { field: 'fecha', headerName: 'Solicitado el', width: 130, renderCell: ({ row }) => fmtFecha(row.fecha) },
+      {
+        field: 'espera',
+        headerName: 'Esperando hace',
+        width: 150,
+        valueGetter: (_v, row) => diasEntre(String(row.fecha ?? '').slice(0, 10), hoyISO()),
+        renderCell: ({ row }) => {
+          const dias = diasEntre(String(row.fecha ?? '').slice(0, 10), hoyISO());
+          return dias >= DIAS_SIN_RESPUESTA ? (
+            <Badge color="rojo">{dias} día(s)</Badge>
+          ) : (
+            <span>{dias} día(s)</span>
+          );
+        },
+      },
+      { field: 'usuario', headerName: 'Pidió', width: 140 },
+      {
+        field: 'motivo',
+        headerName: 'Canal y observaciones',
+        flex: 1,
+        minWidth: 200,
+        valueGetter: (_v, row) => row.motivo ?? '',
+        renderCell: ({ row }) => <span className="texto-gris">{row.motivo ?? ''}</span>,
+      },
+      {
+        field: 'acciones',
+        headerName: 'Acciones',
+        width: 260,
+        sortable: false,
+        filterable: false,
+        // Cuando llega el número, "Registrar expediente de multa" completa
+        // este mismo trámite: habilitado → solicitado → generado.
+        renderCell: ({ row }) => row.local && <AccionesLocal local={row.local} compacto />,
+      },
+    ],
+    [],
+  );
+
   /* Los expedientes ya iniciados. Cada fila es una ACTUACIÓN de tipo
      EXPEDIENTE con su local adentro. */
   const columnasIniciados = useMemo(
@@ -167,7 +257,53 @@ function Expediente() {
       },
       { field: 'cuit', headerName: 'CUIT', width: 150, valueGetter: (_v, row) => row.local?.cuit || '—' },
       { field: 'fecha', headerName: 'Fecha', width: 120, renderCell: ({ row }) => fmtFecha(row.fecha) },
-      { field: 'usuario', headerName: 'Registró', width: 150 },
+      {
+        field: 'situacion',
+        headerName: 'Situación',
+        width: 120,
+        valueGetter: (_v, row) => SITUACION_EXPEDIENTE[row.idEstado]?.etiqueta ?? 'Generado',
+        renderCell: ({ row }) => {
+          const sit = SITUACION_EXPEDIENTE[row.idEstado] ?? SITUACION_EXPEDIENTE[24];
+          return <Badge color={sit.color}>{sit.etiqueta}</Badge>;
+        },
+      },
+      {
+        field: 'ultimaNovedad',
+        headerName: 'Última novedad',
+        flex: 1,
+        minWidth: 220,
+        valueGetter: (_v, row) => row.novedades[row.novedades.length - 1]?.detalle ?? '',
+        renderCell: ({ row }) => {
+          const ultima = row.novedades[row.novedades.length - 1];
+          if (!ultima) return <span className="texto-gris">sin movimientos</span>;
+          return (
+            <span className="celda-apilada" title={ultima.detalle}>
+              <span>{ultima.detalle}</span>
+              <small className="celda-sub">{fmtFechaHora(ultima.momento)}</small>
+            </span>
+          );
+        },
+      },
+      {
+        field: 'novedad',
+        headerName: 'Bitácora',
+        width: 150,
+        sortable: false,
+        filterable: false,
+        renderCell: ({ row }) =>
+          puedeCargarNumero ? (
+            <button
+              type="button"
+              className="btn-tabla"
+              onClick={() => {
+                setNovedad({ detalle: '', publica: false, nuevoEstado: '' });
+                setNovedadDe(row);
+              }}
+            >
+              Registrar novedad
+            </button>
+          ) : null,
+      },
       {
         field: 'estadoLocal',
         headerName: 'Estado actual del local',
@@ -196,7 +332,7 @@ function Expediente() {
       <PageHeader
         etiqueta="EXPEDIENTES"
         titulo="EXPEDIENTES DE MULTA"
-        subtitulo={`${paraGenerar.length} para generar · ${iniciados.length} iniciados`}
+        subtitulo={`${paraGenerar.length} habilitados sin pedir · ${solicitados.length} esperando el número · ${iniciados.length} iniciados`}
         botonVolver
       />
 
@@ -234,6 +370,28 @@ function Expediente() {
         />
       )}
 
+      {/* ================= SOLICITADOS: esperando el número =================
+          La diferencia con los de arriba es QUIÉN decidió: los habilitados los
+          determina el sistema al recalcular; estos los pidió un agente y la
+          dependencia todavía no respondió. La columna de espera es la que
+          responde "cuáles llevan demasiado tiempo sin respuesta". */}
+      <div className="accesos-header">
+        <span>Número solicitado, esperando respuesta ({solicitados.length})</span>
+      </div>
+      {solicitados.length === 0 ? (
+        <Vacio titulo="No hay solicitudes esperando">
+          Cuando un agente pide el número de un expediente (desde la tabla de arriba), la espera se sigue acá.
+        </Vacio>
+      ) : (
+        <Grilla
+          filas={solicitados}
+          columnas={columnasSolicitados}
+          nombreArchivo="expedientes-solicitados"
+          vacio="No hay solicitudes esperando respuesta."
+          alto="auto"
+        />
+      )}
+
       {/* ================= INICIADOS ================= */}
       <div className="accesos-header">
         <span>Expedientes iniciados ({iniciados.length})</span>
@@ -244,6 +402,74 @@ function Expediente() {
           tipo="alerta"
           titulo={`${provisorios.length} expediente(s) con número provisorio: falta el de la mesa de entradas`}
         />
+      )}
+
+      {novedadDe && (
+        <Modal
+          abierto
+          etiqueta="BITÁCORA"
+          titulo={`Novedad del expediente ${novedadDe.numeroExpediente ?? ''}`}
+          onCerrar={() => setNovedadDe(null)}
+        >
+          <div className="formulario formulario-modal">
+            <p className="texto-chico">
+              Cada movimiento queda con fecha, autor y observación: es lo que convierte esta pantalla en una fuente confiable y no
+              en un cuaderno de notas.
+            </p>
+            <CampoTexto
+              id="nov-detalle"
+              etiqueta="¿Qué pasó? (obligatorio)"
+              valor={novedad.detalle}
+              onChange={(v) => setNovedad((p) => ({ ...p, detalle: v }))}
+            />
+            <CampoSelect
+              id="nov-estado"
+              etiqueta="¿Cambia la situación del expediente?"
+              valor={novedad.nuevoEstado}
+              onChange={(v) => setNovedad((p) => ({ ...p, nuevoEstado: v }))}
+              opciones={[
+                { id: 'EN_TRAMITE', etiqueta: 'Pasa a «En trámite»' },
+                { id: 'CERRADO', etiqueta: 'Pasa a «Cerrado» (concluyó)' },
+              ]}
+              vacio="No, es solo una novedad"
+              ayuda="Los estados que maneja la otra dependencia están PENDIENTES de confirmar con la Dirección."
+            />
+            <label className="campo">
+              <span>
+                <input
+                  type="checkbox"
+                  checked={novedad.publica}
+                  onChange={(e) => setNovedad((p) => ({ ...p, publica: e.target.checked }))}
+                />{' '}
+                El titular puede verla en el portal
+              </span>
+            </label>
+            <p className="texto-chico texto-gris">
+              Lo interno y lo publicable se separan acá, en el momento de cargar: el titular ve que tiene expediente y en qué estado
+              está, nunca las observaciones internas de la oficina.
+            </p>
+            <div className="form-acciones">
+              <button
+                type="button"
+                className="btn-primario"
+                disabled={!novedad.detalle.trim()}
+                onClick={async () => {
+                  const r = await novedadExpediente(novedadDe.id, {
+                    detalle: novedad.detalle.trim(),
+                    publica: novedad.publica,
+                    nuevoEstado: novedad.nuevoEstado || undefined,
+                  });
+                  if (r) setNovedadDe(null);
+                }}
+              >
+                Registrar
+              </button>
+              <button type="button" className="btn-secundario" onClick={() => setNovedadDe(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {definitivo && (

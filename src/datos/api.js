@@ -201,6 +201,12 @@ export const api = {
   // El titular PIDE (portal); coordinación OTORGA (la de arriba).
   solicitarProrroga: (localId, datos) => post(`/locales/${localId}/solicitud-prorroga`, datos),
   registrarExpediente: (localId, numeroManual) => post(`/locales/${localId}/expedientes`, { numeroManual }),
+  // La solicitud del numero a la dependencia que tramita las multas, y la
+  // bitacora del expediente (cada movimiento, con su visibilidad).
+  solicitarExpediente: (localId, canal, observaciones) =>
+    post(`/locales/${localId}/expedientes/solicitud`, { canal, observaciones }),
+  novedadesExpedientes: () => get('/expedientes/novedades'),
+  novedadExpediente: (idTramite, datos) => post(`/expedientes/${idTramite}/novedades`, datos),
   // Reemplaza un expediente PROV- por el número de la mesa de entradas.
   numeroDefinitivoExpediente: (id, numero) => put(`/expedientes/${id}/numero`, { numero }),
   reingresar: (localId, motivo) => post(`/locales/${localId}/reingreso`, { motivo }),

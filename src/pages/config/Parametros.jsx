@@ -258,6 +258,14 @@ function Parametros() {
                 onChange={(v) => cambiar('maxProrrogasPorLocal', v)}
                 ayuda="PENDIENTE con el área legal. Hoy solo avisa, no bloquea."
               />
+              <Campo
+                id="par-correo-expedientes"
+                etiqueta="Correo para solicitar expedientes de multa"
+                valor={form.correoSolicitudExpedientes ?? ''}
+                onChange={(v) => cambiar('correoSolicitudExpedientes', v)}
+                ayuda="PENDIENTE: a qué dependencia se le pide el número. Se muestra al agente al solicitar."
+                ancho={2}
+              />
             </div>
 
             <div className="form-acciones">

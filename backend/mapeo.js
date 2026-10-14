@@ -85,9 +85,12 @@ export const ID_ESTADO = {
   // objeto PRORROGA
   PRORROGA_VIGENTE: 20,
   PRORROGA_VENCIDA: 21,
-  // objeto EXPEDIENTE
+  // objeto EXPEDIENTE (la secuencia completa esta en sql/10-expedientes.sql)
   EXPEDIENTE_PENDIENTE: 23,
   EXPEDIENTE_GENERADO: 24,
+  EXPEDIENTE_SOLICITADO: 25,
+  EXPEDIENTE_EN_TRAMITE: 26,
+  EXPEDIENTE_CERRADO: 27,
 };
 
 /* tabla `tipo_documentacion`. */
@@ -515,7 +518,18 @@ export function estadoDeLocal(local, tramites = [], hoy = hoyISO()) {
 
   if (ultimo?.tipo === 'EXPEDIENTE') {
     // No es terminal: coordinación puede reingresar el local (etapa 6).
-    return ultimo.idEstado === ID_ESTADO.EXPEDIENTE_GENERADO ? 'EXPEDIENTE' : 'GENERAR_EXPEDIENTE';
+    //
+    // SOLICITADO se distingue a propósito de GENERAR_EXPEDIENTE: el primero lo
+    // decidió una persona (pidió el número a la otra dependencia) y el segundo
+    // lo decide el sistema al recalcular. Si se unificaran, nunca se sabría
+    // cuántos expedientes están habilitados y nadie pidió todavía.
+    if (ultimo.idEstado === ID_ESTADO.EXPEDIENTE_SOLICITADO) return 'EXPEDIENTE_SOLICITADO';
+    // Generado, en trámite o cerrado: el local tiene su expediente. El detalle
+    // del recorrido vive en la bitácora, no en el estado del local.
+    if ([ID_ESTADO.EXPEDIENTE_GENERADO, ID_ESTADO.EXPEDIENTE_EN_TRAMITE, ID_ESTADO.EXPEDIENTE_CERRADO].includes(ultimo.idEstado)) {
+      return 'EXPEDIENTE';
+    }
+    return 'GENERAR_EXPEDIENTE';
   }
 
   if (ultimo?.tipo === 'NOTIFICACION') {

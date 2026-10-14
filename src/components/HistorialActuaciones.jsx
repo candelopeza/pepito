@@ -130,8 +130,10 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
         <Dato etiqueta="Fecha de vencimiento">{fmtFecha(a.fechaVencimiento)}</Dato>
         {/* El dato que el sistema viejo no guardaba (sección 4.5). */}
         <Dato etiqueta="Expediente de trámite">
-          {a.expedienteTramite ??
-            (a.origen === 'INFORME_9DJ' ? 'no aplica (informe de la prestataria)' : 'NO REGISTRADO')}
+          {a.expedienteTramite === 'SIN REGISTRO'
+            ? 'sin expediente registrado (presentación histórica)'
+            : (a.expedienteTramite ??
+              (a.origen === 'INFORME_9DJ' ? 'no aplica (informe de la prestataria)' : 'NO REGISTRADO'))}
         </Dato>
         {a.origen === 'INFORME_9DJ' && (
           <Dato etiqueta="Origen">
@@ -172,7 +174,7 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
   }
 
   if (a.tipo === 'EXPEDIENTE') {
-    return <Dato etiqueta="Expediente de multa">N° {a.numeroExpediente}</Dato>;
+    return <DetalleExpediente a={a} />;
   }
 
   if (a.tipo === 'REINGRESO') {
@@ -184,6 +186,48 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
   }
 
   return null;
+}
+
+/* El expediente de multa con su recorrido completo: situación y bitácora.
+   Las novedades vienen del store ya FILTRADAS POR ROL en el backend: a la
+   oficina le llega todo; al titular, solo las públicas y sin el autor. Por eso
+   este mismo componente sirve para la ficha y para el portal. */
+const SITUACION_EXPEDIENTE = {
+  23: { etiqueta: 'Pendiente de generación', color: 'naranja' },
+  24: { etiqueta: 'Generado', color: 'azul' },
+  25: { etiqueta: 'Número solicitado', color: 'naranja' },
+  26: { etiqueta: 'En trámite', color: 'amarillo' },
+  27: { etiqueta: 'Cerrado', color: 'gris' },
+};
+
+function DetalleExpediente({ a }) {
+  const { novedadesExpedientes } = useDatos();
+  const novedades = (novedadesExpedientes ?? []).filter((n) => n.idTramite === a.id);
+  const situacion = SITUACION_EXPEDIENTE[a.idEstado] ?? SITUACION_EXPEDIENTE[24];
+
+  return (
+    <>
+      <Dato etiqueta="Expediente de multa">
+        {a.numeroExpediente ? `N° ${a.numeroExpediente}` : 'sin número todavía'}
+      </Dato>
+      <Dato etiqueta="Situación">
+        <Badge color={situacion.color}>{situacion.etiqueta}</Badge>
+      </Dato>
+      {novedades.length > 0 && (
+        <Dato etiqueta="Bitácora" ancho={2}>
+          <ul className="lista-simple">
+            {novedades.map((n) => (
+              <li key={n.id}>
+                <span className="texto-gris">{fmtFechaHora(n.momento)}</span> — {n.detalle}
+                {n.usuario ? <span className="texto-gris"> ({n.usuario})</span> : null}
+                {n.usuario && n.publica ? <Badge color="azul">la ve el titular</Badge> : null}
+              </li>
+            ))}
+          </ul>
+        </Dato>
+      )}
+    </>
+  );
 }
 
 /* PROPS

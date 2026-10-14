@@ -90,6 +90,7 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
     registrarDocumento,
     otorgarProrroga,
     registrarExpediente,
+    solicitarExpediente,
     reingresarAlCircuito,
     bloquearLocal,
     desbloquearLocal,
@@ -608,6 +609,78 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
               }}
             >
               Otorgar prórroga
+            </button>
+            <button type="button" className="btn-secundario" onClick={cerrar}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ======================= SOLICITAR N° DE EXPEDIENTE =======================
+          No inicia nada en la otra dependencia (eso es humano, hoy por correo):
+          registra QUE SE PIDIÓ, cuándo, quién y por dónde. Es lo que separa
+          "habilitado" (lo decidió el sistema) de "solicitado" (lo decidió una
+          persona): sin esa marca nunca se sabría cuántos expedientes esperan
+          que alguien los pida. */}
+      <Modal
+        abierto={abierta === 'solicitar-expediente'}
+        etiqueta="EXPEDIENTE"
+        titulo="Solicitar el número de expediente"
+        onCerrar={cerrar}
+      >
+        <div className="formulario formulario-modal">
+          <div className="bloque-info">
+            <strong>{local.nombreLocal}</strong>
+            <span>
+              {local.razonSocial || 'SIN RAZÓN SOCIAL'} · CUIT {local.cuit || 'SIN CUIT'}
+            </span>
+          </div>
+
+          <p className="texto-chico">
+            El pedido a la dependencia se hace por fuera del sistema
+            {parametros.correoSolicitudExpedientes ? (
+              <>
+                {' '}
+                (correo: <strong>{parametros.correoSolicitudExpedientes}</strong>)
+              </>
+            ) : (
+              <> (el correo de destino todavía no está definido: se carga en Configuración → Parámetros)</>
+            )}
+            . Acá queda la constancia: fecha, agente y canal.
+          </p>
+
+          <CampoSelect
+            id="sol-canal"
+            etiqueta="¿Por qué canal se pidió?"
+            valor={form.canal ?? ''}
+            onChange={(v) => setForm({ ...form, canal: v })}
+            opciones={[
+              { id: 'correo', etiqueta: 'Correo electrónico' },
+              { id: 'telefono', etiqueta: 'Teléfono' },
+              { id: 'presencial', etiqueta: 'En persona' },
+              { id: 'otro', etiqueta: 'Otro' },
+            ]}
+            error={faltaDato.canal}
+          />
+          <CampoTexto
+            id="sol-obs"
+            etiqueta="Observaciones (opcional)"
+            valor={form.observaciones ?? ''}
+            onChange={(v) => setForm({ ...form, observaciones: v })}
+            ayuda="A quién se le pidió, referencia del correo, lo que ayude a seguirlo."
+          />
+
+          <div className="form-acciones">
+            <button
+              type="button"
+              className="btn-primario"
+              onClick={async () => {
+                if (!completo([['canal', form.canal, 'Indicá por qué canal se pidió el número.']])) return;
+                if (await solicitarExpediente(local.id, form.canal, form.observaciones?.trim() ?? '')) terminar();
+              }}
+            >
+              Registrar la solicitud
             </button>
             <button type="button" className="btn-secundario" onClick={cerrar}>
               Cancelar

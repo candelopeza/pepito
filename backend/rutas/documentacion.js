@@ -43,7 +43,7 @@ import {
   insertarTramite,
   parametros,
   recortarObservacion,
-  siguienteExpedienteTramite,
+
   tramitePorId,
   tramitesPorTipo,
 } from '../consultas.js';
@@ -123,10 +123,41 @@ router.post('/', async (req, res, next) => {
         return res.status(400).json({ error: 'El vencimiento del contrato tiene que ser posterior a su emisión' });
       }
     }
-    // EL EXPEDIENTE DE TRÁMITE lo numera el sistema (consultas.js →
-    // siguienteExpedienteTramite). Si la presentación ya trae un número de
-    // otro sistema, se guarda ese.
+    /* >>> EL EXPEDIENTE DE TRÁMITE NO LO INVENTA ESTE SISTEMA <<<
+       Presentar una DDJJ o un contrato inicia un trámite administrativo POR
+       FUERA de este sistema, y ese trámite tiene su número. Acá solo se
+       registra: sin él no se puede reconstruir qué trámite respalda la
+       acreditación (si mañana el comercio impugna una sanción alegando que
+       presentó, no habría forma de rastrearlo). Por eso es OBLIGATORIO, y por
+       eso NO se autogenera: un número inventado para que el sistema deje
+       guardar es un dato sin ningún sentido.
+
+       La única excepción son las presentaciones HISTÓRICAS: las que ya están
+       cargadas sin número nunca lo van a tener, y la oficina puede marcarlas
+       "sin expediente registrado" (queda la marca, no un número falso).
+
+       TODO-DEFINICION (corrección al pliego 4.5): CiDiTuc NO asigna números de
+       expediente ni interviene en el timbrado. Falta que la Dirección confirme
+       qué pasa hoy realmente al presentar: quién asigna el número y dónde se
+       abona el timbrado. Según la respuesta, cambia la etiqueta del campo, o
+       pasa a opcional, o se evalúa un circuito de pago (hoy descartado: el
+       sistema no cobra, no verifica pagos ni contempla presentaciones
+       impagas). */
+    const SIN_EXPEDIENTE = 'SIN REGISTRO';
     const expedienteManual = String(datos.expedienteTramite ?? '').trim();
+    const sinExpediente = datos.sinExpediente === true;
+    // Los contratos del informe 9DJ no pasan por acá (los rechaza el guard de
+    // abajo con su propio mensaje): no se les exige expediente de trámite.
+    if (!expedienteManual && !sinExpediente && datos.origen !== 'INFORME_9DJ') {
+      return res.status(400).json({
+        error:
+          'Falta el número de expediente del trámite: es el que se obtiene al iniciar la presentación en el municipio. ' +
+          'Si es una presentación histórica sin número, marcala como "sin expediente registrado".',
+      });
+    }
+    if (sinExpediente && req.usuario.rol === 'titular') {
+      return res.status(400).json({ error: 'Indicá el número de expediente de tu trámite: te lo dieron al iniciarlo.' });
+    }
     // El origen INFORME_9DJ lo pone únicamente el módulo del informe: es lo
     // que da fe de que ese contrato salió de una carga concreta y auditable.
     if (datos.origen === 'INFORME_9DJ') {
@@ -196,7 +227,7 @@ router.post('/', async (req, res, next) => {
         `${etiqueta} N° ${numero} ${validado ? 'registrada' : 'presentada, pendiente de validación'}${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''} · expediente de trámite ${r.expediente}`,
       trabajo: async (cx, { actuaciones }) => {
         const ciclo = Math.max(1, ...actuaciones.map((a) => Number(a.ciclo) || 1));
-        const expediente = expedienteManual || (await siguienteExpedienteTramite(cx, hoy.slice(0, 4)));
+        const expediente = expedienteManual || SIN_EXPEDIENTE;
         const id = await insertarTramite(cx, {
           idLocal,
           idEstado: validado ? ID_ESTADO.DOC_VIGENTE : ID_ESTADO.DOC_PENDIENTE_REVISION,

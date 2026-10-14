@@ -125,6 +125,9 @@ export function resolverEstado(local, actuaciones, ctx = {}) {
   if (ult?.tipo === 'EXPEDIENTE') {
     // No es terminal: coordinación puede reingresar el local al circuito, y
     // eso genera una notificación posterior que pasa a ser la última.
+    // "Solicitado" se distingue: lo decidió una persona (pidió el número a la
+    // dependencia), mientras que "generar expediente" lo decide el sistema.
+    if (ult.idEstado === 25) return 'EXPEDIENTE_SOLICITADO';
     return 'EXPEDIENTE';
   }
 
@@ -293,9 +296,18 @@ export const ACCIONES = [
     roles: ['coordinacion'],
   },
   {
+    id: 'solicitar-expediente',
+    etiqueta: 'Solicitar N° de expediente',
+    ayuda: 'Registra que se pidió el número a la dependencia que tramita las multas: fecha, agente y canal.',
+    estados: ['GENERAR_EXPEDIENTE'],
+    roles: ['administrativo', 'coordinacion'],
+  },
+  {
     id: 'registrar-expediente',
     etiqueta: 'Registrar expediente de multa',
-    estados: ['GENERAR_EXPEDIENTE'],
+    // También desde "solicitado": cuando la dependencia responde, la carga del
+    // número completa ese mismo expediente.
+    estados: ['GENERAR_EXPEDIENTE', 'EXPEDIENTE_SOLICITADO'],
     roles: ['administrativo', 'coordinacion'],
   },
   {

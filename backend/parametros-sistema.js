@@ -54,6 +54,12 @@ export const PARAMETROS = {
      local por vuelta del circuito (nro_ciclo). */
   topeProrrogaDias: 30,
   maxProrrogasPorLocal: 1,
+
+  /* A quién se le pide el número del expediente de multa. Es un parámetro y no
+     un valor del código porque TODAVÍA NO SE SABE a quién se le pide
+     (TODO-DEFINICION: lo confirma la Dirección) y porque puede cambiar. La
+     Dirección lo edita desde Configuración → Parámetros sin tocar código. */
+  correoSolicitudExpedientes: '',
 };
 
 /* El texto de la cédula. Los {marcadores} los reemplaza el front al imprimir

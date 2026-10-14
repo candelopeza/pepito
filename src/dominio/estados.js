@@ -37,6 +37,7 @@ export const ESTADOS = {
 
   PRORROGA_VIGENTE:    { etiqueta: 'Prórroga vigente',                   grupo: 'en_tramite',    color: 'amarillo' },
   GENERAR_EXPEDIENTE:  { etiqueta: 'Generar expediente',                 grupo: 'cola_admin',    color: 'naranja' },
+  EXPEDIENTE_SOLICITADO: { etiqueta: 'N° de expediente solicitado',      grupo: 'sancionatorio', color: 'naranja' },
   EXPEDIENTE:          { etiqueta: 'Expediente',                         grupo: 'sancionatorio', color: 'rojo' },
 
   CONTRATO_VIGENTE:    { etiqueta: 'Contrato vigente',                   grupo: 'documental',    color: 'verde' },

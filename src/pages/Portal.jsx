@@ -57,9 +57,19 @@ import { ETIQUETA_DOCUMENTO } from '../dominio/actuaciones';
 import { fmtFecha, fmtFechaHora } from '../dominio/fechas';
 import { normalizarCuit } from '../dominio/duplicados';
 
+/* Lo que el titular lee de cada estado del expediente. Sin jerga interna. */
+const SITUACION_PORTAL = {
+  23: 'Pendiente',
+  24: 'Iniciado',
+  25: 'En gestión (se pidió la apertura)',
+  26: 'En trámite',
+  27: 'Concluido',
+};
+
 function Portal() {
   const { usuario } = useRol();
   const {
+    novedadesExpedientes,
     localesConEstado,
     actuacionesDeLocal,
     usuarios,
@@ -269,11 +279,27 @@ function Portal() {
                     <p className="texto-gris">No tenés expedientes de multa.</p>
                   ) : (
                     <ul className="lista-simple">
-                      {expedientesMulta.map((e) => (
-                        <li key={e.id}>
-                          N° <strong>{e.numeroExpediente || 'sin número todavía'}</strong> — iniciado el {fmtFecha(e.fecha)}
-                        </li>
-                      ))}
+                      {expedientesMulta.map((e) => {
+                        /* El titular ve el estado y las novedades PÚBLICAS: el
+                           backend ya le filtra lo interno de la oficina. */
+                        const situacion = SITUACION_PORTAL[e.idEstado] ?? 'Iniciado';
+                        const propias = (novedadesExpedientes ?? []).filter((n) => n.idTramite === e.id);
+                        return (
+                          <li key={e.id}>
+                            N° <strong>{e.numeroExpediente || 'sin número todavía'}</strong> — {situacion.toLowerCase()} ·{' '}
+                            {fmtFecha(e.fecha)}
+                            {propias.length > 0 && (
+                              <ul className="lista-simple">
+                                {propias.map((n) => (
+                                  <li key={n.id} className="texto-chico">
+                                    {fmtFecha(String(n.momento).slice(0, 10))}: {n.detalle}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>

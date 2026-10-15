@@ -23,7 +23,7 @@
    >>> LO QUE GUARDA LA BASE DEL ÁREA <<<
    La tabla `usuario` tiene el LEGAJO de la persona (id_persona, el mismo que
    va a usar CiDiTuc), su tipo de usuario y si está activa. No tiene nombre ni
-   correo: hasta que esté CiDiTuc, la persona se identifica por el legajo. El
+   correo: hasta que esté CiDiTuc, la persona se identifica por el id_persona (el identificador de CiDiTuc). El
    campo de correo sigue acá y aparece solo si el backend lo devuelve, para el
    día que la base lo tenga.
 
@@ -117,7 +117,7 @@ function Usuarios() {
   const columnas = useMemo(
     () => [
       { field: 'id', headerName: 'ID', width: 70 },
-      { field: 'nombre', headerName: hayCorreo ? 'Nombre' : 'Legajo', flex: 1, minWidth: 200 },
+      { field: 'nombre', headerName: hayCorreo ? 'Nombre' : 'ID persona', flex: 1, minWidth: 200 },
       ...(hayCorreo ? [{ field: 'email', headerName: 'Correo', flex: 1, minWidth: 220 }] : []),
       {
         field: 'rolEtiqueta',
@@ -252,7 +252,7 @@ function Usuarios() {
           <div className="formulario formulario-modal">
             <Campo
               id="usr-nombre"
-              etiqueta={hayCorreo ? 'Nombre y apellido' : 'Legajo'}
+              etiqueta={hayCorreo ? 'Nombre y apellido' : 'ID persona'}
               valor={editando.nombre}
               onChange={(v) => setEditando({ ...editando, nombre: v })}
               error={errores.nombre}

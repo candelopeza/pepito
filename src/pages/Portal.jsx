@@ -68,7 +68,7 @@ const SITUACION_PORTAL = {
 };
 
 function Portal() {
-  const { usuario } = useRol();
+  const { usuario, rol: rolActivo } = useRol();
   const {
     novedadesExpedientes,
     parametros,
@@ -125,22 +125,25 @@ function Portal() {
         subtitulo={`CUIL ${cuitPrueba || usuario.cuil || 'no informado'}`}
       />
 
-      {/* El buscador por CUIT es una herramienta de prueba: en modo entrega
-          (rol declarado apagado) no se muestra. El acceso real del titular
-          llega con CiDiTuc: cada titular entra con su identidad y ve lo suyo.
-          Mientras tanto, la OFICINA puede abrir el portal de un CUIT para
-          verlo como lo vería el titular. */}
-      {capacidades?.aceptaRolDeclarado !== false && (
+      {/* >>> VISTA ADMINISTRATIVA <<< La oficina puede abrir el portal de un
+          CUIT para verlo exactamente como lo ve ese titular (sirve para
+          atender una consulta en ventanilla mirando lo mismo que la persona).
+          El acceso real del titular llega con CiDiTuc: cada uno entra con su
+          identidad y ve solo lo suyo, sin este campo. */}
+      {rolActivo && rolActivo !== 'titular' && (
         <div className="selector-rol portal-prueba">
-          <span className="selector-rol-aviso" title="Herramienta de prueba: se elimina cuando haya CiDiTuc">
-            PRUEBA
+          <span
+            className="selector-rol-aviso"
+            title="Vista administrativa: el portal tal como lo ve el titular de ese CUIT. Desaparece cuando el ingreso sea por CiDiTuc."
+          >
+            VER COMO
           </span>
           <input
             className="selector-rol-select"
-            placeholder="Ver como el titular del CUIT…"
+            placeholder="CUIT del titular…"
             value={cuitPrueba}
             onChange={(e) => setCuitPrueba(e.target.value)}
-            aria-label="Ver el portal como el titular de un CUIT (prueba)"
+            aria-label="Ver el portal como el titular de un CUIT"
           />
         </div>
       )}

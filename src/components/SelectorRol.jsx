@@ -1,119 +1,47 @@
 /* ============================================================================
-   SelectorRol.jsx  —  *** PROVISORIO: BORRAR CUANDO HAYA LOGIN ***
+   SelectorRol.jsx  —  ELEGIR EL USUARIO (identificación provisoria)
    ----------------------------------------------------------------------------
-   Es el desplegable de la navbar para cambiar de tipo de usuario a mano.
-   NO es una funcionalidad del sistema: es una herramienta para probar y para
-   mostrarle al área cómo ve la pantalla cada rol, sin necesidad de backend.
+   El desplegable de la barra con los usuarios REALES de la base, por su
+   id_persona (el mismo identificador de CiDiTuc). Elegir uno define quién
+   firma cada acto y qué módulos se ven; el backend reconoce a esa persona y
+   le aplica el rol QUE DICE LA BASE, no el que declare el navegador.
 
-   Está en un archivo aparte justamente para que el día que exista login se
-   borre entero y se saque su línea de Navbar.jsx. Nada más depende de él.
-
-   >>>>>>>>>>>>>>>>>>>>>>>>>>>>>  ATENCIÓN  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-   ESTO NO PUEDE LLEGAR A PRODUCCIÓN ASÍ. Cualquiera que abra el sistema puede
-   auto-asignarse Administrador desde este desplegable. Mientras sea una demo
-   interna no hay problema, pero antes de publicarlo hay que reemplazarlo por
-   el login real y que sea el backend el que decida el rol.
-   >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-
-   USADO EN: components/Navbar.jsx
-   ESTILOS:  App.css -> sección 2.b (SELECTOR DE ROL)
-   ROLES:    salen solos de src/auth/roles.js (no hay lista escrita acá)
-
-   SI HAY PROBLEMA ACÁ:
-     - "Falta un rol en la lista": agregalo en src/auth/roles.js, el
-        desplegable se arma solo con lo que haya ahí.
-     - "Cambio el rol y no cambia la pantalla": el problema no es este
-        archivo. La pantalla no está leyendo el rol con useRol(), o filtra
-        con una lista propia en vez de usar src/config/modulos.js.
-     - "Cambio de rol estando en una pantalla que el rol nuevo no puede ver":
-        RutaProtegida te devuelve al Inicio automáticamente. Es lo esperado.
+   Cuando los agentes estén registrados en CiDiTuc, la Dirección reemplaza en
+   Accesos → Usuarios los identificadores de arranque (RELEVADOR-1, etc.) por
+   el id_persona real de cada uno. Y cuando el sistema se sume al login único,
+   este componente entero se reemplaza por la sesión de CiDiTuc.
    ============================================================================ */
 
 import { useRol } from '../auth/rolContexto';
 import { LISTA_ROLES } from '../auth/roles';
 import { useDatos } from '../datos/datosContexto';
-import { rolHabilitado } from '../config/modulos';
 
 function SelectorRol() {
-  const { rol, setRol, agente, elegirAgente } = useRol();
-  // Para que en la prueba se vea cuál quedó apagado desde Accesos.
-  const { permisos, usuarios, capacidades } = useDatos();
-
-  /* "Firmar como": los agentes de la base que tienen este rol. Elegir uno hace
-     que el backend lo reconozca por su legajo y que los actos queden a su
-     nombre en la auditoría (con el usuario de prueba quedan sin autor). */
-  const candidatos = usuarios.filter((u) => u.rol === rol && u.activo !== false);
-
-  /* >>> MODO ENTREGA <<<
-     Con ACEPTAR_ROL_DECLARADO=no en el backend (backend/.env), el servidor
-     solo reconoce a los usuarios cargados en la base: los perfiles de prueba
-     desaparecen y acá queda únicamente "entrar como" un agente real, con su
-     legajo. Es la identificación provisoria hasta que el sistema se sume a
-     CiDiTuc: ese día, este componente entero se reemplaza por la sesión del
-     login único. */
-  if (capacidades && capacidades.aceptaRolDeclarado === false) {
-    const activos = usuarios.filter((u) => u.activo !== false);
-    return (
-      <div className="selector-rol">
-        <span className="selector-rol-aviso" title="Identificación provisoria hasta el ingreso por CiDiTuc">
-          USUARIO
-        </span>
-        <select
-          className="selector-rol-select"
-          value={agente?.id ?? ''}
-          onChange={(e) => elegirAgente(activos.find((u) => String(u.id) === e.target.value) ?? null)}
-          aria-label="Entrar como"
-        >
-          <option value="">Elegí tu usuario…</option>
-          {activos.map((u) => (
-            <option key={u.id} value={u.id}>
-              Legajo {u.nombre} — {LISTA_ROLES.find((r) => r.id === u.rol)?.etiqueta ?? u.rol}
-            </option>
-          ))}
-        </select>
-      </div>
-    );
-  }
+  const { agente, elegirAgente } = useRol();
+  const { usuarios } = useDatos();
+  const activos = usuarios.filter((u) => u.activo !== false);
 
   return (
     <div className="selector-rol">
-      {/* Etiqueta chiquita que deja claro que esto es de prueba */}
-      <span className="selector-rol-aviso" title="Herramienta de prueba: se elimina cuando haya login">
-        PRUEBA
+      <span
+        className="selector-rol-aviso"
+        title="Identificación provisoria por id_persona: cuando el sistema se sume a CiDiTuc, acá va la sesión del ingreso único"
+      >
+        USUARIO
       </span>
-
-      {/* Select nativo a propósito: es accesible con teclado y se ve igual
-          en cualquier navegador, sin librerías. Para algo temporal alcanza. */}
       <select
         className="selector-rol-select"
-        value={rol}
-        onChange={(e) => setRol(e.target.value)}
-        aria-label="Cambiar tipo de usuario (provisorio)"
+        value={agente?.id ?? ''}
+        onChange={(e) => elegirAgente(activos.find((u) => String(u.id) === e.target.value) ?? null)}
+        aria-label="Elegí tu usuario"
       >
-        {LISTA_ROLES.map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.etiqueta}
-            {rolHabilitado(r.id, permisos) ? '' : ' (deshabilitado)'}
+        <option value="">Elegí tu usuario…</option>
+        {activos.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.nombre} — {LISTA_ROLES.find((r) => r.id === u.rol)?.etiqueta ?? u.rol}
           </option>
         ))}
       </select>
-
-      {candidatos.length > 0 && (
-        <select
-          className="selector-rol-select"
-          value={agente?.id ?? ''}
-          onChange={(e) => elegirAgente(candidatos.find((u) => String(u.id) === e.target.value) ?? null)}
-          aria-label="Firmar como (provisorio)"
-          title="Firmar como un agente cargado en la base"
-        >
-          <option value="">Usuario de prueba</option>
-          {candidatos.map((u) => (
-            <option key={u.id} value={u.id}>
-              Legajo {u.nombre}
-            </option>
-          ))}
-        </select>
-      )}
     </div>
   );
 }

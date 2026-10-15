@@ -37,12 +37,43 @@ import { rolHabilitado } from '../config/modulos';
 function SelectorRol() {
   const { rol, setRol, agente, elegirAgente } = useRol();
   // Para que en la prueba se vea cuál quedó apagado desde Accesos.
-  const { permisos, usuarios } = useDatos();
+  const { permisos, usuarios, capacidades } = useDatos();
 
   /* "Firmar como": los agentes de la base que tienen este rol. Elegir uno hace
      que el backend lo reconozca por su legajo y que los actos queden a su
      nombre en la auditoría (con el usuario de prueba quedan sin autor). */
   const candidatos = usuarios.filter((u) => u.rol === rol && u.activo !== false);
+
+  /* >>> MODO ENTREGA <<<
+     Con ACEPTAR_ROL_DECLARADO=no en el backend (backend/.env), el servidor
+     solo reconoce a los usuarios cargados en la base: los perfiles de prueba
+     desaparecen y acá queda únicamente "entrar como" un agente real, con su
+     legajo. Es la identificación provisoria hasta que el sistema se sume a
+     CiDiTuc: ese día, este componente entero se reemplaza por la sesión del
+     login único. */
+  if (capacidades && capacidades.aceptaRolDeclarado === false) {
+    const activos = usuarios.filter((u) => u.activo !== false);
+    return (
+      <div className="selector-rol">
+        <span className="selector-rol-aviso" title="Identificación provisoria hasta el ingreso por CiDiTuc">
+          USUARIO
+        </span>
+        <select
+          className="selector-rol-select"
+          value={agente?.id ?? ''}
+          onChange={(e) => elegirAgente(activos.find((u) => String(u.id) === e.target.value) ?? null)}
+          aria-label="Entrar como"
+        >
+          <option value="">Elegí tu usuario…</option>
+          {activos.map((u) => (
+            <option key={u.id} value={u.id}>
+              Legajo {u.nombre} — {LISTA_ROLES.find((r) => r.id === u.rol)?.etiqueta ?? u.rol}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
 
   return (
     <div className="selector-rol">

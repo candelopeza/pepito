@@ -72,6 +72,7 @@ function Portal() {
   const {
     novedadesExpedientes,
     parametros,
+    capacidades,
     localesConEstado,
     actuacionesDeLocal,
     usuarios,
@@ -124,18 +125,25 @@ function Portal() {
         subtitulo={`CUIL ${cuitPrueba || usuario.cuil || 'no informado'}`}
       />
 
-      <div className="selector-rol portal-prueba">
-        <span className="selector-rol-aviso" title="Herramienta de prueba: se elimina cuando haya CiDiTuc">
-          PRUEBA
-        </span>
-        <input
-          className="selector-rol-select"
-          placeholder="Ver como el titular del CUIT…"
-          value={cuitPrueba}
-          onChange={(e) => setCuitPrueba(e.target.value)}
-          aria-label="Ver el portal como el titular de un CUIT (prueba)"
-        />
-      </div>
+      {/* El buscador por CUIT es una herramienta de prueba: en modo entrega
+          (rol declarado apagado) no se muestra. El acceso real del titular
+          llega con CiDiTuc: cada titular entra con su identidad y ve lo suyo.
+          Mientras tanto, la OFICINA puede abrir el portal de un CUIT para
+          verlo como lo vería el titular. */}
+      {capacidades?.aceptaRolDeclarado !== false && (
+        <div className="selector-rol portal-prueba">
+          <span className="selector-rol-aviso" title="Herramienta de prueba: se elimina cuando haya CiDiTuc">
+            PRUEBA
+          </span>
+          <input
+            className="selector-rol-select"
+            placeholder="Ver como el titular del CUIT…"
+            value={cuitPrueba}
+            onChange={(e) => setCuitPrueba(e.target.value)}
+            aria-label="Ver el portal como el titular de un CUIT (prueba)"
+          />
+        </div>
+      )}
 
       {mios.length === 0 ? (
         <Vacio titulo="No hay locales asociados a tu CUIL">

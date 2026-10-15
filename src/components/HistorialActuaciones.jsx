@@ -240,7 +240,7 @@ function HistorialActuaciones({ actuaciones, usuarios = [], local = null, cedula
                   return ultima ? (
                     <Dato etiqueta="Observaciones editadas" ancho={2}>
                       <span className="hist-nota">
-                        Por {ultima.actor} el {fmtFechaHora(ultima.momento)}. Lo que decían quedó en el historial de estados.
+                        Por {ultima.actor} el {fmtFechaHora(ultima.momento)}.
                       </span>
                     </Dato>
                   ) : null;
@@ -274,8 +274,8 @@ function HistorialActuaciones({ actuaciones, usuarios = [], local = null, cedula
               onChange={setTexto}
               ayuda={
                 conHistorial
-                  ? 'Para borrarlas, dejalo vacío. Queda en el historial quién las cambió y qué decían.'
-                  : 'Para borrarlas, dejalo vacío. Esta base no guarda el historial: lo que decían no queda registrado.'
+                  ? ''
+                  : ''
               }
             />
             <div className="form-acciones">

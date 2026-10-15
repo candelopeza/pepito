@@ -193,7 +193,7 @@ function Home() {
         }
       />
 
-      {rol && !habilitado && (
+      {!habilitado && (
         <Aviso tipo="alerta" titulo="Este tipo de usuario está deshabilitado">
           Lo apagó el administrador desde Accesos → Tipos de usuario. Hasta que lo vuelva a habilitar no hay módulos disponibles.
           {rol === 'administrador' && ' Como administrador conservás Tipos de usuario en el menú para poder revertirlo.'}

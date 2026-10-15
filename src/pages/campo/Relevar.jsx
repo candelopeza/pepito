@@ -368,9 +368,10 @@ function Relevar() {
         <span>Mis relevamientos ({misRelevamientos.length})</span>
       </div>
       {!usuario.id ? (
-        <Aviso tipo="alerta" titulo="Para ver tu historial, elegí tu usuario">
-          Sin identificarte, lo que cargues queda <strong>sin autor</strong> y no puede aparecer acá. Elegí tu usuario en la barra de
-          arriba (si no figura, lo crea Dirección en Accesos → Usuarios).
+        <Aviso tipo="alerta" titulo="Para ver tu historial, entrá firmando como un agente">
+          Estás con un usuario de prueba, que no existe en la base: lo que cargues queda guardado pero <strong>sin autor</strong>, y
+          por eso no puede aparecer acá. Elegí tu usuario con “Firmar como” en la barra (si no está, lo crea Dirección en Accesos →
+          Usuarios).
         </Aviso>
       ) : (
         <Grilla

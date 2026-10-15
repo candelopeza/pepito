@@ -4,41 +4,39 @@ Qué hay que hacer —y en qué orden— para que el Sistema Grandes Generadores
 quede operando con usuarios reales, sin perfiles de prueba, listo para sumarse
 a CiDiTuc como un portal más.
 
-## 1. Los usuarios (YA EJECUTADO el 2026-10-15)
+## 1. Los usuarios reales (lo hace Dirección, una sola vez)
 
-La identidad es el **id_persona**: el mismo identificador que usa CiDiTuc. La
-base ya tiene un perfil por cada rol, listo para operar:
+Hoy la base tiene solo dos usuarios (los legajos de administración). Hay que
+cargar a cada agente del área:
 
-| id_persona | Rol |
-| --- | --- |
-| 140849, 140850 | Administrador del sistema |
-| RELEVADOR-1 | Relevador de campo |
-| NOTIFICADOR-1 | Notificador |
-| ADMINISTRATIVO-1 | Administrativo |
-| COORDINACION-1 | Coordinación |
-| DIRECCION-1 | Dirección |
-| TITULAR-1 | Titular (portal) |
+1. Entrar al sistema → **Accesos → Usuarios**.
+2. Crear un usuario por persona, con su **legajo** y su tipo (relevador,
+   notificador, administrativo, coordinación, dirección).
+3. Verificar en **Accesos** que cada rol tenga habilitados los módulos que le
+   corresponden (ya vienen con el reparto del pliego; solo revisar).
 
-**Lo único que queda para Dirección**: cuando cada agente esté registrado en
-CiDiTuc, entrar a **Accesos → Usuarios** y reemplazar el identificador de
-arranque (RELEVADOR-1, etc.) por el id_persona real de esa persona, o crearle
-su usuario con el rol que corresponda. Nada más: el rol lo determina la base,
-no el navegador.
+## 2. Apagar los perfiles de prueba (una línea en el servidor)
 
-## 2. Los perfiles de prueba (YA ELIMINADOS)
+En `backend/.env`, agregar:
 
-No existen más usuarios de fantasía ni selector de rol de prueba: se eliminó
-el código (no se apagó). La barra tiene un único desplegable **"Elegí tu
-usuario…"** con los usuarios reales de la base, y el backend corre con
-`ACEPTAR_ROL_DECLARADO=no` (ya puesto en `backend/.env`): un navegador que
-declare un rol sin ser un usuario de la base recibe "Falta identificar al
-usuario" en toda escritura.
+```
+ACEPTAR_ROL_DECLARADO=no
+```
 
-> Para correr las suites de prueba (`npm run expedientes`, `npm run informe`,
-> etc.) hace falta un backend en modo prueba: cambiar esa línea a
-> `ACEPTAR_ROL_DECLARADO=si` y reiniciar (y volver a `no` al terminar).
-> Las suites usan usuarios declarados a propósito, para no firmar actos con
-> identidades reales.
+y reiniciar el backend. Con eso:
+
+- El servidor deja de aceptar roles declarados por el navegador: **solo
+  reconoce a los usuarios cargados en la base**, por su legajo.
+- La barra del sistema cambia sola: desaparecen el selector de rol de prueba y
+  los nombres supuestos (Jorge Medina, Ana Gómez, etc.) y queda un único
+  desplegable **"Elegí tu usuario…"** con los agentes reales.
+- El buscador de prueba del portal del titular ("ver como el CUIT…") también
+  se oculta.
+
+Esta identificación por legajo es provisoria **hasta CiDiTuc**: cuando el
+sistema se sume al login único, la identidad la provee CiDiTuc y se reemplaza
+un solo archivo del backend (`middlewares/usuario.js`) y el selector de la
+barra. Las rutas no se tocan.
 
 ## 3. Revisar la configuración (pantalla Parámetros)
 

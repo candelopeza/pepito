@@ -48,6 +48,9 @@ async function pedir(ruta, opciones = {}) {
     ...opciones,
     headers: {
       'Content-Type': 'application/json',
+      // Sin keep-alive: el servidor corta las conexiones ociosas a los 5s y un
+      // POST sobre un socket ya cerrado da ECONNRESET sin reintento.
+      'Connection': 'close',
       'x-usuario-nombre': encodeURIComponent(USUARIO),
       'x-usuario-rol': 'coordinacion',
     },

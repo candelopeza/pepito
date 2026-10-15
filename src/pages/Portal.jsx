@@ -56,10 +56,22 @@ import { useDatos } from '../datos/datosContexto';
 import { ETIQUETA_DOCUMENTO } from '../dominio/actuaciones';
 import { fmtFecha, fmtFechaHora } from '../dominio/fechas';
 import { normalizarCuit } from '../dominio/duplicados';
+import { ACCIONES } from '../dominio/reglas';
+
+/* Lo que el titular lee de cada estado del expediente. Sin jerga interna. */
+const SITUACION_PORTAL = {
+  23: 'Pendiente',
+  24: 'Iniciado',
+  25: 'En gestión (se pidió la apertura)',
+  26: 'En trámite',
+  27: 'Concluido',
+};
 
 function Portal() {
   const { usuario } = useRol();
   const {
+    novedadesExpedientes,
+    parametros,
     localesConEstado,
     actuacionesDeLocal,
     usuarios,
@@ -98,8 +110,11 @@ function Portal() {
       .forEach((id) => cargarAuditoria(Number(id)));
   }, [idsMios, versionDatos, cargarAuditoria]);
 
-  const puedePedirProrroga = (l) =>
-    ['NOTIF2_ENTREGADA', 'NOTIF2_SIN_FIRMA', 'NOTIF2_FIJADA', 'GENERAR_EXPEDIENTE'].includes(l.estado);
+  // La misma lista que usa coordinación para OTORGAR (dominio/reglas.js):
+  // si el titular puede pedir, la oficina puede conceder. Incluye la primera
+  // notificación entregada y los plazos ya vencidos.
+  const estadosProrroga = ACCIONES.find((a) => a.id === 'otorgar-prorroga')?.estados ?? [];
+  const puedePedirProrroga = (l) => estadosProrroga.includes(l.estado);
 
   return (
     <>
@@ -206,9 +221,9 @@ function Portal() {
               )}
 
               {enValidacion.length > 0 && (
-                <Aviso tipo="alerta" titulo="Tu presentación está en revisión">
-                  {enValidacion.map((d) => `${ETIQUETA_DOCUMENTO[d.tipo]} N° ${d.numero}`).join(' · ')}. Ojo: el plazo sigue
-                  corriendo hasta que la oficina la apruebe.
+                <Aviso tipo="info" titulo="Tu presentación está en revisión">
+                  {enValidacion.map((d) => `${ETIQUETA_DOCUMENTO[d.tipo]} N° ${d.numero}`).join(' · ')}. Si la presentaste dentro
+                  del plazo, tu local no avanza en el circuito mientras la oficina la revisa.
                 </Aviso>
               )}
 
@@ -251,7 +266,13 @@ function Portal() {
                       {documentos.map((d) => (
                         <li key={d.id}>
                           {ETIQUETA_DOCUMENTO[d.tipo]} N° {d.numero} — expediente{' '}
-                          <strong>{d.expedienteTramite ?? 'no registrado'}</strong>
+                          <strong>
+                            {parametros?.portalMuestraNumerosExpediente
+                              ? (d.expedienteTramite ?? 'no registrado')
+                              : d.expedienteTramite
+                                ? 'registrado'
+                                : 'no registrado'}
+                          </strong>
                           {d.validado === false ? (
                             <Badge color="amarillo">En revisión</Badge>
                           ) : (
@@ -269,11 +290,35 @@ function Portal() {
                     <p className="texto-gris">No tenés expedientes de multa.</p>
                   ) : (
                     <ul className="lista-simple">
-                      {expedientesMulta.map((e) => (
-                        <li key={e.id}>
-                          N° <strong>{e.numeroExpediente || 'sin número todavía'}</strong> — iniciado el {fmtFecha(e.fecha)}
-                        </li>
-                      ))}
+                      {expedientesMulta.map((e) => {
+                        /* El titular ve el estado y las novedades PÚBLICAS: el
+                           backend ya le filtra lo interno de la oficina. */
+                        const situacion = SITUACION_PORTAL[e.idEstado] ?? 'Iniciado';
+                        const propias = (novedadesExpedientes ?? []).filter((n) => n.idTramite === e.id);
+                        return (
+                          <li key={e.id}>
+                            {/* El número se muestra solo si la Dirección lo decidió
+                                (PENDIENTE): por defecto, estado y desde cuándo. */}
+                            {parametros?.portalMuestraNumerosExpediente ? (
+                              <>
+                                N° <strong>{e.numeroExpediente || 'sin número todavía'}</strong> —{' '}
+                              </>
+                            ) : (
+                              <>Expediente de multa — </>
+                            )}
+                            <strong>{situacion.toLowerCase()}</strong> · {fmtFecha(e.fecha)}
+                            {propias.length > 0 && (
+                              <ul className="lista-simple">
+                                {propias.map((n) => (
+                                  <li key={n.id} className="texto-chico">
+                                    {fmtFecha(String(n.momento).slice(0, 10))}: {n.detalle}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>

@@ -67,6 +67,16 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
   function validar() {
     const e = {};
     if (!datos.numero.trim()) e.numero = 'El número del documento es obligatorio.';
+    // El expediente del trámite es OBLIGATORIO: sin él no se puede reconstruir
+    // qué trámite respalda la acreditación. Acá no hay excepción: la marca
+    // "sin expediente registrado" es SOLO para documentos que ya existían de
+    // antes, nunca para una carga nueva (sería la puerta para saltearse la
+    // obligatoriedad tildando y guardando sin número).
+    if (!datos.expedienteTramite.trim()) {
+      e.expedienteTramite = desdePortal
+        ? 'Indicá el número de expediente de tu trámite: te lo dieron al iniciarlo.'
+        : 'Es el número del trámite que inició la presentación. Toda presentación nueva lo tiene.';
+    }
     if (!datos.fechaEmision) e.fechaEmision = 'La fecha de emisión es obligatoria.';
     if (esContrato && !datos.fechaVencimiento) {
       e.fechaVencimiento = 'El contrato tiene que declarar su fecha de vencimiento.';
@@ -133,19 +143,25 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
           error={errores.numero}
         />
 
-        {/* El número lo asigna el sistema al guardar (TRAM-año-correlativo).
-            La oficina puede escribir uno si la presentación ya tiene número de
-            otro sistema; el titular no lo ve. */}
-        {!desdePortal && (
-          <Campo
-            id="doc-expediente"
-            etiqueta="N° de expediente del trámite (opcional)"
-            valor={datos.expedienteTramite}
-            onChange={(v) => cambiar('expedienteTramite', v)}
-            error={errores.expedienteTramite}
-            ayuda="Vacío: lo asigna el sistema al guardar (TRAM-2026-…). NO es el expediente de multa."
-          />
-        )}
+        {/* >>> EL EXPEDIENTE DEL TRÁMITE ES OBLIGATORIO Y NO SE INVENTA <<<
+            Presentar inicia un trámite POR FUERA del sistema, y ese trámite
+            tiene su número: es el respaldo administrativo de la acreditación.
+            El sistema NO lo autogenera (un número inventado para poder guardar
+            es un dato sin sentido). PENDIENTE con la Dirección: el pliego decía
+            que lo asignaba CiDiTuc y no es así; falta confirmar quién lo asigna
+            y dónde se abona el timbrado. */}
+        <Campo
+          id="doc-expediente"
+          etiqueta="N° de expediente del trámite"
+          valor={datos.expedienteTramite}
+          onChange={(v) => cambiar('expedienteTramite', v)}
+          error={errores.expedienteTramite}
+          ayuda={
+            desdePortal
+              ? 'Es el número que te dieron al iniciar el trámite de tu presentación en el municipio.'
+              : 'El número que recibió el titular al iniciar el trámite de la presentación. NO es el expediente de multa.'
+          }
+        />
 
         <Campo
           id="doc-emision"

@@ -12,7 +12,8 @@
     "humo": "node pruebas/humo-api.mjs",
     "criterios": "node pruebas/criterios-estado.mjs",
     "lector": "node pruebas/lector-informe.mjs",
-    "informe": "node pruebas/informe-9dj.mjs"
+    "informe": "node pruebas/informe-9dj.mjs",
+    "expedientes": "node --env-file=backend/.env pruebas/expedientes.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

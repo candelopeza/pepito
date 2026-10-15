@@ -1954,3 +1954,38 @@
    components/HistorialActuaciones.jsx: el botón va al pie de la actuación. */
 .hist-editar { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
 @media print { .hist-editar { display: none; } }
+
+/* ---------------------------------------------------------------------------
+   CELDAS DE ADVERTENCIA (Informe 9DJ)
+   ---------------------------------------------------------------------------
+   Un dato que vino mal en el archivo (CUIT que no cierra, contrato que ya
+   venció) tiene que GRITAR antes de que el agente confirme o rechace la fila.
+   A propósito NO es un .badge: la regla 14.18 apaga los colores dentro de las
+   tablas, y esto no es decoración, es una señal de cuidado.
+   --------------------------------------------------------------------------- */
+.celda-advertencia {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  background: #fdecea;
+  border: 2px solid #c62828;
+  border-radius: 6px;
+  padding: 3px 10px;
+  line-height: 1.25;
+  max-width: 100%;
+}
+.celda-advertencia strong {
+  color: #b71c1c;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+.celda-advertencia small {
+  color: #8d2f2a;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: normal;
+}
+
+/* El archivo abierto en el historial: la imagen con su botón de cerrar al lado. */
+.archivo-abierto { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }

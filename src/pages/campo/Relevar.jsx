@@ -35,15 +35,51 @@
    ============================================================================ */
 
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
 import Campo, { CampoSelect, CampoTexto } from '../../components/ui/Campo';
 import Aviso from '../../components/ui/Aviso';
 import Badge from '../../components/ui/Badge';
+import Grilla from '../../components/ui/Grilla';
 import { useDatos } from '../../datos/datosContexto';
 import { useRol } from '../../auth/rolContexto';
 import { CLASIFICACIONES } from '../../config/catalogos';
-import { fmtFechaHora, hoyISO } from '../../dominio/fechas';
+import { fmtFecha, fmtFechaHora, hoyISO } from '../../dominio/fechas';
+
+/* Las columnas del historial del agente. El estado de revisión es el dato
+   que cierra el circuito: el relevamiento vale cuando coordinación lo revisó. */
+const COLUMNAS_MIS_RELEVAMIENTOS = [
+  {
+    field: 'fechaHora',
+    headerName: 'Fecha',
+    width: 150,
+    renderCell: ({ row }) => fmtFechaHora(row.fechaHora),
+  },
+  {
+    field: 'nombreLocal',
+    headerName: 'Local',
+    flex: 1,
+    minWidth: 180,
+    renderCell: ({ row }) => (
+      <Link to={`/locales/${row.localId}`} className="link-local">
+        {row.nombreLocal}
+      </Link>
+    ),
+  },
+  { field: 'direccionRelevada', headerName: 'Dirección relevada', flex: 1, minWidth: 180 },
+  { field: 'clasificacion', headerName: 'Clasificación', width: 150 },
+  {
+    field: 'revisadoEn',
+    headerName: 'Revisión',
+    width: 190,
+    renderCell: ({ row }) =>
+      row.revisadoEn ? (
+        <Badge color="verde">Revisado el {fmtFecha(String(row.revisadoEn).slice(0, 10))}</Badge>
+      ) : (
+        <Badge color="amarillo">Espera revisión</Badge>
+      ),
+  },
+];
 
 /* Hasta qué antigüedad sirve la última posición del GPS al guardar. */
 const POSICION_RECIENTE_MS = 2 * 60 * 1000;
@@ -193,6 +229,16 @@ function Relevar() {
     ? relevamientos.filter((r) => r.idUsuario === usuario.id && String(r.fechaHora ?? '').slice(0, 10) === hoy && !r.revisadoEn)
     : [];
 
+  /* MIS RELEVAMIENTOS: el historial COMPLETO del agente firmante, del más
+     nuevo al más viejo y con el estado de revisión de cada uno. Las cargas de
+     hoy son lo corregible; esto es la constancia de todo el trabajo hecho. */
+  const misRelevamientos = usuario.id
+    ? relevamientos
+        .filter((r) => r.idUsuario === usuario.id)
+        .map((r) => ({ ...r, nombreLocal: localPorId(r.localId)?.nombreLocal ?? r.direccionRelevada ?? `Local N° ${r.localId}` }))
+        .sort((a, b) => String(b.fechaHora ?? '').localeCompare(String(a.fechaHora ?? '')))
+    : [];
+
   function corregir(r) {
     const local = localPorId(r.localId);
     setErrores({});
@@ -315,6 +361,27 @@ function Relevar() {
             ))}
           </ul>
         </>
+      )}
+
+      {/* ---------- Mis relevamientos: el historial completo del agente ---------- */}
+      <div className="accesos-header">
+        <span>Mis relevamientos ({misRelevamientos.length})</span>
+      </div>
+      {!usuario.id ? (
+        <Aviso tipo="alerta" titulo="Para ver tu historial, entrá firmando como un agente">
+          Estás con un usuario de prueba, que no existe en la base: lo que cargues queda guardado pero <strong>sin autor</strong>, y
+          por eso no puede aparecer acá. Elegí tu usuario con “Firmar como” en la barra (si no está, lo crea Dirección en Accesos →
+          Usuarios).
+        </Aviso>
+      ) : (
+        <Grilla
+          filas={misRelevamientos}
+          columnas={COLUMNAS_MIS_RELEVAMIENTOS}
+          nombreArchivo="mis-relevamientos"
+          vacio="Todavía no cargaste ningún relevamiento con este usuario."
+          alto="auto"
+          filasPorPagina={10}
+        />
       )}
 
       {/* ---------- Guardados en el teléfono que el servidor rechazó ----------

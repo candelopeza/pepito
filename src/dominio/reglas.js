@@ -125,10 +125,27 @@ export function resolverEstado(local, actuaciones, ctx = {}) {
   if (ult?.tipo === 'EXPEDIENTE') {
     // No es terminal: coordinación puede reingresar el local al circuito, y
     // eso genera una notificación posterior que pasa a ser la última.
+    // "Solicitado" se distingue: lo decidió una persona (pidió el número a la
+    // dependencia), mientras que "generar expediente" lo decide el sistema.
+    if (ult.idEstado === 25) return 'EXPEDIENTE_SOLICITADO';
     return 'EXPEDIENTE';
   }
 
   if (ult?.tipo === 'NOTIFICACION') {
+    // >>> PRESENTÓ EN TÉRMINO Y LA OFICINA TODAVÍA NO RESOLVIÓ <<<
+    // El plazo era para presentar: si el titular presentó dentro del plazo,
+    // el circuito no puede avanzar por la demora de la oficina en validar.
+    // Si la oficina rechaza, la presentación se da de baja y el estado vuelve
+    // a calcularse solo (con el plazo vencido, si venció).
+    const docs = propias.filter((a) => ['DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO'].includes(a.tipo));
+    const enTermino = docs.some(
+      (d) =>
+        d.validado === false &&
+        (d.fecha ?? '') >= (ult.fecha ?? '') &&
+        (!ult.fechaVencimiento || (d.fecha ?? '') <= ult.fechaVencimiento),
+    );
+    if (enTermino) return 'PRESENTACION_EN_REVISION';
+
     const n = ult.instancia;
 
     // Condición 5: cédula emitida y todavía no entregada. El plazo NO corre.
@@ -289,13 +306,30 @@ export const ACCIONES = [
     id: 'otorgar-prorroga',
     etiqueta: 'Otorgar prórroga',
     ayuda: 'Solo con las dos notificaciones agotadas y antes del expediente.',
-    estados: ['NOTIF2_ENTREGADA', 'NOTIF2_SIN_FIRMA', 'NOTIF2_FIJADA', 'GENERAR_EXPEDIENTE'],
+    /* También con la PRIMERA entregada o ya vencida: el titular puede pedir
+       más tiempo en cualquier punto del circuito de intimación, no solo al
+       final. Vencido el plazo, la prórroga sigue siendo la alternativa antes
+       del paso siguiente. */
+    estados: [
+      'NOTIF1_ENTREGADA', 'NOTIF1_SIN_FIRMA', 'NOTIF1_FIJADA',
+      'NOTIF2_PENDIENTE', 'COMPLETAR_DATOS',
+      'NOTIF2_ENTREGADA', 'NOTIF2_SIN_FIRMA', 'NOTIF2_FIJADA', 'GENERAR_EXPEDIENTE',
+    ],
     roles: ['coordinacion'],
+  },
+  {
+    id: 'solicitar-expediente',
+    etiqueta: 'Solicitar N° de expediente',
+    ayuda: 'Registra que se pidió el número a la dependencia que tramita las multas: fecha, agente y canal.',
+    estados: ['GENERAR_EXPEDIENTE'],
+    roles: ['administrativo', 'coordinacion'],
   },
   {
     id: 'registrar-expediente',
     etiqueta: 'Registrar expediente de multa',
-    estados: ['GENERAR_EXPEDIENTE'],
+    // También desde "solicitado": cuando la dependencia responde, la carga del
+    // número completa ese mismo expediente.
+    estados: ['GENERAR_EXPEDIENTE', 'EXPEDIENTE_SOLICITADO'],
     roles: ['administrativo', 'coordinacion'],
   },
   {

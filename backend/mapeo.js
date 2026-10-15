@@ -85,9 +85,12 @@ export const ID_ESTADO = {
   // objeto PRORROGA
   PRORROGA_VIGENTE: 20,
   PRORROGA_VENCIDA: 21,
-  // objeto EXPEDIENTE
+  // objeto EXPEDIENTE (la secuencia completa esta en sql/10-expedientes.sql)
   EXPEDIENTE_PENDIENTE: 23,
   EXPEDIENTE_GENERADO: 24,
+  EXPEDIENTE_SOLICITADO: 25,
+  EXPEDIENTE_EN_TRAMITE: 26,
+  EXPEDIENTE_CERRADO: 27,
 };
 
 /* tabla `tipo_documentacion`. */
@@ -330,6 +333,11 @@ export function aActuacionFront(fila, documentoPorTramite = new Map()) {
         ...comun,
         tipo: 'EXPEDIENTE',
         numeroExpediente: fila.numeroReferencia ?? null,
+        // Con fecha de cierre, el expediente QUEDÓ ATRÁS: coordinación
+        // reingresó el comercio al circuito y la intimación arrancó de nuevo.
+        // La ficha lo dice con todas las letras para que expediente y
+        // notificación nueva no parezcan un error del sistema.
+        quedoAtras: Boolean(fila.fechaCierre),
       };
 
     case ID_TTRAMITE.RELEVAMIENTO:
@@ -515,10 +523,39 @@ export function estadoDeLocal(local, tramites = [], hoy = hoyISO()) {
 
   if (ultimo?.tipo === 'EXPEDIENTE') {
     // No es terminal: coordinación puede reingresar el local (etapa 6).
-    return ultimo.idEstado === ID_ESTADO.EXPEDIENTE_GENERADO ? 'EXPEDIENTE' : 'GENERAR_EXPEDIENTE';
+    //
+    // SOLICITADO se distingue a propósito de GENERAR_EXPEDIENTE: el primero lo
+    // decidió una persona (pidió el número a la otra dependencia) y el segundo
+    // lo decide el sistema al recalcular. Si se unificaran, nunca se sabría
+    // cuántos expedientes están habilitados y nadie pidió todavía.
+    if (ultimo.idEstado === ID_ESTADO.EXPEDIENTE_SOLICITADO) return 'EXPEDIENTE_SOLICITADO';
+    // Generado, en trámite o cerrado: el local tiene su expediente. El detalle
+    // del recorrido vive en la bitácora, no en el estado del local.
+    if ([ID_ESTADO.EXPEDIENTE_GENERADO, ID_ESTADO.EXPEDIENTE_EN_TRAMITE, ID_ESTADO.EXPEDIENTE_CERRADO].includes(ultimo.idEstado)) {
+      return 'EXPEDIENTE';
+    }
+    return 'GENERAR_EXPEDIENTE';
   }
 
   if (ultimo?.tipo === 'NOTIFICACION') {
+    /* >>> PRESENTÓ EN TÉRMINO Y LA OFICINA TODAVÍA NO RESOLVIÓ <<<
+       Los días del plazo son para que el local presente la documentación. Si
+       presentó DENTRO del plazo y la presentación espera validación, el
+       circuito no avanza por la demora de la oficina: el local se muestra "en
+       revisión" y el vencimiento no se ejecuta. No es que la presentación
+       acredite por sí sola (sección 6.3: eso recién pasa al aprobarse): solo
+       congela el avance sancionatorio hasta que una persona resuelva. Si la
+       oficina rechaza, el documento se da de baja y el estado vuelve a
+       calcularse solo, con el plazo vencido si venció. Presentar FUERA de
+       término no congela nada. */
+    const presentoEnTermino = documentos.some(
+      (d) =>
+        d.idEstado === ID_ESTADO.DOC_PENDIENTE_REVISION &&
+        (d.fecha ?? '') >= (ultimo.fecha ?? '') &&
+        (!ultimo.fechaVencimiento || (d.fecha ?? '') <= ultimo.fechaVencimiento),
+    );
+    if (presentoEnTermino) return 'PRESENTACION_EN_REVISION';
+
     const n = ultimo.instancia;
     const sufijo = SUFIJO_NOTIFICACION[ultimo.idEstado];
 

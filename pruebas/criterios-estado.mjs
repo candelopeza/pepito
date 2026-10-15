@@ -257,6 +257,34 @@ verificar(
   'NOTIF2_PENDIENTE',
 );
 
+verificar(
+  'presentada DENTRO del plazo, la revisión de la oficina congela el avance',
+  estadoDeLocal(
+    local(),
+    [
+      notificacion(1, ID_ESTADO.NOTIF_ENTREGADA, { fecha: '2026-01-10', fechaVencimiento: '2026-02-01' }),
+      // Presentó el 25/01, antes del vencimiento del 01/02: los días del plazo
+      // eran para esto. El circuito no avanza por la demora en validar.
+      documento('DDJJ', { fecha: '2026-01-25', fechaVencimiento: '2027-01-25', idEstado: ID_ESTADO.DOC_PENDIENTE_REVISION }),
+    ],
+    HOY,
+  ),
+  'PRESENTACION_EN_REVISION',
+);
+
+verificar(
+  'si la oficina la aprueba, el local acredita (sale del circuito)',
+  estadoDeLocal(
+    local(),
+    [
+      notificacion(1, ID_ESTADO.NOTIF_ENTREGADA, { fecha: '2026-01-10', fechaVencimiento: '2026-02-01' }),
+      documento('DDJJ', { fecha: '2026-01-25', fechaVencimiento: '2027-01-25' }),
+    ],
+    HOY,
+  ),
+  'DDJJ_VIGENTE',
+);
+
 /* ==========================================================================
    PRÓRROGA
    ========================================================================== */

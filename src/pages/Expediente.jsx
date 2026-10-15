@@ -57,6 +57,9 @@ function Expediente() {
   } = useDatos();
   const { rol } = useRol();
   const puedeCargarNumero = puedeEditar(rol, 'expedientes', permisos);
+  // El NÚMERO (completar un provisorio o corregir uno cargado) es solo del
+  // personal administrativo: es quien habla con la mesa de entradas.
+  const puedeTocarNumero = ['administrativo', 'administrador'].includes(rol);
   // El expediente provisorio al que se le está cargando el número definitivo.
   const [definitivo, setDefinitivo] = useState(null);
   const [numero, setNumero] = useState('');
@@ -231,7 +234,7 @@ function Expediente() {
           String(row.numeroExpediente ?? '').startsWith('PROV-') ? (
             <span className="celda-apilada">
               <strong>{row.numeroExpediente}</strong>
-              {puedeCargarNumero ? (
+              {puedeTocarNumero ? (
                 <button
                   type="button"
                   className="btn-tabla"
@@ -253,7 +256,7 @@ function Expediente() {
               <strong>{row.numeroExpediente}</strong>
               {/* El número guardado no se edita: se CORRIGE, con motivo que
                   queda en la bitácora. */}
-              {puedeCargarNumero && (
+              {puedeTocarNumero && (
                 <button
                   type="button"
                   className="btn-tabla"

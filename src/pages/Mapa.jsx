@@ -46,13 +46,18 @@ import { LISTA_ESTADOS, colorEstado, etiquetaEstado } from '../dominio/estados';
 
 /* Los colores de los badges, para que el punto del mapa y la pastilla de la
    grilla sean del mismo color. Si divergen, el mapa deja de ser legible. */
+/* Paleta propia del mapa: más saturada y oscura que la de los badges, porque
+   sobre el fondo pastel de OpenStreetMap el amarillo y el gris claros
+   desaparecían. Seis colores que se distinguen entre sí incluso de a cientos
+   de puntos (el amarillo pasa a dorado oscuro y el gris a pizarra). Para
+   cambiar un color, se cambia acá y la leyenda lo toma sola. */
 const COLOR_HEX = {
-  verde: '#2e7d32',
-  naranja: '#ef6c00',
-  azul: '#1565c0',
-  amarillo: '#f9a825',
-  rojo: '#c62828',
-  gris: '#90a4ae',
+  verde: '#1b5e20',
+  naranja: '#e65100',
+  azul: '#01579b',
+  amarillo: '#b28704',
+  rojo: '#b71c1c',
+  gris: '#455a64',
 };
 
 /* El centro del ejido y el acercamiento inicial. 13 muestra la ciudad entera
@@ -63,7 +68,7 @@ const ZOOM = 13;
 /* Radio del punto en píxeles. Chico a propósito: con casi dos mil locales, un
    marcador con forma de gota tapa el mapa entero y no se ve la distribución,
    que es justamente para lo que se usa esta pantalla. */
-const RADIO = 5;
+const RADIO = 6;
 
 /* Los locales que no entraron al mapa. Van en la misma tabla que el resto del
    sistema: con 253 registros, una lista suelta no se puede ni buscar ni

@@ -238,7 +238,10 @@ if (!candidato) {
   seccion('El número guardado no se edita: se corrige, con motivo y bitácora');
   {
     const numeroNuevo = `${900000 + Math.floor(Math.random() * 99999)}/${anio}`;
-    const sinMotivo = await pedir(`/expedientes/${idExpediente}/numero`, { metodo: 'PUT', cuerpo: { numero: numeroNuevo } });
+    const comoCoordinacion = await pedir(`/expedientes/${idExpediente}/numero`, { metodo: 'PUT', cuerpo: { numero: numeroNuevo, motivo: 'x' }, rol: 'coordinacion' });
+    verificar('coordinación NO puede tocar el número: es tarea del administrativo', comoCoordinacion.estado === 403, JSON.stringify(comoCoordinacion.cuerpo));
+
+    const sinMotivo = await pedir(`/expedientes/${idExpediente}/numero`, { metodo: 'PUT', cuerpo: { numero: numeroNuevo }, rol: 'administrativo' });
     verificar('corregir sin motivo se rechaza', sinMotivo.estado === 400, JSON.stringify(sinMotivo.cuerpo));
 
     // El numero de OTRO expediente no se puede usar: es el error mas caro.
@@ -248,6 +251,7 @@ if (!candidato) {
       const duplicado = await pedir(`/expedientes/${idExpediente}/numero`, {
         metodo: 'PUT',
         cuerpo: { numero: ajeno.numeroExpediente, motivo: 'prueba de duplicado' },
+        rol: 'administrativo',
       });
       verificar('el número de OTRO comercio se rechaza (el error más caro)', duplicado.estado === 409, JSON.stringify(duplicado.cuerpo));
     }
@@ -255,6 +259,7 @@ if (!candidato) {
     const corregido = await pedir(`/expedientes/${idExpediente}/numero`, {
       metodo: 'PUT',
       cuerpo: { numero: numeroNuevo, motivo: 'Error de tipeo en un dígito (prueba automática).' },
+      rol: 'administrativo',
     });
     verificar('con motivo, la corrección entra', corregido.estado === 200 && corregido.cuerpo?.numeroExpediente === numeroNuevo, JSON.stringify(corregido.cuerpo).slice(0, 120));
 

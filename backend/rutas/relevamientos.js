@@ -29,7 +29,7 @@
 
 import { Router } from 'express';
 import { consultar, enTransaccion } from '../conexion-bd.js';
-import { idDeRubro, insertarTramite, localPorId, recortarObservacion, tramitePorId, tramitesPorTipo } from '../consultas.js';
+import { idDeRubro, insertarTramite, localPorId, parametros, recortarObservacion, tramitePorId, tramitesPorTipo } from '../consultas.js';
 import { ID_ESTADO, ID_TTRAMITE } from '../mapeo.js';
 import { requiereRol } from '../middlewares/usuario.js';
 import { geocodificarDireccion } from '../geocodificador.js';
@@ -211,6 +211,18 @@ router.put('/:id', requiereRol('relevador', 'coordinacion'), async (req, res, ne
     }
     if (String(tramite.fechaHora ?? '').slice(0, 10) !== hoyISO()) {
       return res.status(409).json({ error: 'El relevamiento es de otro día: la corrección la hace la oficina desde el padrón.' });
+    }
+    /* La ventana del relevador tiene HORA de cierre, además del día: hasta la
+       hora límite (parámetro) puede corregir lo suyo; después, la corrección
+       es de la oficina. Coordinación no tiene esta restricción. */
+    if (req.usuario?.rol === 'relevador') {
+      const params = await parametros();
+      const limite = Number(params.horaLimiteCorreccionRelevador);
+      if (Number.isFinite(limite) && limite > 0 && new Date().getHours() >= limite) {
+        return res.status(409).json({
+          error: `Las correcciones del relevador cierran a las ${limite}:00. La corrección ahora la hace la oficina desde el padrón.`,
+        });
+      }
     }
     if (tramite.revisadoEn) {
       return res.status(409).json({ error: 'Coordinación ya controló este relevamiento: la corrección la hace la oficina.' });

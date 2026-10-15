@@ -96,6 +96,12 @@ const VALIDAR_PARAMETRO = {
   emisionRespaldo: (v) => typeof v === 'boolean',
   topeProrrogaDias: (v) => Number.isInteger(v) && v >= 0 && v <= 365,
   maxProrrogasPorLocal: (v) => Number.isInteger(v) && v >= 0 && v <= 20,
+  // Hasta qué hora del día corrige el relevador sus propias cargas.
+  horaLimiteCorreccionRelevador: (v) => Number.isInteger(v) && v >= 0 && v <= 23,
+  // A quién se le pide el número del expediente de multa (puede quedar vacío).
+  correoSolicitudExpedientes: (v) => typeof v === 'string' && v.length <= 200,
+  // ¿El titular ve los números de expediente en el portal? Decisión de la Dirección.
+  portalMuestraNumerosExpediente: (v) => typeof v === 'boolean',
   // { CODIGO: 'texto' }: solo códigos que existen y textos cortos. El código
   // no se toca (sección 3.1: código estable, etiqueta editable).
   etiquetasEstado: (v) =>

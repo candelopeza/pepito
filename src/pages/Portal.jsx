@@ -146,8 +146,9 @@ function Portal() {
       )}
 
       {mios.length === 0 ? (
-        <Vacio titulo="No hay locales asociados a tu CUIL">
-          Si tenés un establecimiento a tu nombre y no aparece acá, comunicate con la Dirección de Ambiente.
+        <Vacio titulo="No tenés cargado ningún local">
+          A tu CUIL no le figura ningún establecimiento en el padrón de Grandes Generadores. Si tenés un local a tu nombre y creés
+          que debería aparecer acá, comunicate con la Dirección de Ambiente de la Municipalidad de San Miguel de Tucumán.
         </Vacio>
       ) : (
         mios.map((l) => {

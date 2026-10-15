@@ -42,23 +42,54 @@ import Grilla from '../components/ui/Grilla';
 import Aviso from '../components/ui/Aviso';
 import { CampoSelect } from '../components/ui/Campo';
 import { useDatos } from '../datos/datosContexto';
-import { LISTA_ESTADOS, colorEstado, etiquetaEstado } from '../dominio/estados';
+import { LISTA_ESTADOS, etiquetaEstado } from '../dominio/estados';
 
 /* Los colores de los badges, para que el punto del mapa y la pastilla de la
    grilla sean del mismo color. Si divergen, el mapa deja de ser legible. */
-/* Paleta propia del mapa: más saturada y oscura que la de los badges, porque
-   sobre el fondo pastel de OpenStreetMap el amarillo y el gris claros
-   desaparecían. Seis colores que se distinguen entre sí incluso de a cientos
-   de puntos (el amarillo pasa a dorado oscuro y el gris a pizarra). Para
-   cambiar un color, se cambia acá y la leyenda lo toma sola. */
-const COLOR_HEX = {
-  verde: '#1b5e20',
-  naranja: '#e65100',
-  azul: '#01579b',
-  amarillo: '#b28704',
-  rojo: '#b71c1c',
-  gris: '#455a64',
+/* >>> UN COLOR POR ESTADO, NO POR GRUPO <<<
+   Los badges usan seis colores por familia, y en el mapa eso dejaba cuatro
+   verdes y tres rojos imposibles de distinguir. Acá cada estado tiene SU
+   color, elegido a mano para que se separen bien sobre el fondo claro de
+   OpenStreetMap. Las variantes de una misma entrega (entregada / sin firma /
+   fijada) comparten la familia con tonos escalonados: son la misma situación
+   operativa y casi nunca conviven en cantidad; todo lo demás es distinto
+   entre sí. Para cambiar un color se cambia acá, y la leyenda lo toma sola. */
+const COLOR_POR_ESTADO = {
+  // el padrón
+  REVISION_DATOS: '#9a6324', // marrón
+  COMPLETAR_DATOS: '#f032e6', // magenta
+  // exentos y cerrados
+  EXENTO_REVISION: '#4363d8', // azul
+  EXENTO_CONFIRMADO: '#000075', // azul marino
+  INACTIVO_CERRADO: '#a9a9a9', // gris
+  // documental (cumple)
+  CONTRATO_VIGENTE: '#2e7d32', // verde
+  CONTRATO_9DJ: '#469990', // verde azulado
+  DDJJ_VIGENTE: '#9acd32', // lima
+  DDJJ_RECICLAJE: '#556b2f', // oliva
+  PRESENTACION_EN_REVISION: '#26c6da', // celeste
+  // primera notificación (amarillos y naranjas)
+  NOTIF1_PENDIENTE: '#ffd600',
+  NOTIF1_GENERADA: '#ffab00',
+  NOTIF1_ENTREGADA: '#f57c00',
+  NOTIF1_SIN_FIRMA: '#ef6c00',
+  NOTIF1_FIJADA: '#e65100',
+  NOTIF1_NO_ENTREGADA: '#bf360c', // ladrillo
+  // segunda notificación (rosas y vinos)
+  NOTIF2_PENDIENTE: '#f48fb1',
+  NOTIF2_GENERADA: '#ec407a',
+  NOTIF2_ENTREGADA: '#c2185b',
+  NOTIF2_SIN_FIRMA: '#ad1457',
+  NOTIF2_FIJADA: '#880e4f',
+  NOTIF2_NO_ENTREGADA: '#560027', // vino
+  // sancionatorio
+  PRORROGA_VIGENTE: '#8e24aa', // violeta
+  GENERAR_EXPEDIENTE: '#e6194b', // rojo frambuesa
+  EXPEDIENTE_SOLICITADO: '#b71c1c', // rojo oscuro
+  EXPEDIENTE: '#000000', // negro
 };
+const COLOR_DESCONOCIDO = '#78909c';
+const colorDeEstado = (codigo) => COLOR_POR_ESTADO[codigo] ?? COLOR_DESCONOCIDO;
 
 /* El centro del ejido y el acercamiento inicial. 13 muestra la ciudad entera
    sin que los puntos se pisen. */
@@ -173,13 +204,15 @@ function Mapa() {
           )}
 
           {conUbicacion.map((local) => {
-            const color = COLOR_HEX[colorEstado(local.estado)] ?? COLOR_HEX.gris;
+            const color = colorDeEstado(local.estado);
             return (
               <CircleMarker
                 key={local.id}
                 center={[local.latitud, local.longitud]}
                 radius={RADIO}
-                pathOptions={{ color: '#fff', weight: 1, fillColor: color, fillOpacity: 0.9 }}
+                /* Borde oscuro y no blanco: los colores claros (amarillo, lima,
+                   rosa) se recortan contra el fondo claro del mapa. */
+                pathOptions={{ color: '#37474f', weight: 1, fillColor: color, fillOpacity: 0.95 }}
               >
                 {/* El tooltip aparece al pasar por encima: permite barrer el
                     mapa sin tener que hacer clic en cada punto. */}
@@ -218,7 +251,7 @@ function Mapa() {
             <span key={codigo}>
               <i
                 className="mapa-punto-leyenda"
-                style={{ background: COLOR_HEX[colorEstado(codigo)] ?? COLOR_HEX.gris }}
+                style={{ background: colorDeEstado(codigo) }}
               />
               {etiquetaEstado(codigo)}
             </span>

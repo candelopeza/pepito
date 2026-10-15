@@ -35,9 +35,10 @@ import Badge from '../../components/ui/Badge';
 import Aviso, { Vacio } from '../../components/ui/Aviso';
 import Modal from '../../components/ui/Modal';
 import Confirmar from '../../components/ui/Confirmar';
+import FormLocal from '../../components/FormLocal';
 import { api } from '../../datos/api';
 import { useDatos } from '../../datos/datosContexto';
-import { fmtFecha } from '../../dominio/fechas';
+import { fmtFecha, hoyISO } from '../../dominio/fechas';
 
 /* Cómo se muestra cada decisión. El color repite el lenguaje del resto del
    sistema: verde confirma, rojo rechaza, gris espera. */
@@ -56,6 +57,14 @@ const ESTADO_CARGA = {
   DESCARTADO: { etiqueta: 'Descartado', color: 'gris' },
   ANULADO: { etiqueta: 'Anulado', color: 'rojo' },
 };
+
+/* Para el buscador del vínculo: sin tildes y en mayúsculas, así "PEÑA" y
+   "pena" se encuentran igual. */
+const normalizarTexto = (t) =>
+  String(t ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase();
 
 /* El archivo del input a base64, leyéndolo como data URL: es binario-seguro
    (una planilla .xlsx o un PDF no sobreviven a pasar por texto). */
@@ -84,6 +93,10 @@ function Informe9DJ() {
   const [confirmarDescartar, setConfirmarDescartar] = useState(false);
   const [vinculando, setVinculando] = useState(null); // la fila del modal de vínculo
   const [numeroVinculo, setNumeroVinculo] = useState('');
+  const [busquedaVinculo, setBusquedaVinculo] = useState('');
+  // El backend frenó un vínculo que no se parece en nada: { idLocal, comparacion }.
+  const [vinculoDudoso, setVinculoDudoso] = useState(null);
+  const [dandoAlta, setDandoAlta] = useState(null); // la fila del modal de alta
   const [anulando, setAnulando] = useState(null); // la carga del modal de anulación
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
 
@@ -139,7 +152,7 @@ function Informe9DJ() {
     async (fila, decision, idLocal) => {
       setError(null);
       try {
-        const r = await api.informe9djDecidir(carga.id, fila.id, decision, idLocal);
+        const r = await api.informe9djDecidir(carga.id, fila.id, { decision, idLocal });
         setCarga((previa) => ({
           ...previa,
           filas: previa.filas.map((f) => (f.id === fila.id ? { ...f, decision: r.decision, idLocal: r.idLocal } : f)),
@@ -151,16 +164,60 @@ function Informe9DJ() {
     [carga?.id],
   );
 
+  const cerrarVinculo = useCallback(() => {
+    setVinculando(null);
+    setNumeroVinculo('');
+    setBusquedaVinculo('');
+    setVinculoDudoso(null);
+  }, []);
+
+  /* Vincular tiene su propio manejo de errores: cuando el backend frena un
+     vínculo que no se parece en nada (ni CUIT, ni dirección, ni nombre), la
+     respuesta trae los dos lados para mostrarlos, y el agente decide si lo
+     confirma igual (forzar). */
   const vincular = useCallback(
-    async (fila, idLocal) => {
-      await decidir(fila, 'VINCULADA', idLocal);
-      setVinculando(null);
-      setNumeroVinculo('');
+    async (fila, idLocal, forzar = false) => {
+      setError(null);
+      try {
+        await api.informe9djDecidir(carga.id, fila.id, { decision: 'VINCULADA', idLocal, forzar });
+      } catch (e) {
+        if (e.estado === 409 && e.cuerpo?.comparacion) {
+          setVinculoDudoso({ idLocal, comparacion: e.cuerpo.comparacion, mensaje: e.message });
+          return;
+        }
+        setError(e.message);
+        cerrarVinculo();
+        return;
+      }
+      cerrarVinculo();
       // El vínculo cambia qué locales sostiene la foto: las bajas propuestas
-      // pueden haber cambiado, así que se repide el detalle.
+      // pueden haber cambiado, así que se repide el detalle entero.
       setCarga(await api.informe9djCarga(carga.id));
     },
-    [decidir, carga?.id],
+    [carga?.id, cerrarVinculo],
+  );
+
+  /* El alta revisada en el formulario del padrón. El local NO se crea acá:
+     los datos quedan guardados en la fila y el local nace al aplicar el
+     informe (si la carga se descarta, no queda rastro, como pide el pliego). */
+  const guardarAlta = useCallback(
+    async (fila, datosAlta) => {
+      setError(null);
+      try {
+        const r = await api.informe9djDecidir(carga.id, fila.id, { decision: 'ALTA', datosAlta });
+        setCarga((previa) => ({
+          ...previa,
+          filas: previa.filas.map((f) =>
+            f.id === fila.id ? { ...f, decision: r.decision, idLocal: r.idLocal, datosAlta: r.datosAlta } : f,
+          ),
+        }));
+        setDandoAlta(null);
+      } catch (e) {
+        setError(e.message);
+        setDandoAlta(null);
+      }
+    },
+    [carga?.id],
   );
 
   /* ---------- aplicar / descartar / anular ---------- */
@@ -224,24 +281,46 @@ function Informe9DJ() {
           </button>
         );
 
-      if (fila.cruce === 'ENCONTRADO') {
+      /* La pregunta es si la fila TIENE un local (porque cruzó sola o porque
+         el agente la vinculó a mano): con local se confirma o se rechaza; sin
+         local se da de alta o se vincula. Antes se miraba solo el cruce y una
+         fila vinculada quedaba sin forma de confirmarse. */
+      if (fila.idLocal) {
         return (
           <span className="acciones-fila">
             {boton('CONFIRMADA', 'Confirmar', 'btn-primario')}
             {boton('RECHAZADA', 'Rechazar')}
             {boton('PENDIENTE', 'Pendiente')}
+            {fila.cruce !== 'ENCONTRADO' && (
+              <button type="button" className="btn-secundario btn-chico" onClick={() => setVinculando(fila)}>
+                Cambiar vínculo…
+              </button>
+            )}
           </span>
         );
       }
+      /* Con coincidencias parecidas a la vista, lo primero es mirarlas: el
+         alta pasa a segundo plano para no crear un duplicado de un local que
+         ya existe con el CUIT mal escrito. */
+      const hayParecidos = fila.cruce === 'PARECIDO' && fila.candidatos.length > 0;
       return (
         <span className="acciones-fila">
-          {boton('ALTA', 'Dar de alta', 'btn-primario')}
-          {fila.decision !== 'VINCULADA' && (
-            <button type="button" className="btn-secundario btn-chico" onClick={() => setVinculando(fila)}>
-              Vincular…
-            </button>
-          )}
+          <button
+            type="button"
+            className={`${hayParecidos ? 'btn-primario' : 'btn-secundario'} btn-chico`}
+            onClick={() => setVinculando(fila)}
+          >
+            {hayParecidos ? 'Elegir cuál es…' : 'Vincular…'}
+          </button>
+          <button
+            type="button"
+            className={`${hayParecidos ? 'btn-secundario' : 'btn-primario'} btn-chico`}
+            onClick={() => setDandoAlta(fila)}
+          >
+            {fila.decision === 'ALTA' ? 'Revisar el alta…' : 'Dar de alta…'}
+          </button>
           {boton('PENDIENTE', 'Pendiente')}
+          {boton('RECHAZADA', 'Rechazar')}
         </span>
       );
     },
@@ -254,15 +333,23 @@ function Informe9DJ() {
       {
         field: 'cuit',
         headerName: 'CUIT',
-        width: 150,
-        renderCell: ({ row }) =>
-          row.cuitValido ? (
-            row.cuit
-          ) : (
-            <span title={row.motivoCuit ?? ''}>
-              <Badge color="rojo">{row.cuit || 'sin CUIT'} ⚠</Badge>
+        width: 210,
+        renderCell: ({ row }) => {
+          if (row.cuitValido) return row.cuit;
+          // El motivo va ESCRITO, no escondido en el hover: es lo que el
+          // agente tiene que leer antes de decidir qué hacer con la fila.
+          const motivo = !row.cuit
+            ? 'la fila vino sin CUIT'
+            : row.cuit.length !== 11
+              ? `tiene ${row.cuit.length} dígitos, deben ser 11`
+              : 'el dígito verificador no cierra';
+          return (
+            <span className="celda-advertencia" title={row.motivoCuit ?? ''}>
+              <strong>⚠ {row.cuit || 'SIN CUIT'}</strong>
+              <small>{motivo}</small>
             </span>
-          ),
+          );
+        },
       },
       { field: 'razonSocial', headerName: 'Razón social', flex: 1, minWidth: 180 },
       { field: 'direccion', headerName: 'Dirección', flex: 1, minWidth: 170 },
@@ -270,8 +357,24 @@ function Informe9DJ() {
       {
         field: 'vencimiento',
         headerName: 'Vencimiento',
-        width: 110,
-        renderCell: ({ row }) => (row.vencimiento ? fmtFecha(row.vencimiento) : <span className="texto-gris">—</span>),
+        width: 175,
+        renderCell: ({ row }) => {
+          if (!row.vencimiento) return <span className="texto-gris">—</span>;
+          // Un contrato que YA viene vencido no se puede cargar (lo rechaza el
+          // backend): se marca para que el agente lo vea antes de intentarlo.
+          if (row.vencimiento < hoyISO()) {
+            return (
+              <span
+                className="celda-advertencia"
+                title="Este contrato ya viene vencido: no se puede confirmar, vincular ni dar de alta. Rechazalo o dejalo pendiente y pedí la aclaración a la prestataria."
+              >
+                <strong>⚠ {fmtFecha(row.vencimiento)}</strong>
+                <small>ya venció: no se carga</small>
+              </span>
+            );
+          }
+          return fmtFecha(row.vencimiento);
+        },
       },
       {
         field: 'idLocal',
@@ -286,8 +389,15 @@ function Informe9DJ() {
               </Link>
             );
           }
+          if (row.decision === 'ALTA') {
+            return <span title="El local se crea al aplicar el informe">se creará «{row.datosAlta?.nombreLocal ?? row.razonSocial}»</span>;
+          }
           if (row.candidatos.length) {
-            return <Badge color="naranja">{row.candidatos.length} sucursales posibles</Badge>;
+            return (
+              <span title="El CUIT no cruzó solo, pero hay locales con la misma dirección o un nombre parecido. Tocá «Elegir cuál es…» para verlos.">
+                <Badge color="naranja">{row.candidatos.length} coincidencia(s) parecida(s)</Badge>
+              </span>
+            );
           }
           return <span className="texto-gris">no está en el padrón</span>;
         },
@@ -304,7 +414,7 @@ function Informe9DJ() {
       {
         field: 'acciones',
         headerName: 'Revisar',
-        width: 250,
+        width: 320,
         sortable: false,
         filterable: false,
         renderCell: ({ row }) => botonesDecision(row),
@@ -407,6 +517,8 @@ function Informe9DJ() {
         width: 110,
         sortable: false,
         filterable: false,
+        // La única puerta para deshacer una carga aplicada (los contratos del
+        // informe no se editan desde la ficha): pide motivo y queda firmada.
         renderCell: ({ row }) =>
           row.estado === 'APLICADO' ? (
             <button type="button" className="btn-peligro btn-chico" onClick={() => setAnulando(row)}>
@@ -423,6 +535,24 @@ function Informe9DJ() {
   const sinRevisar = filas.filter((f) => f.decision === 'SIN_REVISAR').length;
   const cuentas = carga?.cuentas ?? {};
   const candidatosDelVinculo = (vinculando?.candidatos ?? []).map((id) => porId.get(id)).filter(Boolean);
+
+  /* El buscador del vínculo: por nombre, razón social, CUIT o dirección. Los
+     agentes del área no conocen el número interno de local, así que buscar
+     por texto es el camino normal; el número queda como atajo. */
+  const textoBusqueda = normalizarTexto(busquedaVinculo).trim();
+  const digitosBusqueda = textoBusqueda.replace(/\D/g, '');
+  const resultadosBusqueda =
+    textoBusqueda.length >= 3
+      ? localesConEstado
+          .filter(
+            (l) =>
+              normalizarTexto(l.nombreLocal).includes(textoBusqueda) ||
+              normalizarTexto(l.razonSocial).includes(textoBusqueda) ||
+              normalizarTexto(l.direccion).includes(textoBusqueda) ||
+              (digitosBusqueda.length >= 4 && String(l.cuit ?? '').replace(/\D/g, '').includes(digitosBusqueda)),
+          )
+          .slice(0, 8)
+      : [];
 
   return (
     <>
@@ -632,45 +762,169 @@ function Informe9DJ() {
         abierto={Boolean(vinculando)}
         etiqueta="VINCULAR"
         titulo={`¿Qué local es "${vinculando?.razonSocial || vinculando?.cuit || ''}"?`}
-        onCerrar={() => {
-          setVinculando(null);
-          setNumeroVinculo('');
-        }}
+        onCerrar={cerrarVinculo}
       >
-        {candidatosDelVinculo.length > 0 && (
+        {/* El backend frenó el vínculo porque los datos no se parecen en nada:
+            se muestran los dos lados y la decisión final es del agente. */}
+        {vinculoDudoso ? (
           <>
-            <p>El CUIT corresponde a varias sucursales. Elegí la que es:</p>
-            <ul className="lista-candidatos">
-              {candidatosDelVinculo.map((l) => (
-                <li key={l.id}>
-                  <button type="button" className="btn-secundario btn-chico" onClick={() => vincular(vinculando, l.id)}>
-                    Vincular
-                  </button>{' '}
-                  <strong>{l.nombreLocal}</strong> — {l.direccion} (N° {l.id})
-                </li>
+            <Aviso tipo="alerta" titulo="Los datos no coinciden">
+              Ni el CUIT, ni la dirección, ni el nombre se parecen. Compará antes de confirmar:
+            </Aviso>
+            <table className="tabla-datos">
+              <tbody>
+                <tr>
+                  <th />
+                  <th>El informe dice</th>
+                  <th>El local elegido es</th>
+                </tr>
+                <tr>
+                  <th>Nombre</th>
+                  <td>{vinculoDudoso.comparacion.fila.razonSocial || '—'}</td>
+                  <td>
+                    {vinculoDudoso.comparacion.local.nombreLocal || '—'}
+                    {vinculoDudoso.comparacion.local.razonSocial ? ` (${vinculoDudoso.comparacion.local.razonSocial})` : ''}
+                  </td>
+                </tr>
+                <tr>
+                  <th>CUIT</th>
+                  <td>{vinculoDudoso.comparacion.fila.cuit || '—'}</td>
+                  <td>{vinculoDudoso.comparacion.local.cuit || '—'}</td>
+                </tr>
+                <tr>
+                  <th>Dirección</th>
+                  <td>{vinculoDudoso.comparacion.fila.direccion || '—'}</td>
+                  <td>{vinculoDudoso.comparacion.local.direccion || '—'}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="barra-lote">
+              <button type="button" className="btn-secundario" onClick={() => setVinculoDudoso(null)}>
+                Volver a buscar
+              </button>
+              <button type="button" className="btn-peligro" onClick={() => vincular(vinculando, vinculoDudoso.idLocal, true)}>
+                Son el mismo local: vincular igual
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {vinculando && !vinculando.cuitValido && (
+              <Aviso tipo="alerta" titulo="Cuidado: el CUIT de esta fila no cierra">
+                {vinculando.motivoCuit ?? 'El CUIT vino mal en el archivo.'} Cotejá contra el archivo original (columna “Como vino en
+                el archivo”) antes de vincular: puede ser otro comercio.
+              </Aviso>
+            )}
+            {candidatosDelVinculo.length > 0 && (
+              <>
+                <p>
+                  {vinculando?.cuitValido && candidatosDelVinculo.every((l) => String(l.cuit ?? '').replace(/\D/g, '') === vinculando.cuit)
+                    ? 'El CUIT corresponde a varias sucursales. Elegí la que es:'
+                    : 'Estos locales del padrón se parecen (misma dirección o nombre parecido, aunque el CUIT no coincida). Compará y elegí:'}
+                </p>
+                <ul className="lista-candidatos">
+                  {candidatosDelVinculo.map((l) => (
+                    <li key={l.id}>
+                      <button type="button" className="btn-secundario btn-chico" onClick={() => vincular(vinculando, l.id)}>
+                        Vincular
+                      </button>{' '}
+                      <strong>{l.nombreLocal}</strong> — {l.direccion || 'sin dirección'}
+                      {l.cuit ? ` · CUIT ${l.cuit}` : ''} (N° {l.id})
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            <p>{candidatosDelVinculo.length > 0 ? 'O buscá otro local del padrón:' : 'Buscá el local en el padrón:'}</p>
+            <label className="campo" htmlFor="busqueda-vinculo">
+              <span>Por nombre, razón social, CUIT o dirección</span>
+              <input
+                id="busqueda-vinculo"
+                type="text"
+                value={busquedaVinculo}
+                onChange={(e) => setBusquedaVinculo(e.target.value)}
+                placeholder="ej.: panadería albertus, 30716780100, solano vera…"
+                autoComplete="off"
+              />
+            </label>
+            {textoBusqueda.length >= 3 &&
+              (resultadosBusqueda.length ? (
+                <ul className="lista-candidatos">
+                  {resultadosBusqueda.map((l) => (
+                    <li key={l.id}>
+                      <button type="button" className="btn-secundario btn-chico" onClick={() => vincular(vinculando, l.id)}>
+                        Vincular
+                      </button>{' '}
+                      <strong>{l.nombreLocal}</strong> — {l.direccion || 'sin dirección'}
+                      {l.cuit ? ` · CUIT ${l.cuit}` : ''} (N° {l.id})
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="texto-gris">Ningún local del padrón coincide con esa búsqueda.</p>
               ))}
-            </ul>
+
+            <p className="texto-chico">¿Sabés el número interno del local? Es un atajo, no hace falta:</p>
+            <div className="barra-lote">
+              <input
+                type="number"
+                value={numeroVinculo}
+                onChange={(e) => setNumeroVinculo(e.target.value)}
+                placeholder="N° de local"
+                aria-label="Número del local a vincular"
+              />
+              <button
+                type="button"
+                className="btn-primario btn-chico"
+                disabled={!numeroVinculo}
+                onClick={() => vincular(vinculando, Number(numeroVinculo))}
+              >
+                Vincular
+              </button>
+            </div>
           </>
         )}
-        <p>{candidatosDelVinculo.length > 0 ? 'O indicá otro local por su número:' : 'Indicá el número del local del padrón:'}</p>
-        <div className="barra-lote">
-          <input
-            type="number"
-            value={numeroVinculo}
-            onChange={(e) => setNumeroVinculo(e.target.value)}
-            placeholder="N° de local"
-            aria-label="Número del local a vincular"
-          />
-          <button
-            type="button"
-            className="btn-primario btn-chico"
-            disabled={!numeroVinculo}
-            onClick={() => vincular(vinculando, Number(numeroVinculo))}
-          >
-            Vincular
-          </button>
-        </div>
       </Modal>
+
+      {/* El alta revisada: el mismo formulario del padrón, precargado con la
+          fila del informe. Los datos quedan en la fila y el local se crea
+          recién al APLICAR: si la carga se descarta, no queda rastro. */}
+      {dandoAlta && (
+        <Modal
+          abierto
+          etiqueta="ALTA DESDE EL INFORME"
+          titulo={`Nuevo local: ${dandoAlta.datosAlta?.nombreLocal ?? dandoAlta.razonSocial ?? dandoAlta.cuit ?? ''}`}
+          ancho="ancho"
+          onCerrar={() => setDandoAlta(null)}
+        >
+          {!dandoAlta.cuitValido && (
+            <Aviso tipo="alerta" titulo="Cuidado: el CUIT de esta fila no cierra">
+              {dandoAlta.motivoCuit ?? 'El CUIT vino mal en el archivo.'} Antes de crear un local nuevo, revisá que no sea uno que ya
+              existe con el CUIT bien escrito, y corregí el CUIT en el formulario si lo conseguís.
+            </Aviso>
+          )}
+          <Aviso tipo="info" titulo="Los datos quedan guardados en la fila">
+            Revisá y completá lo que falte. El local se crea recién al <strong>aplicar el informe</strong>, con su contrato de la
+            prestataria; si la carga se descarta, no queda nada en el padrón.
+          </Aviso>
+          <FormLocal
+            key={dandoAlta.id}
+            esNuevo
+            local={
+              dandoAlta.datosAlta ?? {
+                nombreLocal: dandoAlta.razonSocial ?? '',
+                razonSocial: dandoAlta.razonSocial ?? '',
+                cuit: dandoAlta.cuit ?? '',
+                direccion: dandoAlta.direccion ?? '',
+                rubro: '',
+              }
+            }
+            onGuardar={(l) => guardarAlta(dandoAlta, l)}
+            onCancelar={() => setDandoAlta(null)}
+          />
+        </Modal>
+      )}
 
       {/* Anular una carga aplicada */}
       <Modal

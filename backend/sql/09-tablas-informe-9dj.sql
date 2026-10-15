@@ -103,3 +103,14 @@ CREATE TABLE IF NOT EXISTS informe_9dj_fila (
   CONSTRAINT fk_fila_informe FOREIGN KEY (id_informe) REFERENCES informe_9dj (id_informe)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Cada fila de cada informe 9DJ, con su cruce contra el padron y la decision del agente';
+
+-- ----------------------------------------------------------------------------
+-- AGREGADO (2026-10-07): los datos del alta, editados por el agente
+-- ----------------------------------------------------------------------------
+-- Cuando una fila no encontrada se decide como ALTA, el agente revisa y puede
+-- corregir los datos con el mismo formulario del padron (nombre, rubro,
+-- contacto...). Lo editado queda aca como JSON y es lo que usa la aplicacion
+-- del informe para crear el local. Si esta vacio, se usan los datos crudos de
+-- la fila, como antes.
+ALTER TABLE informe_9dj_fila ADD COLUMN IF NOT EXISTS datos_alta TEXT NULL
+  COMMENT 'JSON con los datos del alta revisados por el agente';

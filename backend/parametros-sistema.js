@@ -54,6 +54,20 @@ export const PARAMETROS = {
      local por vuelta del circuito (nro_ciclo). */
   topeProrrogaDias: 30,
   maxProrrogasPorLocal: 1,
+
+  /* A quién se le pide el número del expediente de multa. Es un parámetro y no
+     un valor del código porque TODAVÍA NO SE SABE a quién se le pide
+     (TODO-DEFINICION: lo confirma la Dirección) y porque puede cambiar. La
+     Dirección lo edita desde Configuración → Parámetros sin tocar código. */
+  correoSolicitudExpedientes: '',
+
+  /* ¿El portal del titular muestra los NÚMEROS de expediente (el de multa y el
+     del trámite de cada presentación)? PENDIENTE: decisión de la Dirección.
+     A favor de mostrarlos: el titular tiene derecho a saber qué expediente se
+     le inició, y lo va a necesitar para un trámite. En contra: es información
+     del circuito sancionatorio y puede preferirse darla en ventanilla. Por
+     defecto NO se muestran: el titular ve el estado y desde cuándo. */
+  portalMuestraNumerosExpediente: false,
 };
 
 /* El texto de la cédula. Los {marcadores} los reemplaza el front al imprimir

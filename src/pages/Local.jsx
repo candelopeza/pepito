@@ -174,13 +174,32 @@ function Local() {
         width: 130,
         // valueGetter para que el orden sea por fecha real y no por el texto:
         // ordenar '01/12' contra '15/03' como cadenas da cualquier cosa.
-        valueGetter: (_v, row) => row.plazo?.vencimiento ?? '',
-        renderCell: ({ row }) =>
-          row.plazo ? (
-            <span className={row.plazo.vencido ? 'texto-vencido' : ''}>{fmtFecha(row.plazo.vencimiento)}</span>
+        //
+        // La fecha sale de lo que el estado dice: si hay un plazo corriendo
+        // (notificación, prórroga) manda el plazo; si el local está cubierto
+        // por documentación (contrato, DDJJ), lo que vence es esa vigencia.
+        // Antes solo se miraba el plazo y un local con contrato quedaba con
+        // la columna vacía aunque el contrato tuviera fecha.
+        valueGetter: (_v, row) =>
+          row.plazo?.vencimiento ??
+          row.vigente?.contrato?.fechaVencimiento ??
+          row.vigente?.reciclaje?.fechaVencimiento ??
+          row.vigente?.ddjj?.fechaVencimiento ??
+          '',
+        renderCell: ({ row }) => {
+          if (row.plazo) {
+            return <span className={row.plazo.vencido ? 'texto-vencido' : ''}>{fmtFecha(row.plazo.vencimiento)}</span>;
+          }
+          const vigencia =
+            row.vigente?.contrato?.fechaVencimiento ??
+            row.vigente?.reciclaje?.fechaVencimiento ??
+            row.vigente?.ddjj?.fechaVencimiento;
+          return vigencia ? (
+            <span title="Hasta cuándo está vigente su documentación">{fmtFecha(vigencia)}</span>
           ) : (
             <span className="texto-gris">—</span>
-          ),
+          );
+        },
       },
       {
         field: 'cantidadActuaciones',

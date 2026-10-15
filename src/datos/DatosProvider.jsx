@@ -117,6 +117,7 @@ const BASE_VACIA = {
   plantillaCedula: '',
   limiteMunicipal: [],
   limiteOficial: false,
+  novedadesExpedientes: [],
   secuencias: { cedula: 0, expediente: 0 },
   permisos: PERMISOS_VACIOS,
   capacidades: CAPACIDADES_VACIAS,
@@ -169,6 +170,7 @@ function DatosProvider({ children }) {
       capacidades,
       solicitudesProrroga,
       limite,
+      novedadesExpedientes,
     ] = await Promise.all([
       api.locales(),
       api.actuaciones(),
@@ -187,6 +189,9 @@ function DatosProvider({ children }) {
       api.capacidades().catch(() => CAPACIDADES_VACIAS),
       api.solicitudesProrroga().catch(() => []),
       api.limiteMunicipal(),
+      // La bitacora de los expedientes de multa. Si la base no tiene la tabla
+      // (sql/10), el sistema sigue andando sin ella.
+      api.novedadesExpedientes().catch(() => []),
     ]);
 
     /* `secuencias` ya no es una tabla: el último número de cédula se deduce de
@@ -218,6 +223,7 @@ function DatosProvider({ children }) {
          el que valida el backend (sección 9.2 del pliego). */
       limiteMunicipal: limite?.poligono ?? [],
       limiteOficial: Boolean(limite?.oficial),
+      novedadesExpedientes,
       secuencias: { cedula: ultimaCedula, expediente: 0 },
       capacidades: { ...CAPACIDADES_VACIAS, ...capacidades },
       solicitudesProrroga,
@@ -595,6 +601,17 @@ function DatosProvider({ children }) {
     [ejecutar],
   );
 
+  const solicitarExpediente = useCallback(
+    (localId, canal, observaciones) =>
+      ejecutar('Solicitud registrada', () => api.solicitarExpediente(localId, canal, observaciones)),
+    [ejecutar],
+  );
+
+  const novedadExpediente = useCallback(
+    (idTramite, datos) => ejecutar('Novedad registrada', () => api.novedadExpediente(idTramite, datos)),
+    [ejecutar],
+  );
+
   const registrarExpediente = useCallback(
     (localId, numeroManual) => ejecutar('Expediente registrado', () => api.registrarExpediente(localId, numeroManual)),
     [ejecutar],
@@ -602,8 +619,8 @@ function DatosProvider({ children }) {
 
   /* El número definitivo de un expediente provisorio (sección 8.3). */
   const numeroDefinitivoExpediente = useCallback(
-    (actuacionId, numero) =>
-      ejecutar('Número de expediente registrado', () => api.numeroDefinitivoExpediente(actuacionId, numero)),
+    (actuacionId, numero, motivo) =>
+      ejecutar('Número de expediente registrado', () => api.numeroDefinitivoExpediente(actuacionId, numero, motivo)),
     [ejecutar],
   );
 
@@ -788,6 +805,8 @@ function DatosProvider({ children }) {
       otorgarProrroga,
       solicitarProrroga,
       registrarExpediente,
+      solicitarExpediente,
+      novedadExpediente,
       numeroDefinitivoExpediente,
       reingresarAlCircuito,
       fusionarLocales,
@@ -807,7 +826,7 @@ function DatosProvider({ children }) {
       guardarLocal, eliminarLocal, bloquearLocal, desbloquearLocal, geocodificarPendientes,
       crearRelevamiento, editarRelevamiento, revisarRelevamiento, generarCedula, regenerarCedula, asignarNotificador,
       marcarImpresa, marcarImpresas, registrarEntrega, corregirEntrega, editarObservaciones, registrarDocumento, validarPresentacion, otorgarProrroga, solicitarProrroga,
-      registrarExpediente, numeroDefinitivoExpediente, reingresarAlCircuito, fusionarLocales,
+      registrarExpediente, numeroDefinitivoExpediente, solicitarExpediente, novedadExpediente, reingresarAlCircuito, fusionarLocales,
       guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla,
       guardarPermiso, restablecerPermisosDeRol, habilitarRol, reiniciarDemo, recalcularEstados,
     ],

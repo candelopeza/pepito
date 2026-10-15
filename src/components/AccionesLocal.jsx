@@ -90,6 +90,7 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
     registrarDocumento,
     otorgarProrroga,
     registrarExpediente,
+    solicitarExpediente,
     reingresarAlCircuito,
     bloquearLocal,
     desbloquearLocal,
@@ -616,6 +617,78 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
         </div>
       </Modal>
 
+      {/* ======================= SOLICITAR N° DE EXPEDIENTE =======================
+          No inicia nada en la otra dependencia (eso es humano, hoy por correo):
+          registra QUE SE PIDIÓ, cuándo, quién y por dónde. Es lo que separa
+          "habilitado" (lo decidió el sistema) de "solicitado" (lo decidió una
+          persona): sin esa marca nunca se sabría cuántos expedientes esperan
+          que alguien los pida. */}
+      <Modal
+        abierto={abierta === 'solicitar-expediente'}
+        etiqueta="EXPEDIENTE"
+        titulo="Solicitar el número de expediente"
+        onCerrar={cerrar}
+      >
+        <div className="formulario formulario-modal">
+          <div className="bloque-info">
+            <strong>{local.nombreLocal}</strong>
+            <span>
+              {local.razonSocial || 'SIN RAZÓN SOCIAL'} · CUIT {local.cuit || 'SIN CUIT'}
+            </span>
+          </div>
+
+          <p className="texto-chico">
+            El pedido a la dependencia se hace por fuera del sistema
+            {parametros.correoSolicitudExpedientes ? (
+              <>
+                {' '}
+                (correo: <strong>{parametros.correoSolicitudExpedientes}</strong>)
+              </>
+            ) : (
+              <> (el correo de destino todavía no está definido: se carga en Configuración → Parámetros)</>
+            )}
+            . Acá queda la constancia: fecha, agente y canal.
+          </p>
+
+          <CampoSelect
+            id="sol-canal"
+            etiqueta="¿Por qué canal se pidió?"
+            valor={form.canal ?? ''}
+            onChange={(v) => setForm({ ...form, canal: v })}
+            opciones={[
+              { id: 'correo', etiqueta: 'Correo electrónico' },
+              { id: 'telefono', etiqueta: 'Teléfono' },
+              { id: 'presencial', etiqueta: 'En persona' },
+              { id: 'otro', etiqueta: 'Otro' },
+            ]}
+            error={faltaDato.canal}
+          />
+          <CampoTexto
+            id="sol-obs"
+            etiqueta="Observaciones (opcional)"
+            valor={form.observaciones ?? ''}
+            onChange={(v) => setForm({ ...form, observaciones: v })}
+            ayuda="A quién se le pidió, referencia del correo, lo que ayude a seguirlo."
+          />
+
+          <div className="form-acciones">
+            <button
+              type="button"
+              className="btn-primario"
+              onClick={async () => {
+                if (!completo([['canal', form.canal, 'Indicá por qué canal se pidió el número.']])) return;
+                if (await solicitarExpediente(local.id, form.canal, form.observaciones?.trim() ?? '')) terminar();
+              }}
+            >
+              Registrar la solicitud
+            </button>
+            <button type="button" className="btn-secundario" onClick={cerrar}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* ======================= EXPEDIENTE DE MULTA ======================= */}
       <Modal
         abierto={abierta === 'registrar-expediente'}
@@ -638,29 +711,56 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
             </Aviso>
           )}
 
-          <Campo
-            id="exp-numero"
-            etiqueta="N° de expediente"
-            valor={form.numero ?? ''}
-            onChange={(v) => setForm({ ...form, numero: v })}
-            ayuda="El número que dio la mesa de entradas. Si todavía no está, dejalo vacío: queda uno provisorio (PROV-…) para reemplazar después en Expedientes."
-          />
+          {form.ratificando ? (
+            /* >>> LA RATIFICACIÓN <<< El número se muestra tal como se va a
+               guardar: asignarle a un comercio el expediente de otro es el
+               error más caro que puede cometerse acá. */
+            <>
+              <Aviso tipo="alerta" titulo="Revisá antes de guardar">
+                El expediente de <strong>{local.nombreLocal}</strong> queda con el número{' '}
+                <strong style={{ fontSize: '1.2rem' }}>{form.numero?.trim()}</strong>. ¿Es correcto?
+              </Aviso>
+              <div className="form-acciones">
+                <button
+                  type="button"
+                  className="btn-peligro"
+                  onClick={async () => {
+                    if (await registrarExpediente(local.id, form.numero?.trim())) terminar();
+                    else setForm({ ...form, ratificando: false });
+                  }}
+                >
+                  Sí, iniciar con el {form.numero?.trim()}
+                </button>
+                <button type="button" className="btn-secundario" onClick={() => setForm({ ...form, ratificando: false })}>
+                  No, volver
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Campo
+                id="exp-numero"
+                etiqueta="N° de expediente (obligatorio)"
+                valor={form.numero ?? ''}
+                onChange={(v) => setForm({ ...form, numero: v })}
+                ayuda={`Formato número/año, por ejemplo 175079/${new Date().getFullYear()}. ¿Todavía no llegó? Usá «Solicitar N° de expediente»: un expediente no se inicia con un número de prueba.`}
+              />
 
-          <div className="form-acciones">
-            <button
-              type="button"
-              className="btn-peligro"
-              disabled={faltan.length > 0 && parametros.exigirDatosSiempre}
-              onClick={async () => {
-                if (await registrarExpediente(local.id, form.numero?.trim())) terminar();
-              }}
-            >
-              Iniciar expediente
-            </button>
-            <button type="button" className="btn-secundario" onClick={cerrar}>
-              Cancelar
-            </button>
-          </div>
+              <div className="form-acciones">
+                <button
+                  type="button"
+                  className="btn-peligro"
+                  disabled={!form.numero?.trim() || (faltan.length > 0 && parametros.exigirDatosSiempre)}
+                  onClick={() => setForm({ ...form, ratificando: true })}
+                >
+                  Continuar
+                </button>
+                <button type="button" className="btn-secundario" onClick={cerrar}>
+                  Cancelar
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
 

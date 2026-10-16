@@ -18,6 +18,9 @@
    plazos tres horas antes. Se puede pisar con TZ en el .env. */
 process.env.TZ = process.env.TZ || 'America/Argentina/Tucuman';
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import { identificarUsuario, aceptaRolDeclarado } from './middlewares/usuario.js';
@@ -42,6 +45,26 @@ const PUERTO = Number(process.env.PUERTO) || 3000;
 /* --- middlewares generales ------------------------------------------------ */
 // El front (Vite) corre en otro puerto: sin esto el navegador bloquea los fetch.
 app.use(cors({ origin: process.env.ORIGEN_FRONT || true }));
+
+/* --- la aplicación misma, en la misma dirección (opcional) ----------------
+   Con CARPETA_FRONT en el .env (la carpeta que arma `npm run build`, por
+   ejemplo ../dist), este servidor entrega también la aplicación: la página en
+   "/", y sw.js, el manifest y los íconos. Así una sola dirección HTTPS sirve
+   para todo, que es lo que necesitan los teléfonos para el GPS y para abrir
+   sin señal. La app se compila con VITE_API_URL=/ (mismo servidor).
+   Va antes que todo lo demás: un archivo de la app no necesita usuario ni
+   base. Ningún archivo de la app se llama como una ruta de la API. Sin la
+   variable, no cambia nada: la app se sigue sirviendo aparte, como antes. */
+const CARPETA_FRONT = process.env.CARPETA_FRONT
+  ? path.resolve(path.dirname(fileURLToPath(import.meta.url)), process.env.CARPETA_FRONT)
+  : null;
+if (CARPETA_FRONT) {
+  if (fs.existsSync(path.join(CARPETA_FRONT, 'index.html'))) {
+    app.use(express.static(CARPETA_FRONT, { index: 'index.html' }));
+  } else {
+    console.warn(`[front] CARPETA_FRONT=${process.env.CARPETA_FRONT}: no hay index.html ahí. ¿Falta npm run build?`);
+  }
+}
 // Lee el JSON que manda el front en el body de los POST/PUT. El límite deja
 // lugar a la foto de una entrega (achicada en el celular antes de enviarla).
 // El limite deja lugar a la foto de una entrega (achicada en el celular) y
@@ -119,6 +142,7 @@ iniciarTareas();
 app.listen(PUERTO, () => {
   const c = capacidades();
   console.log(`API Grandes Generadores escuchando en http://localhost:${PUERTO}`);
+  if (CARPETA_FRONT) console.log(`  la aplicación también se sirve acá, desde ${CARPETA_FRONT}`);
   console.log(
     `  auditoría: ${c.auditoria ? 'sí' : 'NO (sql/05)'} · parámetros editables: ${c.parametros ? 'sí' : 'NO (sql/06)'} · ` +
       `accesos: ${c.accesos ? 'sí' : 'NO (sql/07)'} · constancia de impresión: ${c.impresion ? 'sí' : 'NO (sql/04)'} · ` +

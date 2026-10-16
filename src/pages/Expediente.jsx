@@ -370,9 +370,8 @@ function Expediente() {
 
       {sinDebidoProceso.length > 0 && (
         <Aviso tipo="bloqueo" titulo={`${sinDebidoProceso.length} local(es) llegaron acá sin dos entregas fehacientes`}>
-          {sinDebidoProceso.map((l) => l.nombreLocal).join(' · ')}. Revisalos antes de elevar: ningún local debería llegar a
-          expediente sin que consten dos notificaciones con entrega efectiva. En el sistema viejo esto pasaba por el error B-1, que
-          leía el resultado de entrega de la columna equivocada.
+          {sinDebidoProceso.map((l) => l.nombreLocal).join(' · ')}. Revisalos antes de relevar: ningún local debería llegar a
+          expediente sin que consten dos notificaciones con entrega efectiva.
         </Aviso>
       )}
 
@@ -407,7 +406,7 @@ function Expediente() {
       </div>
       {solicitados.length === 0 ? (
         <Vacio titulo="No hay solicitudes esperando">
-          Cuando un agente pide el número de un expediente (desde la tabla de arriba), la espera se sigue acá.
+
         </Vacio>
       ) : (
         <Grilla

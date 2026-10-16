@@ -190,7 +190,7 @@ function LocalFicha() {
 
       {local.sinGeo && (
         <Aviso tipo="alerta" titulo="El local no tiene ubicación en el padrón">
-          {local.motivoSinGeo} No aparece en el mapa ni entra en el ruteo de notificaciones. Corregí la dirección para que se pueda
+          {local.motivoSinGeo} Corregí la dirección para que se pueda
           geocodificar.
           {puedeVerRuta(rol, '/herramientas/geocodificacion', permisos) && (
             <>

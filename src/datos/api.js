@@ -12,9 +12,16 @@
    define en el archivo `.env` de la raíz del proyecto (no el de backend/). Si
    no está, asume http://localhost:3000, que es donde corre el backend en
    desarrollo.
+
+   VITE_API_URL=/ es "el mismo servidor que la app": cuando el backend sirve
+   también la aplicación (CARPETA_FRONT en backend/.env), los pedidos van a la
+   misma dirección de la página. Así una sola dirección HTTPS alcanza para
+   todo, que es lo que necesitan los teléfonos.
    ============================================================================ */
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
+// Para los mensajes: con BASE vacía (mismo servidor) se nombra la dirección de la página.
+const DONDE = BASE || (typeof location !== 'undefined' ? location.origin : 'este servidor');
 
 /* ---------------------------------------------------------------------------
    QUIÉN PIDE
@@ -32,10 +39,12 @@ export function identificarse(usuario) {
   usuarioActual = usuario;
 }
 
-function cabeceras() {
+/* `usuario`: por defecto, el activo. La cola sin conexión pasa el de quien hizo
+   la carga, que puede no ser el que está elegido cuando vuelve la señal. */
+function cabeceras(usuario = usuarioActual) {
   const h = { 'Content-Type': 'application/json' };
-  if (usuarioActual?.nombre) h['x-usuario-nombre'] = encodeURIComponent(usuarioActual.nombre);
-  if (usuarioActual?.rol) h['x-usuario-rol'] = usuarioActual.rol;
+  if (usuario?.nombre) h['x-usuario-nombre'] = encodeURIComponent(usuario.nombre);
+  if (usuario?.rol) h['x-usuario-rol'] = usuario.rol;
   return h;
 }
 
@@ -59,15 +68,15 @@ export class ErrorApi extends Error {
   }
 }
 
-async function pedir(ruta, opciones = {}) {
+async function pedir(ruta, { comoUsuario, ...opciones } = {}) {
   let respuesta;
   try {
-    respuesta = await fetch(`${BASE}${ruta}`, { ...opciones, headers: cabeceras() });
+    respuesta = await fetch(`${BASE}${ruta}`, { ...opciones, headers: cabeceras(comoUsuario ?? usuarioActual) });
   } catch {
     // fetch solo falla así cuando no hubo respuesta: el backend está apagado,
     // o no hay red. Es el error más común en desarrollo, así que conviene que
     // lo diga con todas las letras.
-    throw new ErrorApi(`No se pudo contactar al servidor en ${BASE}. ¿Está corriendo el backend?`, 0);
+    throw new ErrorApi(`No se pudo contactar al servidor en ${DONDE}. ¿Está corriendo el backend?`, 0);
   }
 
   if (respuesta.status === 204) return null;
@@ -95,7 +104,7 @@ export async function descargarArchivo(id) {
   try {
     respuesta = await fetch(`${BASE}/archivos/${id}`, { headers: cabeceras() });
   } catch {
-    throw new ErrorApi(`No se pudo contactar al servidor en ${BASE}. ¿Está corriendo el backend?`, 0);
+    throw new ErrorApi(`No se pudo contactar al servidor en ${DONDE}. ¿Está corriendo el backend?`, 0);
   }
   if (!respuesta.ok) {
     let cuerpo = null;
@@ -116,7 +125,8 @@ export async function urlDeArchivo(id) {
 }
 
 const get = (ruta) => pedir(ruta);
-const post = (ruta, cuerpo) => pedir(ruta, { method: 'POST', body: JSON.stringify(cuerpo ?? {}) });
+const post = (ruta, cuerpo, comoUsuario) =>
+  pedir(ruta, { method: 'POST', body: JSON.stringify(cuerpo ?? {}), comoUsuario });
 const put = (ruta, cuerpo) => pedir(ruta, { method: 'PUT', body: JSON.stringify(cuerpo ?? {}) });
 const borrar = (ruta) => pedir(ruta, { method: 'DELETE' });
 
@@ -175,7 +185,8 @@ export const api = {
   auditoria: (id) => get(`/locales/${id}/auditoria`),
 
   // --- relevamiento ---------------------------------------------------------
-  crearRelevamiento: (datos) => post('/relevamientos', datos),
+  // comoUsuario: solo lo pasa la cola sin conexión (la carga sale a nombre de quien la hizo).
+  crearRelevamiento: (datos, comoUsuario) => post('/relevamientos', datos, comoUsuario),
   // El autor corrige su carga, el mismo día (sección 6.2).
   editarRelevamiento: (id, datos) => put(`/relevamientos/${id}`, datos),
   revisarRelevamiento: (localId, resultado) => post(`/relevamientos/${localId}/revision`, { resultado }),
@@ -185,7 +196,7 @@ export const api = {
   regenerarCedula: (id) => post(`/notificaciones/${id}/regenerar`),
   asignarNotificador: (id, notificadorId) => put(`/notificaciones/${id}/notificador`, { notificadorId }),
   marcarImpresa: (id) => post(`/notificaciones/${id}/impresion`),
-  registrarEntrega: (id, datos) => post(`/notificaciones/${id}/entrega`, datos),
+  registrarEntrega: (id, datos, comoUsuario) => post(`/notificaciones/${id}/entrega`, datos, comoUsuario),
   // Corregir una entrega mal cargada: el agente en el día, o coordinación con motivo.
   corregirEntrega: (id, datos) => put(`/notificaciones/${id}/entrega`, datos),
   // Corregir o borrar las observaciones de una actuación (queda en el historial).

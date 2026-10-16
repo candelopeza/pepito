@@ -3,9 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- El ícono de la app (public/icono-app-*.png) va después: el navegador
+         usa el último. Sacando esta línea vuelve el favicon.svg de la plantilla. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="./icono-app-32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1565c0" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <!-- Instalada en la pantalla de inicio: el iPhone no lee los íconos del
+         manifest, usa este. Y la abre a pantalla completa, sin barra de Safari. -->
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Grandes Generadores" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Grandes Generadores</title>
   </head>
   <body>

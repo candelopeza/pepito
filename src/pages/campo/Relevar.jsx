@@ -45,6 +45,7 @@ import { useDatos } from '../../datos/datosContexto';
 import { useRol } from '../../auth/rolContexto';
 import { CLASIFICACIONES } from '../../config/catalogos';
 import { fmtFecha, fmtFechaHora, hoyISO } from '../../dominio/fechas';
+import { quienLaCargo } from '../../datos/colaSinConexion';
 
 /* Las columnas del historial del agente. El estado de revisión es el dato
    que cierra el circuito: el relevamiento vale cuando coordinación lo revisó. */
@@ -398,6 +399,7 @@ function Relevar() {
                 <li key={p.id}>
                   <strong>{p.etiqueta}</strong>
                   <span>{fmtFechaHora(p.creado)}</span>
+                  {quienLaCargo(p, usuario) && <span className="texto-chico">{quienLaCargo(p, usuario)}</span>}
                   <Badge color="rojo">{p.error}</Badge>
                   <button type="button" className="btn-tabla" onClick={() => descartarPendiente(p.id)}>
                     Descartar

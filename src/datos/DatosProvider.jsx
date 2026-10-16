@@ -97,6 +97,14 @@ const CLAVE_COPIA = 'copia-datos';
    api.js con estado 0. Cualquier otro error es una respuesta del servidor. */
 const esSinConexion = (e) => e?.estado === 0;
 
+/* La cola sin conexión manda cada carga a nombre de quien la hizo (ver
+   enviarItem). En false, todas salen a nombre del usuario activo, como antes. */
+const ENVIAR_A_NOMBRE_DE_QUIEN_CARGO = true;
+
+/* Lo que se guarda del autor: lo justo para las cabeceras de api.js y para
+   mostrar en la lista de pendientes quién la cargó. */
+const autorDeLaCarga = (u) => (u?.nombre ? { id: u.id ?? null, nombre: String(u.nombre), rol: u.rol } : null);
+
 /* La forma del store antes de que lleguen los datos. Existe para que nada
    explote si algo se renderiza antes de tiempo: todas las colecciones son
    arrays vacíos, no undefined. */
@@ -316,11 +324,21 @@ function DatosProvider({ children }) {
      el dispositivo (colaSinConexion.js) y sale sola cuando vuelve la conexión.
      El resto de los actos (los de oficina) necesitan señal y lo dicen.
      ========================================================================== */
+  /* Cada carga sale a nombre de QUIEN LA HIZO (item.autor), no de quien esté
+     elegido cuando vuelve la señal: un teléfono compartido, o un "Firmar como"
+     cambiado en el medio, la firmaban a nombre de otro. Las cargas guardadas
+     antes de este cambio no traen autor y salen con el usuario activo, como
+     antes. En false, todas salen con el usuario activo.
+     PENDIENTE CON EL LOGIN (CiDiTuc): no se va a poder mandar a nombre de otro.
+     Ahí la regla pasa a ser enviar solo las cargas del que inició sesión y
+     dejar esperando las de los demás. */
   const enviarItem = useCallback(
-    (item) =>
-      item.tipo === 'relevamiento'
-        ? api.crearRelevamiento(item.datos)
-        : api.registrarEntrega(item.referencia, item.datos),
+    (item) => {
+      const autor = ENVIAR_A_NOMBRE_DE_QUIEN_CARGO ? (item.autor ?? undefined) : undefined;
+      return item.tipo === 'relevamiento'
+        ? api.crearRelevamiento(item.datos, autor)
+        : api.registrarEntrega(item.referencia, item.datos, autor);
+    },
     [],
   );
 
@@ -346,7 +364,9 @@ function DatosProvider({ children }) {
 
   /* Guarda en la cola o envía: lo que corresponda según haya señal. */
   const guardarOEncolar = useCallback(
-    async (item, mensajeOk) => {
+    async (itemSinAutor, mensajeOk) => {
+      // Quién la cargó queda pegado a la carga, igual que la hora y el GPS.
+      const item = { ...itemSinAutor, autor: autorDeLaCarga(usuario) };
       try {
         const resultado = await enviarItem(item);
         await cargarTodo();
@@ -366,7 +386,7 @@ function DatosProvider({ children }) {
         return { enCola: true, idCola: guardado.id };
       }
     },
-    [enviarItem, cargarTodo],
+    [enviarItem, cargarTodo, usuario],
   );
 
   const descartarPendiente = useCallback((id) => quitarPendiente(id), []);

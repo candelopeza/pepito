@@ -53,6 +53,13 @@ import {
 } from '../dominio/actuaciones';
 import { fmtFecha, hoyISO, vencimientoHabil } from '../dominio/fechas';
 
+/* La foto de la entrega se saca en el momento, con la cámara: cuando la entrega
+   no se concreta es la única prueba de que el notificador estuvo en el
+   domicilio, y una foto vieja de la galería no prueba nada (decidido con
+   DITEC, 15/10/2026). No rige al corregir una entrega desde la oficina. En
+   false vuelve a dejar elegir de la galería. */
+const FOTO_SOLO_CAMARA = true;
+
 function FormEntrega({ cedula, local, onGuardar, onCancelar, correccion = false, pideMotivo = false }) {
   const { feriados, parametros, capacidades } = useDatos();
   // La foto se guarda si la base tiene la tabla `archivo` (backend/sql/08).
@@ -184,6 +191,7 @@ function FormEntrega({ cedula, local, onGuardar, onCancelar, correccion = false,
         <CampoFoto
           id="ent-foto"
           etiqueta={noEntregada && fotoSeGuarda ? 'Fotografía (obligatoria)' : 'Fotografía del local'}
+          soloCamara={FOTO_SOLO_CAMARA && !correccion}
           valor={datos.evidencia}
           onChange={(imagen, nombre) => setDatos((p) => ({ ...p, evidencia: imagen, evidenciaNombre: nombre }))}
           error={errores.evidencia}

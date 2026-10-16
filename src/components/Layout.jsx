@@ -47,10 +47,12 @@
         cerrarlo de arriba; si ninguna anda, revisá que llegue `cerrarMenu`.
      - "Escape no cierra el menú": el listener solo se agrega mientras está
         abierto, mirá el useEffect.
+     - "Entro a una pantalla y aparece bajada, por la mitad": es el efecto de
+        CADA PANTALLA ARRANCA ARRIBA, más abajo.
    ============================================================================ */
 
 import { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation, useNavigationType } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 
@@ -75,6 +77,18 @@ function Layout() {
   }, [menuAbierto]);
 
   const cerrarMenu = () => setMenuAbierto(false);
+
+  // ===== CADA PANTALLA ARRANCA ARRIBA =====
+  // La página no se recarga al cambiar de sección: solo cambia lo de adentro,
+  // y el navegador dejaba el scroll donde estaba. En el celular, si bajaste
+  // hasta el final de Notificaciones y abrís otra sección, aparecía por la
+  // mitad o en su final, como cortada. Al volver atrás (POP) no se fuerza
+  // nada: queda lo que haga el navegador.
+  const { pathname } = useLocation();
+  const tipoDeNavegacion = useNavigationType();
+  useEffect(() => {
+    if (tipoDeNavegacion !== 'POP') window.scrollTo(0, 0);
+  }, [pathname, tipoDeNavegacion]);
 
   return (
     <div className="app-container">

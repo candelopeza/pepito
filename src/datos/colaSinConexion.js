@@ -105,3 +105,12 @@ export async function enviarPendientes(enviar) {
   }
   return { enviados, rechazados };
 }
+
+/* "Cargó: Legajo 200002", solo si la carga es de OTRO agente que el que está
+   usando el teléfono ahora (con el propio no hace falta decirlo). Las cargas
+   guardadas antes de que se anotara el autor no lo tienen: null. */
+export function quienLaCargo(item, usuarioActual) {
+  const nombre = item?.autor?.nombre;
+  if (!nombre || nombre === String(usuarioActual?.nombre ?? '')) return null;
+  return `Cargó: ${/^\d+$/.test(nombre) ? 'Legajo ' : ''}${nombre}`;
+}

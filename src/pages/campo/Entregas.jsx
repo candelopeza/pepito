@@ -46,6 +46,7 @@ import { useRol } from '../../auth/rolContexto';
 import { useDatos } from '../../datos/datosContexto';
 import { ordenarPorProximidad } from '../../dominio/geo';
 import { fmtFecha, fmtFechaHora, hoyISO } from '../../dominio/fechas';
+import { quienLaCargo } from '../../datos/colaSinConexion';
 import { resultadoEntrega } from '../../dominio/actuaciones';
 
 /* Estados del local en los que su cédula en curso espera una entrega. */
@@ -148,6 +149,7 @@ function Entregas() {
               <li key={p.id}>
                 <strong>{p.etiqueta}</strong>
                 <span>{fmtFechaHora(p.creado)}</span>
+                {quienLaCargo(p, usuario) && <span className="texto-chico">{quienLaCargo(p, usuario)}</span>}
                 {p.rechazado ? (
                   <>
                     <Badge color="rojo">No se aceptó: {p.error}</Badge>

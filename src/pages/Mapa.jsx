@@ -42,54 +42,18 @@ import Grilla from '../components/ui/Grilla';
 import Aviso from '../components/ui/Aviso';
 import { CampoSelect } from '../components/ui/Campo';
 import { useDatos } from '../datos/datosContexto';
-import { LISTA_ESTADOS, etiquetaEstado } from '../dominio/estados';
+import { LISTA_ESTADOS, colorEstado, etiquetaEstado } from '../dominio/estados';
 
 /* Los colores de los badges, para que el punto del mapa y la pastilla de la
    grilla sean del mismo color. Si divergen, el mapa deja de ser legible. */
-/* >>> UN COLOR POR ESTADO, NO POR GRUPO <<<
-   Los badges usan seis colores por familia, y en el mapa eso dejaba cuatro
-   verdes y tres rojos imposibles de distinguir. Acá cada estado tiene SU
-   color, elegido a mano para que se separen bien sobre el fondo claro de
-   OpenStreetMap. Las variantes de una misma entrega (entregada / sin firma /
-   fijada) comparten la familia con tonos escalonados: son la misma situación
-   operativa y casi nunca conviven en cantidad; todo lo demás es distinto
-   entre sí. Para cambiar un color se cambia acá, y la leyenda lo toma sola. */
-const COLOR_POR_ESTADO = {
-  // el padrón
-  REVISION_DATOS: '#9a6324', // marrón
-  COMPLETAR_DATOS: '#f032e6', // magenta
-  // exentos y cerrados
-  EXENTO_REVISION: '#4363d8', // azul
-  EXENTO_CONFIRMADO: '#000075', // azul marino
-  INACTIVO_CERRADO: '#a9a9a9', // gris
-  // documental (cumple)
-  CONTRATO_VIGENTE: '#2e7d32', // verde
-  CONTRATO_9DJ: '#469990', // verde azulado
-  DDJJ_VIGENTE: '#9acd32', // lima
-  DDJJ_RECICLAJE: '#556b2f', // oliva
-  PRESENTACION_EN_REVISION: '#26c6da', // celeste
-  // primera notificación (amarillos y naranjas)
-  NOTIF1_PENDIENTE: '#ffd600',
-  NOTIF1_GENERADA: '#ffab00',
-  NOTIF1_ENTREGADA: '#f57c00',
-  NOTIF1_SIN_FIRMA: '#ef6c00',
-  NOTIF1_FIJADA: '#e65100',
-  NOTIF1_NO_ENTREGADA: '#bf360c', // ladrillo
-  // segunda notificación (rosas y vinos)
-  NOTIF2_PENDIENTE: '#f48fb1',
-  NOTIF2_GENERADA: '#ec407a',
-  NOTIF2_ENTREGADA: '#c2185b',
-  NOTIF2_SIN_FIRMA: '#ad1457',
-  NOTIF2_FIJADA: '#880e4f',
-  NOTIF2_NO_ENTREGADA: '#560027', // vino
-  // sancionatorio
-  PRORROGA_VIGENTE: '#8e24aa', // violeta
-  GENERAR_EXPEDIENTE: '#e6194b', // rojo frambuesa
-  EXPEDIENTE_SOLICITADO: '#b71c1c', // rojo oscuro
-  EXPEDIENTE: '#000000', // negro
+const COLOR_HEX = {
+  verde: '#2e7d32',
+  naranja: '#ef6c00',
+  azul: '#1565c0',
+  amarillo: '#f9a825',
+  rojo: '#c62828',
+  gris: '#90a4ae',
 };
-const COLOR_DESCONOCIDO = '#78909c';
-const colorDeEstado = (codigo) => COLOR_POR_ESTADO[codigo] ?? COLOR_DESCONOCIDO;
 
 /* El centro del ejido y el acercamiento inicial. 13 muestra la ciudad entera
    sin que los puntos se pisen. */
@@ -99,7 +63,7 @@ const ZOOM = 13;
 /* Radio del punto en píxeles. Chico a propósito: con casi dos mil locales, un
    marcador con forma de gota tapa el mapa entero y no se ve la distribución,
    que es justamente para lo que se usa esta pantalla. */
-const RADIO = 6;
+const RADIO = 5;
 
 /* Los locales que no entraron al mapa. Van en la misma tabla que el resto del
    sistema: con 253 registros, una lista suelta no se puede ni buscar ni
@@ -204,15 +168,13 @@ function Mapa() {
           )}
 
           {conUbicacion.map((local) => {
-            const color = colorDeEstado(local.estado);
+            const color = COLOR_HEX[colorEstado(local.estado)] ?? COLOR_HEX.gris;
             return (
               <CircleMarker
                 key={local.id}
                 center={[local.latitud, local.longitud]}
                 radius={RADIO}
-                /* Borde oscuro y no blanco: los colores claros (amarillo, lima,
-                   rosa) se recortan contra el fondo claro del mapa. */
-                pathOptions={{ color: '#37474f', weight: 1, fillColor: color, fillOpacity: 0.95 }}
+                pathOptions={{ color: '#fff', weight: 1, fillColor: color, fillOpacity: 0.9 }}
               >
                 {/* El tooltip aparece al pasar por encima: permite barrer el
                     mapa sin tener que hacer clic en cada punto. */}
@@ -251,7 +213,7 @@ function Mapa() {
             <span key={codigo}>
               <i
                 className="mapa-punto-leyenda"
-                style={{ background: colorDeEstado(codigo) }}
+                style={{ background: COLOR_HEX[colorEstado(codigo)] ?? COLOR_HEX.gris }}
               />
               {etiquetaEstado(codigo)}
             </span>
@@ -259,7 +221,6 @@ function Mapa() {
         </div>
       )}
 
-      
 
       {/* ---------- Los que no se pudieron ubicar ---------- */}
       {sinUbicacion.length > 0 && (

@@ -16,6 +16,10 @@ export default defineConfig({
   server: {
     port: 5174,
     strictPort: true,
+    /* Escuchar también en la red local, no solo en localhost: es lo que
+       permite abrir el sistema desde un celular con http://<IP-de-la-PC>:5174
+       (misma red). Sin esto, Vite solo atiende a la propia máquina. */
+    host: true,
   },
   plugins: [
     react(),

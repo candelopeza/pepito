@@ -6,6 +6,17 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 export default defineConfig({
   // Rutas relativas: necesario para abrir el build desde el disco (file://).
   base: './',
+  /* >>> PUERTO FIJO: ESTE PROYECTO ES SIEMPRE http://localhost:5174 <<<
+     El 5173 es el puerto por defecto de TODOS los proyectos Vite y se lo
+     queda el primero que arranca: si trabajocampo corre primero, este se
+     corría al 5174 y parecía que "se mezclaban" los proyectos. Con el puerto
+     clavado y strictPort, Grandes Generadores vive en el 5174 pase lo que
+     pase (y si alguna vez está ocupado, avisa con un error en vez de
+     mudarse en silencio a otro). */
+  server: {
+    port: 5174,
+    strictPort: true,
+  },
   plugins: [
     react(),
     // Incrusta el JS y el CSS dentro del propio index.html.

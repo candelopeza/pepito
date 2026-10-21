@@ -134,6 +134,12 @@ if (!idLocal) {
   });
   verificar('la marca "sin expediente" NO sirve para saltearse la obligatoriedad en una carga nueva', conTilde.estado === 400, JSON.stringify(conTilde.cuerpo));
 
+  const emisionFutura = await pedir('/documentacion', {
+    metodo: 'POST',
+    cuerpo: { localId: idLocal, tipo: 'DDJJ', numero: 'DJ-FUTURA', fechaEmision: '2099-01-01', expedienteTramite: '888888/2026' },
+  });
+  verificar('una fecha de emisión futura se rechaza: el documento ya existe cuando se carga', emisionFutura.estado === 400 && /futura/.test(emisionFutura.cuerpo?.error ?? ''), JSON.stringify(emisionFutura.cuerpo));
+
   const conNumero = await pedir('/documentacion', {
     metodo: 'POST',
     cuerpo: { localId: idLocal, tipo: 'DDJJ', numero: 'DJ-PRUEBA-3', fechaEmision: '2026-10-14', expedienteTramite: 'EXP-PRUEBA-777/2026' },

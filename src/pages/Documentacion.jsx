@@ -130,6 +130,8 @@ function Documentacion() {
         field: 'fechaVencimiento',
         headerName: 'Vencimiento',
         width: 160,
+        // El CSV exporta lo que diga el formatter; sin él salía la fecha cruda.
+        valueFormatter: (value) => (value ? fmtFecha(value) : ''),
         renderCell: ({ row }) => {
           if (row.fechaVencimiento) return fmtFecha(row.fechaVencimiento);
           // Un contrato del informe 9DJ no vence por fecha: vale mientras el

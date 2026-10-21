@@ -78,6 +78,11 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
         : 'Es el número del trámite que inició la presentación. Toda presentación nueva lo tiene.';
     }
     if (!datos.fechaEmision) e.fechaEmision = 'La fecha de emisión es obligatoria.';
+    // Una emisión futura es imposible: el documento ya existe cuando se carga.
+    // El servidor también lo rechaza; acá se avisa antes de enviar.
+    if (datos.fechaEmision && datos.fechaEmision > hoyISO()) {
+      e.fechaEmision = 'La fecha de emisión no puede ser futura: el documento ya fue emitido.';
+    }
     if (esContrato && !datos.fechaVencimiento) {
       e.fechaVencimiento = 'El contrato tiene que declarar su fecha de vencimiento.';
     }
@@ -169,6 +174,7 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
           tipo="date"
           valor={datos.fechaEmision}
           onChange={(v) => cambiar('fechaEmision', v)}
+          max={hoyISO()}
           error={errores.fechaEmision}
         />
 

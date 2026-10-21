@@ -30,7 +30,6 @@
    ============================================================================ */
 
 import { useState } from 'react';
-import PageHeader from '../../components/ui/PageHeader';
 import Campo, { CampoSelect } from '../../components/ui/Campo';
 import Confirmar from '../../components/ui/Confirmar';
 import { useDatos } from '../../datos/datosContexto';
@@ -130,7 +129,6 @@ function Parametros() {
 
   return (
     <>
-      <PageHeader etiqueta="CONFIGURACIÓN" titulo="PARÁMETROS DEL SISTEMA" botonVolver />
       {MOSTRAR_PLAZOS_Y_DECISIONES && (
         <>
           {/* ================= PLAZOS ================= */}

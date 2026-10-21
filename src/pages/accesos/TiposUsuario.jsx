@@ -42,7 +42,6 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { GridActionsCellItem } from '@mui/x-data-grid';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
-import PageHeader from '../../components/ui/PageHeader';
 import Badge from '../../components/ui/Badge';
 import Grilla from '../../components/ui/Grilla';
 import Modal from '../../components/ui/Modal';
@@ -198,7 +197,7 @@ function TiposUsuario() {
   const [params, setParams] = useSearchParams();
 
   // Quien llegue acá con acceso de consulta ve las llaves pero no las mueve.
-  const soloLectura = !puedeEditar(rolActivo, 'accesos-roles', permisos) || sinTablas;
+  const soloLectura = !puedeEditar(rolActivo, 'accesos', permisos) || sinTablas;
 
   const [buscar, setBuscar] = useState('');
 
@@ -290,12 +289,11 @@ function TiposUsuario() {
 
   return (
     <>
-      <PageHeader
-        etiqueta="ACCESOS"
-        titulo="TIPOS DE USUARIO"
-        subtitulo={`${LISTA_ROLES.length} tipos de usuario · ${prendidos} habilitado(s)`}
-        botonVolver
-      />
+      <div className="accesos-header">
+        <span>
+          Tipos de usuario: {LISTA_ROLES.length} · {prendidos} habilitado(s)
+        </span>
+      </div>
 
       {sinTablas && <p className="texto-chico">Esta base todavía no guarda los permisos: rige el reparto por defecto.</p>}
 

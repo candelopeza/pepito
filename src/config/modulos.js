@@ -134,15 +134,6 @@ export const MODULOS = [
     rolesEdicion: ['administrativo', 'coordinacion'],
   },
   {
-    id: 'validaciones',
-    titulo: 'Validar presentaciones',
-    descripcion: 'Documentación que entró por el portal y espera aprobación',
-    ruta: '/validaciones',
-    grupo: 'operativo',
-    roles: ['administrativo', 'coordinacion'],
-    rolesEdicion: ['administrativo', 'coordinacion'],
-  },
-  {
     id: 'prorrogas',
     titulo: 'Prórrogas',
     descripcion: 'Prórrogas otorgadas y solicitudes pendientes',
@@ -201,19 +192,10 @@ export const MODULOS = [
 
   /* ===================== ACCESOS ===================== */
   {
-    id: 'accesos-roles',
-    titulo: 'Tipos de usuario',
-    descripcion: 'Qué ve y qué modifica cada tipo de usuario',
-    ruta: '/accesos/tipos-usuario',
-    grupo: 'accesos',
-    roles: ['administrador'],
-    rolesEdicion: ['administrador'],
-  },
-  {
-    id: 'accesos-usuarios',
-    titulo: 'Usuarios',
-    descripcion: 'Alta, baja y rol de los agentes',
-    ruta: '/accesos/usuarios',
+    id: 'accesos',
+    titulo: 'Accesos',
+    descripcion: 'Usuarios (por id_persona) y qué puede hacer cada tipo',
+    ruta: '/accesos',
     grupo: 'accesos',
     roles: ['administrador', 'direccion'],
     rolesEdicion: ['administrador', 'direccion'],
@@ -241,40 +223,13 @@ export const MODULOS = [
 
   /* ===================== CONFIGURACIÓN ===================== */
   {
-    id: 'config-rubros',
-    titulo: 'Rubros',
-    descripcion: 'Catálogo de rubros de los establecimientos',
-    ruta: '/config/rubros',
+    id: 'configuracion',
+    titulo: 'Configuración',
+    descripcion: 'Rubros, feriados, plantilla de cédula y parámetros, en una sola pantalla',
+    ruta: '/configuracion',
     grupo: 'configuracion',
     roles: ['coordinacion', 'direccion'],
     rolesEdicion: ['coordinacion', 'direccion'],
-  },
-  {
-    id: 'config-feriados',
-    titulo: 'Feriados',
-    descripcion: 'Calendario para el cómputo de días hábiles',
-    ruta: '/config/feriados',
-    grupo: 'configuracion',
-    roles: ['coordinacion', 'direccion'],
-    rolesEdicion: ['coordinacion', 'direccion'],
-  },
-  {
-    id: 'config-plantilla',
-    titulo: 'Plantilla de cédula',
-    descripcion: 'Texto del documento de notificación',
-    ruta: '/config/plantilla',
-    grupo: 'configuracion',
-    roles: ['coordinacion', 'direccion'],
-    rolesEdicion: ['coordinacion', 'direccion'],
-  },
-  {
-    id: 'config-parametros',
-    titulo: 'Parámetros del sistema',
-    descripcion: 'Plazos de notificación y criterios de cómputo',
-    ruta: '/config/parametros',
-    grupo: 'configuracion',
-    roles: ['direccion'],
-    rolesEdicion: ['direccion'],
   },
 
   /* ===================== PORTAL DEL TITULAR ===================== */
@@ -444,7 +399,7 @@ export const ROL_ADMINISTRADOR = 'administrador';
 
 /* El módulo que ningún ajuste puede quitarle a un rol, ni siquiera apagar el
    rol entero. Por eso en nivelAcceso() se mira ANTES que rolHabilitado(). */
-const FIJOS = { [ROL_ADMINISTRADOR]: ['accesos-roles'] };
+const FIJOS = { [ROL_ADMINISTRADOR]: ['accesos'] };
 
 export function esPermisoFijo(idModulo, rol) {
   return (FIJOS[rol] || []).includes(idModulo);

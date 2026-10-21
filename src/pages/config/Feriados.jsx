@@ -23,7 +23,6 @@
         al día siguiente. Está como parámetro en Configuración → Parámetros.
    ============================================================================ */
 
-import PageHeader from '../../components/ui/PageHeader';
 import Badge from '../../components/ui/Badge';
 import CrudCatalogo from '../../components/CrudCatalogo';
 import { useDatos } from '../../datos/datosContexto';
@@ -59,12 +58,11 @@ function Feriados() {
 
   return (
     <>
-      <PageHeader
-        etiqueta="CONFIGURACIÓN"
-        titulo="CALENDARIO DE FERIADOS"
-        subtitulo={`${feriados.length} fecha(s) cargadas · ${proximos.length} por venir`}
-        botonVolver
-      />
+      <div className="accesos-header">
+        <span>
+          {feriados.length} fecha(s) cargadas · {proximos.length} por venir
+        </span>
+      </div>
       <div className="bloque-info">
         <strong>Verificación en vivo</strong>
         <span>

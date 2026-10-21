@@ -16,7 +16,6 @@
    valor que ya no existe en el desplegable.
    ============================================================================ */
 
-import PageHeader from '../../components/ui/PageHeader';
 import CrudCatalogo from '../../components/CrudCatalogo';
 import { useDatos } from '../../datos/datosContexto';
 
@@ -27,7 +26,6 @@ function Rubros() {
 
   return (
     <>
-      <PageHeader etiqueta="CONFIGURACIÓN" titulo="RUBROS DE LOS ESTABLECIMIENTOS" botonVolver />
 
       <CrudCatalogo
         clave="rubros"

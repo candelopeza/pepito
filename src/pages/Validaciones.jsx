@@ -22,7 +22,6 @@
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import PageHeader from '../components/ui/PageHeader';
 import Grilla from '../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
@@ -157,12 +156,9 @@ function Validaciones() {
 
   return (
     <>
-      <PageHeader
-        etiqueta="PORTAL"
-        titulo="VALIDAR PRESENTACIONES"
-        subtitulo={`${pendientes.length} presentación(es) esperando aprobación`}
-        botonVolver
-      />
+      <div className="accesos-header">
+        <span>Esperan validación ({pendientes.length})</span>
+      </div>
 
       {pendientes.length === 0 ? (
         <Vacio titulo="No hay nada para validar" />

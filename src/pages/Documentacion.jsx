@@ -34,6 +34,7 @@ import BuscadorLocal from '../components/BuscadorLocal';
 import FormDocumento from '../components/FormDocumento';
 import HistorialActuaciones from '../components/HistorialActuaciones';
 import { useRol } from '../auth/rolContexto';
+import Validaciones from './Validaciones';
 import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
 import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
@@ -46,6 +47,9 @@ function Documentacion() {
   const { rol } = useRol();
   const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, usuarios, registrarDocumento, permisos } = useDatos();
   const puedeCargar = puedeEditar(rol, 'documentacion', permisos);
+  // Validar es decidir: lo hacen administrativo y coordinación. El resto ve
+  // la tabla de documentación sin la bandeja.
+  const puedeValidar = ['administrativo', 'coordinacion', 'administrador'].includes(rol);
 
   const [modal, setModal] = useState(false);
   const [paso, setPaso] = useState(0);
@@ -194,6 +198,10 @@ function Documentacion() {
         subtitulo={`${documentos.length} documento(s) registrados · ${documentos.filter((d) => d.vigente).length} vigentes`}
         botonVolver
       />
+
+      {/* La bandeja de validación vive acá: es la misma materia que la tabla
+          de abajo, antes separada en su propia pestaña. */}
+      {puedeValidar && <Validaciones />}
 
       {sinExpediente > 0 && (
         <Aviso tipo="alerta" titulo={`${sinExpediente} documentos sin número de expediente de trámite`}>

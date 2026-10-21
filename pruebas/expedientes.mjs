@@ -44,19 +44,30 @@ function seccion(titulo) {
   console.log(`\n=== ${titulo} ===`);
 }
 
+/* El fetch de Node reutiliza conexiones y el servidor corta las ociosas a los
+   5 segundos: un pedido sobre un socket ya muerto da ECONNRESET. Se reintenta
+   UNA vez con conexión nueva (en estas pruebas ningún pedido llega al servidor
+   cuando el socket muere al escribir). */
+async function conReintento(hacerPedido) {
+  try {
+    return await hacerPedido();
+  } catch (e) {
+    if (String(e?.cause?.code ?? '') !== 'ECONNRESET') throw e;
+    await new Promise((r) => setTimeout(r, 300));
+    return hacerPedido();
+  }
+}
+
 async function pedir(ruta, { metodo = 'GET', cuerpo, rol = 'coordinacion', nombre = USUARIO } = {}) {
-  const r = await fetch(`${BASE}${ruta}`, {
+  const r = await conReintento(() => fetch(`${BASE}${ruta}`, {
     method: metodo,
     headers: {
       'Content-Type': 'application/json',
-      // Sin keep-alive: el servidor corta las conexiones ociosas a los 5s y un
-      // POST sobre un socket ya cerrado da ECONNRESET sin reintento.
-      'Connection': 'close',
       'x-usuario-nombre': encodeURIComponent(nombre),
       'x-usuario-rol': rol,
     },
     body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-  });
+  }));
   return { estado: r.status, cuerpo: await r.json().catch(() => null) };
 }
 

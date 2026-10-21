@@ -238,15 +238,6 @@ export const MODULOS = [
     roles: ['administrativo', 'coordinacion'],
     rolesEdicion: ['administrativo', 'coordinacion'],
   },
-  {
-    id: 'geocodificacion',
-    titulo: 'Geocodificación pendiente',
-    descripcion: 'Locales sin ubicación: hay que corregir la dirección',
-    ruta: '/herramientas/geocodificacion',
-    grupo: 'herramientas',
-    roles: ['administrativo', 'coordinacion'],
-    rolesEdicion: ['administrativo', 'coordinacion'],
-  },
 
   /* ===================== CONFIGURACIÓN ===================== */
   {

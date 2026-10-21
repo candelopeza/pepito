@@ -34,7 +34,7 @@
    hablarlo con quien despliega.
    ============================================================================ */
 
-import { HashRouter, Route, Routes } from 'react-router-dom';
+import { Navigate, HashRouter, Route, Routes } from 'react-router-dom';
 
 import RolProvider from './auth/RolProvider';
 import DatosProvider from './datos/DatosProvider';
@@ -68,7 +68,6 @@ import Entregas from './pages/campo/Entregas';
 // --- Herramientas ---
 import Duplicados from './pages/herramientas/Duplicados';
 import Informe9DJ from './pages/herramientas/Informe9DJ';
-import Geocodificacion from './pages/herramientas/Geocodificacion';
 
 // --- Accesos (control de usuarios y de lo que ve cada tipo de usuario) ---
 import TiposUsuario from './pages/accesos/TiposUsuario';
@@ -126,7 +125,8 @@ function App() {
 
               <Route path="herramientas/duplicados" element={<RutaProtegida ruta="/herramientas/duplicados"><Duplicados /></RutaProtegida>} />
               <Route path="herramientas/informe-9dj" element={<RutaProtegida ruta="/herramientas/informe-9dj"><Informe9DJ /></RutaProtegida>} />
-              <Route path="herramientas/geocodificacion" element={<RutaProtegida ruta="/herramientas/geocodificacion"><Geocodificacion /></RutaProtegida>} />
+              {/* La pestaña se integró al Mapa: los marcadores viejos siguen andando. */}
+              <Route path="herramientas/geocodificacion" element={<Navigate to="/mapa" replace />} />
 
               {/* ---- Configuración (tablas maestras y parámetros) ---- */}
               <Route path="config/rubros" element={<RutaProtegida ruta="/config/rubros"><Rubros /></RutaProtegida>} />

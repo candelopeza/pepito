@@ -781,3 +781,121 @@ se puede violar: la carga manual del número funciona SIEMPRE; una integración
 futura solo puede sumarse como camino alternativo.
 
 Pruebas: `npm run expedientes` (24 verificaciones, limpia lo que toca).
+
+## 15. La aplicación en el teléfono (15 de octubre de 2026)
+
+Probado en tamaños de iPhone SE, iPhone 14, iPhone 15 Pro Max, Android chico
+(360 px) y Pixel 7, y en la PC.
+
+**Las tablas** (`src/components/ui/Grilla.jsx`, cambia en todas a la vez):
+
+- La barra de Columnas, Filtros, Densidad y Exportar ocupaba 248 px en el
+  teléfono, con huecos enormes. La causa: `gap: 8` en el estilo de MUI no son
+  8 px sino 8 × el espaciado del tema = 64 px. Ahora es `'8px'`.
+- En el teléfono, y en la PC cuando la tabla es más angosta que 560 px, la barra
+  va en un renglón y los botones muestran solo el ícono.
+- En el teléfono, todas las tablas miden lo que ocupan sus filas: ya no tienen
+  scroll propio y al deslizar el dedo se mueve la página, así se llega al pie
+  con el cambio de página.
+- Se apaga con `AJUSTE_CELULAR = false`. La densidad no se tocó: nueve
+  pantallas tienen celdas de dos renglones que en modo compacto se cortarían.
+
+**Las pantallas** (`src/App.css`, sección 14.25): menos margen en el teléfono,
+los tres filtros del padrón en una sola fila, y la ficha del local en una
+columna con el historial deslizable de costado (antes ensanchaba la página).
+
+**El rol de PRUEBA queda recordado** (`src/auth/RolProvider.jsx`): el rol y el
+"Firmar como" se guardan en el dispositivo. Antes cada recarga volvía a
+coordinación (volver a abrir la app en el teléfono, deslizar hacia abajo,
+Responsively al cambiar de dirección) y el agente cargaba a nombre de otro. Se
+apaga con `RECORDAR_EN_EL_DISPOSITIVO = false`. Se va con el login de CiDiTuc.
+
+PENDIENTE: la cola sin conexión envía cada carga con el usuario elegido AL
+ENVIAR, no con el que la cargó. Con el rol recordado ya no pasa al recargar,
+pero sí si dos agentes comparten el teléfono y cambian el "Firmar como" antes
+de que vuelva la señal.
+
+**Cada sección abre arriba** (`src/components/Layout.jsx`): al cambiar de
+sección desde el menú o un botón, la pantalla nueva quedaba con el scroll de la
+anterior (Notificaciones abría 1.300 px más abajo) y parecía cortada. Ahora
+vuelve arriba. Se probó en iPhone SE, iPhone 15 Pro Max y Android chico: en
+todas las pantallas se llega al final bajando.
+
+**Responsively**: si el teléfono simulado es más alto que el monitor, la parte
+de abajo queda debajo de la barra de tareas de Windows y parece cortada. No es
+la app: se achica con el menú ⋮ → Zoom (−), o con Ctrl y la tecla menos.
+
+## 16. Android e iPhone: instalar, trabajar sin señal y publicar (15 de octubre de 2026)
+
+Todo se probó en un teléfono simulado (390 px, pantalla táctil) contra la base
+de PRUEBA, por `http://localhost` y por una dirección HTTPS de prueba (túnel):
+19 controles, todos bien. Cada cambio se apaga con su marca.
+
+| Qué | Dónde | Marca para apagarlo |
+|---|---|---|
+| Se puede instalar: íconos PNG (192, 512, maskable), ícono del iPhone y etiquetas para pantalla completa | `public/icono-app-*.png`, `public/apple-touch-icon.png`, `public/manifest.webmanifest`, `index.html` | sacar las líneas nuevas de `index.html` |
+| El teléfono no borra lo guardado sin enviar (`navigator.storage.persist`), solo en pantallas táctiles | `src/main.jsx` | `PEDIR_ALMACENAMIENTO_PERSISTENTE` |
+| El iPhone no agranda la pantalla al tocar un campo: campos a 16px en pantallas táctiles | `src/App.css` 14.26 | borrar el bloque |
+| Foto de la entrega solo con la cámara, en el momento (no al corregir desde la oficina). Decidido con DITEC el 15/10/2026 | `src/components/FormEntrega.jsx`, `ui/Campo.jsx` (`soloCamara`) | `FOTO_SOLO_CAMARA` |
+| Las cargas sin señal salen a nombre de quien las hizo, aunque después cambie el "Firmar como". La lista dice "Cargó: Legajo …" si es de otro | `src/datos/DatosProvider.jsx`, `api.js`, `colaSinConexion.js` | `ENVIAR_A_NOMBRE_DE_QUIEN_CARGO` |
+| Padrón en tarjetas en el teléfono: buscador, de a 20, Ficha / Cómo llegar / Editar | `src/components/ListaTarjetasLocales.jsx` (nuevo), `pages/Local.jsx` | `TARJETAS_EN_CELULAR` |
+| Aviso en el Inicio para instalar la app (botón Instalar en Android; instrucciones en iPhone). Solo en teléfono y si no está instalada; "Ahora no" lo oculta en ese teléfono | `src/components/AvisoInstalar.jsx` (nuevo), `pages/Home.jsx` | `MOSTRAR_AVISO_INSTALAR` |
+| El backend puede servir también la app: una sola dirección para todo | `backend/servidor.js` | `CARPETA_FRONT` vacía (como antes) |
+
+PENDIENTE CON EL LOGIN (CiDiTuc): no se va a poder mandar una carga a nombre de
+otro. La regla pasa a ser: se envían solo las cargas del que inició sesión, y
+las de los demás esperan a que ellos entren.
+
+LIMITES DEL IPHONE (no se pueden resolver con código):
+- La cola se envía solo con la app abierta: el iPhone no deja que una página
+  trabaje cerrada. Al volver la señal, el agente tiene que abrir la app.
+- Si no se instala en la pantalla de inicio, Safari puede borrar lo guardado
+  si la página no se abre en 7 días. Instalada, no.
+
+### Publicarla en una dirección (lo que hay que pedirle a Sistemas)
+
+Los teléfonos SOLO permiten el GPS y abrir sin señal en una dirección con
+**HTTPS**, y la dirección tiene que **verse desde los datos móviles** (una IP
+interna como 172.16.x.x no se ve desde la calle). Hay que pedir:
+
+1. Un nombre, por ejemplo `gg.smt.gob.ar`, con certificado HTTPS.
+2. Que ese nombre lleve al servidor donde corre el backend (un proxy inverso
+   hacia el puerto del backend, por ejemplo 3000). Una sola dirección para
+   todo: el backend entrega la app y la API.
+3. Que la base del área (MariaDB) quede accesible SOLO para el backend, no
+   desde afuera.
+4. Que el backend quede corriendo siempre (servicio de Windows o pm2): de eso
+   dependen también la emisión automática y el recálculo diario.
+
+Y de nuestro lado:
+
+```powershell
+# 1. compilar la app para que hable con su misma dirección (en PowerShell)
+$env:VITE_API_URL='/'; npm run build
+# (en Git Bash: MSYS_NO_PATHCONV=1 VITE_API_URL=/ npm run build — sin eso,
+#  Git Bash cambia la "/" por "C:/Program Files/Git/" y la app no encuentra la API)
+
+# 2. en backend/.env
+CARPETA_FRONT=../dist
+ACEPTAR_ROL_DECLARADO=no   # en producción: solo entran los agentes cargados
+```
+
+Antes de publicar con la base del área: hoy el usuario lo declara el
+navegador (selector de PRUEBA). Con la dirección abierta a internet, cualquiera
+con el link podría elegir un rol. Hasta que esté CiDiTuc, conviene que
+Sistemas limite el acceso (VPN, o la red municipal más los datos móviles de
+los teléfonos de los agentes).
+
+### Probar en teléfonos de verdad antes de que esté Sistemas
+
+Un túnel de Cloudflare (gratis, `cloudflared.exe`) da una dirección HTTPS
+temporal hacia la PC. SOLO con la base de PRUEBA, nunca con la del área (por
+lo del párrafo anterior):
+
+```
+cloudflared.exe tunnel --url http://localhost:3001
+```
+
+El backend de prueba tiene que estar corriendo con `CARPETA_FRONT` apuntando a
+un build hecho con `VITE_API_URL=/`. La dirección cambia cada vez que se abre
+el túnel y deja de andar al cerrarlo.

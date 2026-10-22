@@ -25,19 +25,53 @@
    salir de la sesión de CiDiTuc y desaparece setRol. Ninguna pantalla se
    entera, porque todas leen con useRol().
 
-   NOTA: el rol vive en memoria. Recargar (F5) vuelve al rol por defecto, y es
-   a propósito: un rol viejo guardado en el navegador es justo el tipo de cosa
-   que genera bugs difíciles de encontrar cuando aparezca el login de verdad.
+   NOTA: antes el rol vivía solo en memoria y recargar (F5) volvía siempre a
+   coordinación. En el teléfono eso es a cada rato: volver a abrir la app
+   instalada, deslizar hacia abajo, o Responsively cuando cambia de dirección.
+   El agente quedaba cargando a nombre de coordinación sin darse cuenta. Ahora
+   el rol y el "firmar como" quedan guardados en el dispositivo (ver
+   RECORDAR_EN_EL_DISPOSITIVO). Cuando llegue el login se va junto con setRol:
+   el rol saldrá de la sesión de CiDiTuc y no habrá nada que recordar.
    ============================================================================ */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RolContext } from './rolContexto';
 import { ROL_POR_DEFECTO, ROLES, esRolValido } from './roles';
 import { usuarioDeRol } from './usuarioActual';
 
+/* PROVISORIO, hasta el login. En false vuelve a vivir solo en memoria, como
+   antes: cada recarga arranca en coordinación. */
+const RECORDAR_EN_EL_DISPOSITIVO = true;
+const CLAVE_GUARDADO = 'grandes-generadores-rol-de-prueba';
+
+/* Lo elegido la última vez en este dispositivo, si todavía tiene sentido: un
+   rol que ya no existe, o un agente de otro rol, se descartan. */
+function leerGuardado() {
+  if (!RECORDAR_EN_EL_DISPOSITIVO) return null;
+  try {
+    const guardado = JSON.parse(localStorage.getItem(CLAVE_GUARDADO));
+    if (!guardado || !esRolValido(guardado.rol)) return null;
+    const agente = guardado.agente?.id && guardado.agente.rol === guardado.rol ? guardado.agente : null;
+    return { rol: guardado.rol, agente };
+  } catch {
+    // Ventana privada o almacenamiento bloqueado: se arranca como antes.
+    return null;
+  }
+}
+
 function RolProvider({ children }) {
-  const [rol, setRolInterno] = useState(ROL_POR_DEFECTO);
-  const [agente, setAgente] = useState(null);
+  const [guardado] = useState(leerGuardado);
+  const [rol, setRolInterno] = useState(guardado?.rol ?? ROL_POR_DEFECTO);
+  const [agente, setAgente] = useState(guardado?.agente ?? null);
+
+  useEffect(() => {
+    if (!RECORDAR_EN_EL_DISPOSITIVO) return;
+    try {
+      localStorage.setItem(CLAVE_GUARDADO, JSON.stringify({ rol, agente }));
+    } catch {
+      // Sin almacenamiento sigue andando: solo que no se recuerda.
+    }
+  }, [rol, agente]);
 
   function setRol(nuevoRol) {
     if (!esRolValido(nuevoRol)) {

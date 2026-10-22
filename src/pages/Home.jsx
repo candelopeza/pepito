@@ -43,6 +43,7 @@
 import { Link, Navigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import PageHeader from '../components/ui/PageHeader';
+import AvisoInstalar from '../components/AvisoInstalar';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
@@ -197,6 +198,9 @@ function Home() {
                 : `Tenés ${totalPendientes} caso(s) esperando una acción tuya.`
         }
       />
+
+      {/* Solo en el teléfono y si la app todavía no está instalada. */}
+      <AvisoInstalar />
 
       {!habilitado && (
         <Aviso tipo="alerta" titulo="Este tipo de usuario está deshabilitado">

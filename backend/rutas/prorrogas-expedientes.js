@@ -31,6 +31,7 @@ import { requiereRol } from '../middlewares/usuario.js';
 import { ErrorActo, ejecutarActo } from '../actos.js';
 import { auditoriaDisponible } from '../auditoria.js';
 import { hoyISO, sumarDias } from '../../src/dominio/fechas.js';
+import { dosEntregasEfectivas } from '../../src/dominio/actuaciones.js';
 import { ACCIONES, requiereDatosRegistrales } from '../../src/dominio/reglas.js';
 
 const router = Router();
@@ -639,6 +640,56 @@ router.post('/locales/:id/reingreso', requiereRol('coordinacion'), async (req, r
           nroCiclo: ciclo + 1,
           fechaInicio: hoyISO(),
           observaciones: `Reingreso al circuito desde expediente: ${motivo}`,
+        });
+        return { idTramite: id };
+      },
+    });
+
+    res.json(await localPorId(idLocal));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* POST /locales/:id/volver-a-notificar   { motivo }   (coordinacion)
+
+   Para los locales que llegaron a "Generar expediente" (o "Expediente
+   solicitado") SIN las dos notificaciones con entrega efectiva: casos del
+   sistema viejo (error B-1 del Anexo B). Sin las dos entregas no se les puede
+   iniciar el expediente, y antes quedaban trabados. Hace lo mismo que el
+   reingreso: ciclo nuevo y primera notificación pendiente, con el motivo en el
+   historial. Si había un pedido de número abierto, se cierra. */
+router.post('/locales/:id/volver-a-notificar', requiereRol('coordinacion'), async (req, res, next) => {
+  try {
+    const idLocal = Number(req.params.id);
+    const motivo = (req.body?.motivo ?? '').trim();
+    if (!motivo) return res.status(400).json({ error: 'Escribí el motivo: queda en el historial del local' });
+
+    await ejecutarActo(req, {
+      idLocal,
+      accion: 'volver-a-notificar',
+      controlar: async ({ actuaciones }) =>
+        dosEntregasEfectivas(actuaciones)
+          ? new ErrorActo(409, 'Este local tiene las dos notificaciones entregadas: corresponde iniciar el expediente, no volver a notificar.')
+          : null,
+      motivo: `Vuelve a notificar (no constaban las dos entregas efectivas): ${motivo}`,
+      trabajo: async (cx, { actuaciones }) => {
+        const ciclo = cicloDe(actuaciones);
+        await cx.execute('UPDATE local SET id_estado = ? WHERE id_local = ?', [ID_ESTADO.REVISION_DATOS, idLocal]);
+        // Un pedido de número que haya quedado abierto se cierra: este ciclo terminó.
+        await cx.execute(
+          `UPDATE tramite SET fecha_cierre = NOW()
+            WHERE id_local = ? AND id_ttramite = ? AND fecha_cierre IS NULL AND habilita = 1`,
+          [idLocal, ID_TTRAMITE.EXPEDIENTE_MULTA],
+        );
+        const id = await insertarTramite(cx, {
+          idLocal,
+          idEstado: ID_ESTADO.NOTIF_PENDIENTE,
+          idTtramite: ID_TTRAMITE.PRIMERA_NOTIFICACION,
+          idUsuario: req.usuario?.id ?? null,
+          nroCiclo: ciclo + 1,
+          fechaInicio: hoyISO(),
+          observaciones: `Vuelve a notificar (no constaban las dos entregas efectivas): ${motivo}`,
         });
         return { idTramite: id };
       },

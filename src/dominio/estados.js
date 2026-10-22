@@ -16,6 +16,9 @@ export const ESTADOS = {
   REVISION_DATOS:      { etiqueta: 'Revisión de datos pendiente',        grupo: 'cola_admin',    color: 'amarillo' },
   EXENTO_REVISION:     { etiqueta: 'Exento - pendiente de control',      grupo: 'cola_admin',    color: 'azul' },
   EXENTO_CONFIRMADO:   { etiqueta: 'Relevado - Exento',                  grupo: 'terminal',      color: 'verde' },
+  // Lo usa el área (local.id_estado "inactivo") y llega así del backend
+  // (mapeo.js). Antes no estaba acá y la pantalla mostraba el código crudo.
+  INACTIVO_CERRADO:    { etiqueta: 'Inactivo / cerrado',                 grupo: 'terminal',      color: 'gris' },
 
   NOTIF1_PENDIENTE:    { etiqueta: '1° Notificación pendiente',          grupo: 'cola_emision',  color: 'naranja' },
   NOTIF1_GENERANDO:    { etiqueta: 'Generar notificación 1',             grupo: 'transitorio',   color: 'gris' },

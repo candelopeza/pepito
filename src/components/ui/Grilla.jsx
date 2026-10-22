@@ -35,7 +35,8 @@
    de dejar que el Data Grid lance un error: ver la red de seguridad más abajo.
    ============================================================================ */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import {
   DataGrid,
   GridToolbar,
@@ -94,8 +95,31 @@ const ESTILO = {
   '& .MuiDataGrid-cell': { fontSize: 14, color: '#444', display: 'flex', alignItems: 'center' },
   '& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within': { outline: 'none' },
   // La barra de herramientas hereda el fondo blanco de la tarjeta.
-  '& .MuiDataGrid-toolbarContainer': { padding: '8px 12px', gap: 8 },
+  // gap con 'px': en el sx de MUI un número suelto se multiplica por el
+  // espaciado del tema, y `gap: 8` daba 64px entre botones. La barra se partía
+  // en varios renglones aun en tablas anchas, y en el celular quedaban huecos
+  // enormes entre COLUMNAS, FILTROS y DENSIDAD. flex y alignContent: que la
+  // barra mida solo lo que ocupa si igual no entra en un renglón.
+  '& .MuiDataGrid-toolbarContainer': { padding: '8px 12px', gap: '8px', flex: '0 0 auto', alignContent: 'flex-start' },
 };
+
+/* EN EL CELULAR (pantallas de hasta ANCHO_CELULAR px). En false, las tablas se
+   ven en el teléfono igual que antes. */
+const AJUSTE_CELULAR = true;
+const ANCHO_CELULAR = 600;
+
+/* La barra en un solo renglón y los botones solo con su ícono. El texto sigue
+   en el botón (lo lee el lector de pantalla), solo que con tamaño cero. Va en
+   el celular y también en la PC cuando la tabla es más angosta que
+   ANCHO_BARRA_COMPLETA (Rubros, Reportes): ahí los cuatro botones con texto
+   tampoco entran en un renglón. */
+const ANCHO_BARRA_COMPLETA = 560;
+const ESTILO_BARRA_COMPACTA = {
+  '& .MuiDataGrid-toolbarContainer': { padding: '4px 6px', gap: 0, flex: '0 0 auto', flexWrap: 'nowrap' },
+  '& .MuiDataGrid-toolbarContainer .MuiButton-root': { minWidth: 0, padding: '6px 8px', fontSize: 0 },
+  '& .MuiDataGrid-toolbarContainer .MuiButton-startIcon': { margin: 0 },
+};
+const ESTILO_CELULAR = { '& .MuiDataGrid-cell': { fontSize: 13 } };
 
 /* Alto de una fila y del andamiaje (encabezado + barra + paginador), para
    calcular cuánto mide la grilla cuando se pide alto automático. */
@@ -178,12 +202,20 @@ function Grilla({
 
   /* Con alto="auto" la grilla mide lo que necesita: una tabla de tres filas no
      deja medio metro de blanco abajo, y una de doscientas no crece sin fin
-     porque el tope es la altura de una página completa. */
+     porque el tope es la altura de una página completa.
+
+     En el celular TODAS las tablas van con alto automático, y siguiendo las
+     filas por página que elija el agente. Con un alto fijo, la tabla tenía su
+     propio scroll: al deslizar el dedo sobre ella se movían las filas y no la
+     página, y nunca se llegaba al pie con el cambio de página. */
+  const celular = useMediaQuery(`(max-width:${ANCHO_CELULAR}px)`) && AJUSTE_CELULAR;
+  const [filasPorPaginaElegidas, setFilasPorPaginaElegidas] = useState(filasPorPagina);
   const altura = useMemo(() => {
-    if (alto !== 'auto') return alto;
-    const visibles = Math.min(filas.length || 1, filasPorPagina);
+    if (alto !== 'auto' && !celular) return alto;
+    const porPagina = celular ? filasPorPaginaElegidas : filasPorPagina;
+    const visibles = Math.min(filas.length || 1, porPagina);
     return ALTO_FIJO + visibles * (compacta ? ALTO_FILA_COMPACTA : ALTO_FILA);
-  }, [alto, filas.length, filasPorPagina, compacta]);
+  }, [alto, celular, filas.length, filasPorPagina, filasPorPaginaElegidas, compacta]);
 
   /* ---------------------------------------------------------------------------
      EL id DE CADA FILA  —  la red de seguridad
@@ -278,9 +310,14 @@ function Grilla({
             ...(ordenInicial ? { sorting: { sortModel: ordenInicial } } : {}),
           }}
           pageSizeOptions={[5, 10, 25, 50, 100]}
+          onPaginationModelChange={(modelo) => setFilasPorPaginaElegidas(modelo.pageSize)}
           disableRowSelectionOnClick
           onRowClick={alClickFila ? (params) => alClickFila(params.row) : undefined}
-          sx={ESTILO}
+          sx={{
+            ...ESTILO,
+            ...(celular || (AJUSTE_CELULAR && anchoMaximo < ANCHO_BARRA_COMPLETA) ? ESTILO_BARRA_COMPACTA : {}),
+            ...(celular ? ESTILO_CELULAR : {}),
+          }}
         />
       </div>
     </>

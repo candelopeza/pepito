@@ -295,6 +295,22 @@ function distanciaKm(latA, lngA, latB, lngB) {
   return Number((2 * R * Math.asin(Math.sqrt(a))).toFixed(2));
 }
 
+/* POST /herramientas/ubicar-direccion   { direccion }
+
+   Busca en el mapa una dirección escrita, ANTES de guardar el local: el
+   formulario la usa para mostrar si se encuentra y dónde. NO GUARDA NADA. Al
+   guardar se vuelve a buscar con la misma función, así que el resultado es el
+   mismo que se va a guardar. */
+router.post('/ubicar-direccion', requiereRol('administrativo', 'coordinacion'), async (req, res, next) => {
+  try {
+    const direccion = String(req.body?.direccion ?? '').trim();
+    if (!direccion) return res.status(400).json({ error: 'Escribí la dirección para buscarla en el mapa' });
+    res.json(await geocodificarDireccion(direccion));
+  } catch (e) {
+    next(e);
+  }
+});
+
 /* POST /herramientas/coordenadas/propuestas   { ids: [1, 2, 3] }
 
    Geocodifica las direcciones de esos locales y devuelve qué coordenada

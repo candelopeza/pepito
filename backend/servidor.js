@@ -23,6 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import { identificarUsuario, aceptaRolDeclarado } from './middlewares/usuario.js';
 import { problemaDeConexion } from './conexion-bd.js';
 import { capacidades, revisarCapacidades, vigilarCapacidades } from './capacidades.js';
@@ -47,6 +48,17 @@ const PUERTO = Number(process.env.PUERTO) || 3000;
 // ORIGEN_FRONT admite varios origenes separados por coma: el front se abre
 // desde la PC (localhost) y desde los celulares de la red (la IP de la PC).
 app.use(cors({ origin: process.env.ORIGEN_FRONT ? process.env.ORIGEN_FRONT.split(',').map((o) => o.trim()) : true }));
+
+/* --- todo lo que sale, comprimido -----------------------------------------
+   Cada vez que se abre la app, y DESPUÉS DE CADA GUARDADO, el front vuelve a
+   pedir el padrón, las actuaciones y los relevamientos: con la base del área
+   son unos 2 MB de JSON. Comprimidos (gzip) son unos 200 KB, diez veces menos.
+   La app compilada baja de 1,9 MB a unos 580 KB. En el teléfono, con poca
+   señal, es la diferencia entre esperar 15 segundos y uno o dos; y gasta diez
+   veces menos datos. Las fotos y PDF no se tocan (ya vienen comprimidos). Se
+   apaga con COMPRIMIR=no en el .env (por ejemplo, si el servidor de Sistemas
+   ya comprime por su cuenta). */
+if (String(process.env.COMPRIMIR ?? 'si').trim().toLowerCase() !== 'no') app.use(compression());
 
 /* --- la aplicación misma, en la misma dirección (opcional) ----------------
    Con CARPETA_FRONT en el .env (la carpeta que arma `npm run build`, por

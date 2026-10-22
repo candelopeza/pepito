@@ -97,6 +97,14 @@ const CLAVE_COPIA = 'copia-datos';
    api.js con estado 0. Cualquier otro error es una respuesta del servidor. */
 const esSinConexion = (e) => e?.estado === 0;
 
+/* La cola sin conexión manda cada carga a nombre de quien la hizo (ver
+   enviarItem). En false, todas salen a nombre del usuario activo, como antes. */
+const ENVIAR_A_NOMBRE_DE_QUIEN_CARGO = true;
+
+/* Lo que se guarda del autor: lo justo para las cabeceras de api.js y para
+   mostrar en la lista de pendientes quién la cargó. */
+const autorDeLaCarga = (u) => (u?.nombre ? { id: u.id ?? null, nombre: String(u.nombre), rol: u.rol } : null);
+
 /* La forma del store antes de que lleguen los datos. Existe para que nada
    explote si algo se renderiza antes de tiempo: todas las colecciones son
    arrays vacíos, no undefined. */
@@ -291,7 +299,9 @@ function DatosProvider({ children }) {
       try {
         const resultado = await llamada();
         await cargarTodo();
-        if (mensajeOk) setAviso({ tipo: 'success', texto: mensajeOk });
+        // mensajeOk puede ser una función del resultado, para avisos que
+        // dependen de lo que contestó el servidor (ver guardarLocal).
+        if (mensajeOk) setAviso(typeof mensajeOk === 'function' ? mensajeOk(resultado) : { tipo: 'success', texto: mensajeOk });
         // Siempre algo "verdadero" cuando salió bien, aunque el endpoint no
         // devuelva cuerpo: las pantallas cierran el formulario solo si esto
         // no es null, y así no se pierde lo escrito cuando falla.
@@ -316,11 +326,21 @@ function DatosProvider({ children }) {
      el dispositivo (colaSinConexion.js) y sale sola cuando vuelve la conexión.
      El resto de los actos (los de oficina) necesitan señal y lo dicen.
      ========================================================================== */
+  /* Cada carga sale a nombre de QUIEN LA HIZO (item.autor), no de quien esté
+     elegido cuando vuelve la señal: un teléfono compartido, o un "Firmar como"
+     cambiado en el medio, la firmaban a nombre de otro. Las cargas guardadas
+     antes de este cambio no traen autor y salen con el usuario activo, como
+     antes. En false, todas salen con el usuario activo.
+     PENDIENTE CON EL LOGIN (CiDiTuc): no se va a poder mandar a nombre de otro.
+     Ahí la regla pasa a ser enviar solo las cargas del que inició sesión y
+     dejar esperando las de los demás. */
   const enviarItem = useCallback(
-    (item) =>
-      item.tipo === 'relevamiento'
-        ? api.crearRelevamiento(item.datos)
-        : api.registrarEntrega(item.referencia, item.datos),
+    (item) => {
+      const autor = ENVIAR_A_NOMBRE_DE_QUIEN_CARGO ? (item.autor ?? undefined) : undefined;
+      return item.tipo === 'relevamiento'
+        ? api.crearRelevamiento(item.datos, autor)
+        : api.registrarEntrega(item.referencia, item.datos, autor);
+    },
     [],
   );
 
@@ -346,7 +366,9 @@ function DatosProvider({ children }) {
 
   /* Guarda en la cola o envía: lo que corresponda según haya señal. */
   const guardarOEncolar = useCallback(
-    async (item, mensajeOk) => {
+    async (itemSinAutor, mensajeOk) => {
+      // Quién la cargó queda pegado a la carga, igual que la hora y el GPS.
+      const item = { ...itemSinAutor, autor: autorDeLaCarga(usuario) };
       try {
         const resultado = await enviarItem(item);
         await cargarTodo();
@@ -366,7 +388,7 @@ function DatosProvider({ children }) {
         return { enCola: true, idCola: guardado.id };
       }
     },
-    [enviarItem, cargarTodo],
+    [enviarItem, cargarTodo, usuario],
   );
 
   const descartarPendiente = useCallback((id) => quitarPendiente(id), []);
@@ -435,10 +457,23 @@ function DatosProvider({ children }) {
   /* Alta y edición. La coordenada NO se manda: la obtiene el backend
      geocodificando la dirección declarada, que es la única fuente válida
      (sección 9.2 del pliego). */
+  /* Si se cargó o se cambió la dirección, el backend la busca en el mapa y
+     contesta `ubicacion`. Antes no se decía nada: el local quedaba sin
+     ubicación y recién se notaba en el mapa. */
   const guardarLocal = useCallback(
     (datos) =>
-      ejecutar(datos.id ? 'Local actualizado' : 'Local dado de alta', () =>
-        datos.id ? api.localEdicion(datos.id, datos) : api.localAlta(datos),
+      ejecutar(
+        (r) => {
+          const hecho = datos.id ? 'Local actualizado' : 'Local dado de alta';
+          if (!r?.ubicacion) return { tipo: 'success', texto: hecho };
+          return r.ubicacion.ok
+            ? { tipo: 'success', texto: `${hecho}. La dirección se ubicó en el mapa.` }
+            : {
+                tipo: 'info',
+                texto: `${hecho}, pero la dirección no se pudo ubicar en el mapa: ${r.ubicacion.motivo ?? 'sin motivo'} Revisala, o ubicala a mano en Herramientas → Geocodificación pendiente.`,
+              };
+        },
+        () => (datos.id ? api.localEdicion(datos.id, datos) : api.localAlta(datos)),
       ),
     [ejecutar],
   );
@@ -457,6 +492,17 @@ function DatosProvider({ children }) {
     (localId) => ejecutar('Se levantó el bloqueo', () => api.desbloquear(localId)),
     [ejecutar],
   );
+
+  /* Busca una dirección en el mapa SIN guardar nada (botón "Ubicar en el mapa"
+     del formulario del local). No muestra cartel: el formulario muestra el
+     resultado debajo del campo. */
+  const ubicarDireccion = useCallback(async (direccion) => {
+    try {
+      return await api.ubicarDireccion(direccion);
+    } catch (e) {
+      return { ok: false, motivo: esSinConexion(e) ? 'Sin conexión con el servidor: probá cuando vuelva la señal.' : e.message };
+    }
+  }, []);
 
   const geocodificarPendientes = useCallback(
     () =>
@@ -629,6 +675,22 @@ function DatosProvider({ children }) {
     [ejecutar],
   );
 
+  // El comercio cerró: sale del padrón y del mapa, conserva el historial.
+  const cerrarLocal = useCallback(
+    (localId, motivo) => ejecutar('Local marcado como cerrado', () => api.cerrarLocal(localId, motivo)),
+    [ejecutar],
+  );
+  const reabrirLocal = useCallback(
+    (localId, motivo) => ejecutar('Local reabierto', () => api.reabrirLocal(localId, motivo)),
+    [ejecutar],
+  );
+
+  // Sin las dos entregas efectivas: vuelve a 1° notificación (ver reglas.js).
+  const volverANotificar = useCallback(
+    (localId, motivo) => ejecutar('El local vuelve a 1° notificación pendiente', () => api.volverANotificar(localId, motivo)),
+    [ejecutar],
+  );
+
   /* ==========================================================================
      HERRAMIENTAS
      ========================================================================== */
@@ -789,6 +851,7 @@ function DatosProvider({ children }) {
       bloquearLocal,
       desbloquearLocal,
       geocodificarPendientes,
+      ubicarDireccion,
       crearRelevamiento,
       editarRelevamiento,
       revisarRelevamiento,
@@ -809,6 +872,9 @@ function DatosProvider({ children }) {
       novedadExpediente,
       numeroDefinitivoExpediente,
       reingresarAlCircuito,
+      volverANotificar,
+      cerrarLocal,
+      reabrirLocal,
       fusionarLocales,
       guardarEnCatalogo,
       eliminarDeCatalogo,
@@ -823,10 +889,10 @@ function DatosProvider({ children }) {
     [
       base, hoy, cargando, cargarTodo, localesConEstado,
       auditorias, cargarAuditoria, versionDatos, sinConexion, pendientes, sincronizar, descartarPendiente,
-      guardarLocal, eliminarLocal, bloquearLocal, desbloquearLocal, geocodificarPendientes,
+      guardarLocal, eliminarLocal, bloquearLocal, desbloquearLocal, geocodificarPendientes, ubicarDireccion,
       crearRelevamiento, editarRelevamiento, revisarRelevamiento, generarCedula, regenerarCedula, asignarNotificador,
       marcarImpresa, marcarImpresas, registrarEntrega, corregirEntrega, editarObservaciones, registrarDocumento, validarPresentacion, otorgarProrroga, solicitarProrroga,
-      registrarExpediente, numeroDefinitivoExpediente, solicitarExpediente, novedadExpediente, reingresarAlCircuito, fusionarLocales,
+      registrarExpediente, numeroDefinitivoExpediente, solicitarExpediente, novedadExpediente, reingresarAlCircuito, volverANotificar, cerrarLocal, reabrirLocal, fusionarLocales,
       guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla,
       guardarPermiso, restablecerPermisosDeRol, habilitarRol, reiniciarDemo, recalcularEstados,
     ],

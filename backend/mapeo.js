@@ -234,6 +234,8 @@ export function aLocalFront(fila) {
     domicilioFiscal: fila.domicilioFiscal ?? '',
     email: fila.emailLocal ?? '',
     telefono: fila.telefonoLocal ?? '',
+    // Columna opcional (sql/11): sin ella llega vacío y el formulario no deja escribirlo.
+    titularCuil: fila.titularCuil ?? '',
     observaciones: fila.observacion ?? '',
     // Las coordenadas vienen como DECIMAL, que mysql2 entrega como string para
     // no perder precisión. El front las usa como número (mapa, cálculos).

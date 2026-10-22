@@ -25,6 +25,7 @@
    ============================================================================ */
 
 import { useMemo, useState } from 'react';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GridActionsCellItem } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
@@ -38,6 +39,7 @@ import Confirmar from '../components/ui/Confirmar';
 import Grilla from '../components/ui/Grilla';
 import { BadgeEstado } from '../components/ui/Badge';
 import FormLocal from '../components/FormLocal';
+import ListaTarjetasLocales from '../components/ListaTarjetasLocales';
 import { CampoSelect } from '../components/ui/Campo';
 import { faltantesRegistrales } from '../dominio/reglas';
 import { useRol } from '../auth/rolContexto';
@@ -58,7 +60,12 @@ const SITUACIONES = [
     etiqueta: 'En circuito de intimación',
     cumple: (l) => ['cola_emision', 'en_tramite', 'entrega', 'bloqueo'].includes(l.estadoGrupo),
   },
+  // Los cerrados (el comercio cerró) no están en el padrón: se ven solo con esta
+  // opción, para encontrarlos y reabrirlos (ver "Marcar como cerrado").
+  { id: 'cerrados', etiqueta: 'Cerrados', cumple: (l) => l.estado === 'INACTIVO_CERRADO' },
 ];
+
+const CERRADO = 'INACTIVO_CERRADO';
 
 const LOCAL_VACIO = {
   nombreLocal: '',
@@ -78,12 +85,17 @@ const LOCAL_VACIO = {
    administrativo terminaba en un "no tenés permiso". */
 const ROLES_BAJA_LOCAL = ['coordinacion', 'administrador'];
 
+/* En el teléfono (hasta 600px) el padrón va en tarjetas en vez de la tabla:
+   ver components/ListaTarjetasLocales.jsx. En false, la tabla también ahí. */
+const TARJETAS_EN_CELULAR = true;
+
 function Local() {
   const { rol } = useRol();
   const navegar = useNavigate();
   const { localesConEstado, guardarLocal, eliminarLocal, permisos } = useDatos();
   const puedeEditarLocales = puedeEditar(rol, 'locales', permisos);
   const puedeDarDeBaja = puedeEditarLocales && ROLES_BAJA_LOCAL.includes(rol);
+  const enTarjetas = useMediaQuery('(max-width:600px)') && TARJETAS_EN_CELULAR;
 
   /* ---------- Lo que puede venir pedido desde el Inicio ----------
      Dos parámetros opcionales, y los dos son SOLO ESTADO INICIAL: si la URL
@@ -261,15 +273,22 @@ function Local() {
      Lo único que queda acá es el filtro que llega POR URL: el tablero manda a
      /locales?estado=COMPLETAR_DATOS y esa lista tiene que aparecer ya filtrada. */
   const situacion = SITUACIONES.find((x) => x.id === filtroSituacion);
+  /* El padrón son los locales que existen: los cerrados quedan afuera, salvo
+     que se pidan (Situación → Cerrados, o el estado "Inactivo / cerrado"). */
+  const verCerrados = filtroSituacion === 'cerrados' || filtroEstado === CERRADO;
+  const padron = useMemo(
+    () => (verCerrados ? localesConEstado : localesConEstado.filter((l) => l.estado !== CERRADO)),
+    [localesConEstado, verCerrados],
+  );
   const filas = useMemo(
     () =>
-      localesConEstado.filter(
+      padron.filter(
         (l) =>
           (!filtroEstado || l.estado === filtroEstado) &&
           (!filtroRubro || l.rubro === filtroRubro) &&
           (!situacion || situacion.cumple(l)),
       ),
-    [localesConEstado, filtroEstado, filtroRubro, situacion],
+    [padron, filtroEstado, filtroRubro, situacion],
   );
 
   // Las opciones salen del padrón: solo los estados y rubros que existen, con
@@ -305,7 +324,7 @@ function Local() {
       <PageHeader
         etiqueta="LOCALES"
         titulo="PADRÓN DE ESTABLECIMIENTOS"
-        subtitulo={`${filas.length} de ${localesConEstado.length} locales`}
+        subtitulo={`${filas.length} de ${padron.length} locales`}
         botonVolver
       />
 
@@ -362,25 +381,36 @@ function Local() {
         </div>
       )}
 
-      <Grilla
-        filas={filas}
-        columnas={columnas}
-        nombreArchivo="padron-locales"
-        tituloImpresion="Padrón de establecimientos"
-        vacio="Ningún local coincide con la búsqueda."
-        botones={
-          puedeEditarLocales && (
-            <button
-              type="button"
-              className="btn-icono btn-icono-azul"
-              title="Nuevo local"
-              onClick={() => setSeleccion({ local: { ...LOCAL_VACIO }, esNuevo: true })}
-            >
-              <AddIcon fontSize="small" />
-            </button>
-          )
-        }
-      />
+      {enTarjetas && (
+        <ListaTarjetasLocales
+          locales={filas}
+          alAbrir={(l) => navegar(`/locales/${l.id}`)}
+          alEditar={puedeEditarLocales ? (l) => setSeleccion({ local: l, esNuevo: false }) : null}
+          alNuevo={puedeEditarLocales ? () => setSeleccion({ local: { ...LOCAL_VACIO }, esNuevo: true }) : null}
+        />
+      )}
+
+      {!enTarjetas && (
+        <Grilla
+          filas={filas}
+          columnas={columnas}
+          nombreArchivo="padron-locales"
+          tituloImpresion="Padrón de establecimientos"
+          vacio="Ningún local coincide con la búsqueda."
+          botones={
+            puedeEditarLocales && (
+              <button
+                type="button"
+                className="btn-icono btn-icono-azul"
+                title="Nuevo local"
+                onClick={() => setSeleccion({ local: { ...LOCAL_VACIO }, esNuevo: true })}
+              >
+                <AddIcon fontSize="small" />
+              </button>
+            )
+          }
+        />
+      )}
 
       {/* ---------- Modal de alta / edición ----------
           El `seleccion &&` de afuera hace que el formulario se desmonte del

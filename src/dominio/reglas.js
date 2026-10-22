@@ -30,6 +30,7 @@
 import { hoyISO, plazoVencido } from './fechas.js';
 import { estaVigente } from './vigencias.js';
 import { correPlazo, deLocal } from './actuaciones.js';
+import { CODIGOS_ESTADO } from './estados.js';
 import { LISTA_ESTADOS } from './estados.js';
 
 /* ============================================================================
@@ -323,7 +324,9 @@ export const ACCIONES = [
   {
     id: 'otorgar-prorroga',
     etiqueta: 'Otorgar prórroga',
-    ayuda: 'Solo con las dos notificaciones agotadas y antes del expediente.',
+    // La ayuda decía "solo con las dos notificaciones agotadas", de cuando la
+    // regla era esa; desde el 14/10 vale también con la primera (ver abajo).
+    ayuda: 'Con una notificación entregada (la primera o la segunda) y antes de iniciar el expediente.',
     /* También con la PRIMERA entregada o ya vencida: el titular puede pedir
        más tiempo en cualquier punto del circuito de intimación, no solo al
        final. Vencido el plazo, la prórroga sigue siendo la alternativa antes
@@ -341,6 +344,9 @@ export const ACCIONES = [
     ayuda: 'Registra que se pidió el número a la dependencia que tramita las multas: fecha, agente y canal.',
     estados: ['GENERAR_EXPEDIENTE'],
     roles: ['administrativo', 'coordinacion'],
+    // Sin las dos entregas efectivas no se puede iniciar: no se ofrece pedir
+    // el número (el camino es "Volver a notificar").
+    condicion: (local) => local?.sinDosEntregasEfectivas !== true,
   },
   {
     id: 'registrar-expediente',
@@ -349,6 +355,22 @@ export const ACCIONES = [
     // número completa ese mismo expediente.
     estados: ['GENERAR_EXPEDIENTE', 'EXPEDIENTE_SOLICITADO'],
     roles: ['administrativo', 'coordinacion'],
+    // El backend lo rechaza sin las dos entregas efectivas: no se ofrece.
+    condicion: (local) => local?.sinDosEntregasEfectivas !== true,
+  },
+  {
+    /* Para los locales que llegaron a "Generar expediente" SIN las dos
+       notificaciones con entrega efectiva (casos que vienen de AppSheet, error
+       B-1 del Anexo B). A esos no se les puede iniciar el expediente, y antes
+       no había forma de sacarlos de ahí: quedaban trabados. Vuelven a 1°
+       notificación pendiente con un ciclo nuevo, como el reingreso, y el
+       motivo queda en el historial. Decidido con DITEC el 20/10/2026. */
+    id: 'volver-a-notificar',
+    etiqueta: 'Volver a notificar',
+    ayuda: 'No constan las dos notificaciones entregadas: vuelve a 1° notificación pendiente para hacerlo bien.',
+    estados: ['GENERAR_EXPEDIENTE', 'EXPEDIENTE_SOLICITADO'],
+    roles: ['coordinacion'],
+    condicion: (local) => Boolean(local?.sinDosEntregasEfectivas),
   },
   {
     id: 'reingresar-circuito',
@@ -356,6 +378,27 @@ export const ACCIONES = [
     ayuda: 'Genera una nueva primera notificación y reinicia la intimación.',
     estados: ['EXPEDIENTE'],
     roles: ['coordinacion'],
+  },
+  {
+    /* EL COMERCIO CERRÓ. Distinto de la baja (que es para un error de carga
+       y oculta todo el historial) y del bloqueo (una pausa mientras se
+       revisa algo): el local sale del padrón, del mapa, de las bandejas y de
+       la emisión, pero conserva su historial y se puede reabrir. Usa el
+       estado INACTIVO que la base del área ya tenía. Solo el administrador
+       del sistema (roles vacío: el administrador puede todo), decidido con
+       DITEC el 21/10/2026. */
+    id: 'cerrar-local',
+    etiqueta: 'Marcar como cerrado',
+    ayuda: 'El comercio cerró: sale del padrón, del mapa y de las bandejas. Conserva su historial y se puede reabrir.',
+    estados: CODIGOS_ESTADO.filter((c) => c !== 'INACTIVO_CERRADO'),
+    roles: [],
+  },
+  {
+    id: 'reabrir-local',
+    etiqueta: 'Reabrir local',
+    ayuda: 'Se marcó cerrado por error, o volvió a abrir: vuelve al estado que le corresponde por sus trámites.',
+    estados: ['INACTIVO_CERRADO'],
+    roles: [],
   },
   {
     id: 'bloquear',

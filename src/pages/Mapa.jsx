@@ -111,7 +111,11 @@ function Mapa() {
   const filtrados = useMemo(
     () =>
       localesConEstado.filter(
-        (l) => (!filtroEstado || l.estado === filtroEstado) && (!filtroRubro || l.rubro === filtroRubro),
+        (l) =>
+          // Los cerrados (el comercio cerró) no van al mapa, salvo que se los pida por estado.
+          (l.estado !== 'INACTIVO_CERRADO' || filtroEstado === 'INACTIVO_CERRADO') &&
+          (!filtroEstado || l.estado === filtroEstado) &&
+          (!filtroRubro || l.rubro === filtroRubro),
       ),
     [localesConEstado, filtroEstado, filtroRubro],
   );

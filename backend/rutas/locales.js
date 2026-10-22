@@ -32,6 +32,7 @@ import { requiereRol } from '../middlewares/usuario.js';
 import { geocodificarDireccion } from '../geocodificador.js';
 import { ErrorActo, ejecutarActo, registrarAlta } from '../actos.js';
 import { historialDeLocal, registrarCambio, solicitudesDeProrrogaPendientes } from '../auditoria.js';
+import { tiene } from '../capacidades.js';
 
 const router = Router();
 
@@ -142,11 +143,17 @@ router.post('/', requiereRol('administrativo', 'coordinacion'), async (req, res,
           datos.observaciones ? recortarObservacion(datos.observaciones) : null,
         ],
       );
+      // El CUIL del titular habilitado (portal), solo si la base tiene la
+      // columna: sql/11-titular-cuil.sql.
+      if (tiene('titularCuil') && datos.titularCuil?.trim()) {
+        await cx.execute('UPDATE local SET titular_cuil = ? WHERE id_local = ?', [datos.titularCuil.trim(), resultado.insertId]);
+      }
       await registrarAlta(cx, req, resultado.insertId, 'Alta manual en el padrón', 'alta-local');
       return resultado.insertId;
     });
 
-    res.status(201).json(await localPorId(idLocal));
+    // `ubicacion` le dice a la pantalla si la dirección se encontró en el mapa.
+    res.status(201).json({ ...(await localPorId(idLocal)), ubicacion: { ok: geo.ok, motivo: geo.motivo ?? null } });
   } catch (e) {
     next(e);
   }
@@ -186,13 +193,17 @@ router.put('/:id', requiereRol('administrativo', 'coordinacion'), async (req, re
     cambio('domicilioFiscal', 'domicilio_fiscal', 'domicilio fiscal');
     cambio('email', 'email_local', 'correo');
     cambio('telefono', 'telefono_local', 'teléfono');
+    // Sin la columna (sql/11) el dato no tiene dónde guardarse: se ignora.
+    if (tiene('titularCuil')) cambio('titularCuil', 'titular_cuil', 'CUIL del titular habilitado');
     cambio('observaciones', 'observacion', 'observaciones del padrón', (v) => (v ? recortarObservacion(v) : null));
     if (distinto(datos.rubro, actual.rubro)) {
       asignar('id_rubro', await idDeRubro(datos.rubro), 'rubro', actual.rubro, datos.rubro);
     }
 
+    let ubicacion;
     if (distinto(datos.direccion, actual.direccion)) {
       const geo = await geocodificarDireccion(datos.direccion);
+      ubicacion = { ok: geo.ok, motivo: geo.motivo ?? null };
       asignar('direccion_local', datos.direccion, 'dirección', actual.direccion, datos.direccion);
       asignar('latitud_local', geo.ok ? geo.latitud : null);
       asignar('longitud_local', geo.ok ? geo.longitud : null);
@@ -232,7 +243,8 @@ router.put('/:id', requiereRol('administrativo', 'coordinacion'), async (req, re
       },
     });
 
-    res.json(await localPorId(id));
+    // Si cambió la dirección, `ubicacion` dice si se encontró en el mapa.
+    res.json({ ...(await localPorId(id)), ...(ubicacion ? { ubicacion } : {}) });
   } catch (e) {
     next(e);
   }
@@ -316,6 +328,87 @@ router.delete('/:id/bloqueo', requiereRol('coordinacion'), async (req, res, next
       forzarRegistro: true,
       trabajo: async (cx) => {
         await cx.execute('UPDATE local SET bloqueado = 0, bloqueado_motivo = NULL, id_usuario_bloqueado = NULL WHERE id_local = ?', [id]);
+        return {};
+      },
+    });
+
+    res.json(await localPorId(id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* POST /locales/:id/cierre   { motivo }   (solo el administrador)
+
+   EL COMERCIO CERRÓ. El local pasa al estado INACTIVO que la base del área ya
+   tenía (id_estado 6, "Inactivo / cerrado" en pantalla): sale del padrón, del
+   mapa, de las bandejas y de la emisión automática, pero no se borra nada y
+   conserva su historial. Es distinto de la baja (DELETE /locales/:id), que es
+   para un error de carga y oculta también los trámites. El estado que tenía
+   queda en la auditoría (estado_anterior): con eso se lo reabre. */
+router.post('/:id/cierre', requiereRol('administrador'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const motivo = (req.body?.motivo ?? '').trim();
+    if (!motivo) return res.status(400).json({ error: 'Escribí el motivo: queda en el historial del local' });
+
+    await ejecutarActo(req, {
+      idLocal: id,
+      accion: 'cerrar-local',
+      motivo: `Local cerrado: ${motivo}`,
+      forzarRegistro: true,
+      trabajo: async (cx) => {
+        await cx.execute('UPDATE local SET id_estado = ? WHERE id_local = ?', [ID_ESTADO.LOCAL_INACTIVO, id]);
+        return {};
+      },
+    });
+
+    res.json(await localPorId(id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* Al reabrir, el local vuelve al estado guardado que tenía. Si tiene trámites
+   del circuito, su estado sale de ellos y alcanza con "Revisión de datos"
+   (igual que el reingreso). Si no tiene, el estado guardado ES su estado: un
+   exento tiene que volver a exento, no entrar al circuito por reabrirlo. */
+const ESTADO_GUARDADO_AL_REABRIR = {
+  EXENTO_REVISION: ID_ESTADO.EXENTO_PENDIENTE,
+  EXENTO_CONFIRMADO: ID_ESTADO.RELEVADO_EXENTO,
+  COMPLETAR_DATOS: ID_ESTADO.COMPLETAR_DATOS,
+};
+
+/* POST /locales/:id/reapertura   { motivo }   (solo el administrador)
+
+   Se marcó cerrado por error, o el comercio volvió a abrir. El estado anterior
+   sale de la auditoría del cierre; si no la hay (un local que ya venía cerrado
+   de AppSheet, o una base sin sql/05), vuelve a "Revisión de datos" y desde
+   ahí sus trámites deciden. */
+router.post('/:id/reapertura', requiereRol('administrador'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const motivo = (req.body?.motivo ?? '').trim();
+    if (!motivo) return res.status(400).json({ error: 'Escribí el motivo: queda en el historial del local' });
+
+    let anterior = null;
+    if (tiene('auditoria')) {
+      const [cierre] = await consultar(
+        `SELECT estado_anterior FROM auditoria
+          WHERE id_local = ? AND accion = 'cerrar-local' ORDER BY id_auditoria DESC LIMIT 1`,
+        [id],
+      );
+      anterior = cierre?.estadoAnterior ?? null;
+    }
+    const idEstado = ESTADO_GUARDADO_AL_REABRIR[anterior] ?? ID_ESTADO.REVISION_DATOS;
+
+    await ejecutarActo(req, {
+      idLocal: id,
+      accion: 'reabrir-local',
+      motivo: `Local reabierto: ${motivo}`,
+      forzarRegistro: true,
+      trabajo: async (cx) => {
+        await cx.execute('UPDATE local SET id_estado = ? WHERE id_local = ?', [idEstado, id]);
         return {};
       },
     });

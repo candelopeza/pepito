@@ -149,8 +149,12 @@ function achicarImagen(archivo, maximo = 1600, calidad = 0.8) {
 
 /* Foto desde la cámara o la galería del celular. `valor` es la imagen ya
    achicada (data URL); onChange recibe (imagen, nombreDelArchivo). Se usa en
-   el formulario de entrega de cédulas (sección 6.2). */
-export function CampoFoto({ id, etiqueta, valor, onChange, error, ayuda, ancho }) {
+   el formulario de entrega de cédulas (sección 6.2).
+
+   soloCamara: en el teléfono abre directo la cámara trasera y no deja elegir
+   una foto guardada (atributo `capture`, lo respetan Android e iPhone). Así la
+   foto es del momento. En la PC no cambia nada: abre el explorador de archivos. */
+export function CampoFoto({ id, etiqueta, valor, onChange, error, ayuda, ancho, soloCamara = false }) {
   const [preparando, setPreparando] = useState(false);
 
   async function elegir(e) {
@@ -169,7 +173,14 @@ export function CampoFoto({ id, etiqueta, valor, onChange, error, ayuda, ancho }
 
   return (
     <Envoltura id={id} etiqueta={etiqueta} error={error} ayuda={preparando ? 'Preparando la foto…' : ayuda} ancho={ancho}>
-      <input id={id} type="file" accept="image/*" className={error ? 'con-error' : ''} onChange={elegir} />
+      <input
+        id={id}
+        type="file"
+        accept="image/*"
+        capture={soloCamara ? 'environment' : undefined}
+        className={error ? 'con-error' : ''}
+        onChange={elegir}
+      />
       {valor && (
         <span className="campo-foto-previa">
           <img src={valor} alt="Foto cargada" />

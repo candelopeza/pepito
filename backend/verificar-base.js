@@ -96,6 +96,9 @@ async function main() {
   dato('sql/07 accesos', cap.accesos ? 'sí' : 'NO', !cap.accesos);
   dato('sql/08 fotos y documentos (archivo)', cap.archivos ? 'sí' : 'NO', !cap.archivos);
   dato('sql/09 informe 9 de Julio', informe9dj ? 'sí' : 'NO', !informe9dj);
+  const bitacoraExpedientes = await existeTabla('expediente_novedad');
+  dato('sql/10 bitácora de expedientes', bitacoraExpedientes ? 'sí' : 'NO', !bitacoraExpedientes);
+  dato('sql/11 CUIL del titular habilitado', cap.titularCuil ? 'sí' : 'NO', !cap.titularCuil);
 
   /* ---------------------------------------------------------------- 1 */
   titulo('1. CANTIDADES (para comparar con el Excel de AppSheet)');

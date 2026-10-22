@@ -38,3 +38,20 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
 }
+
+// --- 6. Que el teléfono no borre lo guardado ---
+// Las cargas hechas sin señal viven en el dispositivo (datos/colaSinConexion.js).
+// Si el teléfono se queda sin espacio, o Safari ve que la página no se abrió en
+// 7 días, puede borrarlas sin avisar. Esto le pide que las trate como datos del
+// usuario. Solo en teléfonos y tablets (pantalla táctil) o con la app
+// instalada: en la PC no hace falta, y Firefox lo preguntaría con un cartel.
+// En el iPhone lo que más protege es instalarla en la pantalla de inicio.
+const PEDIR_ALMACENAMIENTO_PERSISTENTE = true;
+const esTelefono =
+  window.matchMedia?.('(pointer: coarse)').matches || window.matchMedia?.('(display-mode: standalone)').matches;
+if (PEDIR_ALMACENAMIENTO_PERSISTENTE && esTelefono && navigator.storage?.persist) {
+  navigator.storage
+    .persisted()
+    .then((ya) => ya || navigator.storage.persist())
+    .catch(() => {});
+}

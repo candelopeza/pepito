@@ -46,6 +46,7 @@ import { useRol } from '../../auth/rolContexto';
 import { useDatos } from '../../datos/datosContexto';
 import { ordenarPorProximidad } from '../../dominio/geo';
 import { fmtFecha, fmtFechaHora, hoyISO } from '../../dominio/fechas';
+import { quienLaCargo } from '../../datos/colaSinConexion';
 import { resultadoEntrega } from '../../dominio/actuaciones';
 
 /* Estados del local en los que su cédula en curso espera una entrega. */
@@ -148,6 +149,7 @@ function Entregas() {
               <li key={p.id}>
                 <strong>{p.etiqueta}</strong>
                 <span>{fmtFechaHora(p.creado)}</span>
+                {quienLaCargo(p, usuario) && <span className="texto-chico">{quienLaCargo(p, usuario)}</span>}
                 {p.rechazado ? (
                   <>
                     <Badge color="rojo">No se aceptó: {p.error}</Badge>
@@ -164,8 +166,19 @@ function Entregas() {
         </>
       )}
 
-      {ruta.length === 0 ? (
+      {/* La lista son las cédulas asignadas A ESTE AGENTE (por su id en la
+          tabla de usuarios). Con el usuario de prueba, que no existe en la
+          base, nunca hay ninguna: se dice por qué en vez de "no tenés nada". */}
+      {ruta.length === 0 && !verTodas && !yo ? (
+        <Aviso tipo="alerta" titulo="Para ver tus cédulas, entrá firmando como un agente">
+          Estás con un usuario de prueba, que no existe en la base, y las cédulas se asignan a cada agente. Elegí tu usuario
+          con “Firmar como” en la barra (si no está, lo crea Dirección en Accesos → Usuarios).
+        </Aviso>
+      ) : ruta.length === 0 ? (
         <Vacio titulo="No tenés entregas pendientes">
+          {sinAsignar.length > 0 &&
+            !verTodas &&
+            `Hay ${sinAsignar.length} cédula(s) emitidas sin notificador: coordinación las asigna desde el tablero.`}
         </Vacio>
       ) : (
         <ol className="lista-entregas">

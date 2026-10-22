@@ -134,15 +134,6 @@ export const MODULOS = [
     rolesEdicion: ['administrativo', 'coordinacion'],
   },
   {
-    id: 'validaciones',
-    titulo: 'Validar presentaciones',
-    descripcion: 'Documentación que entró por el portal y espera aprobación',
-    ruta: '/validaciones',
-    grupo: 'operativo',
-    roles: ['administrativo', 'coordinacion'],
-    rolesEdicion: ['administrativo', 'coordinacion'],
-  },
-  {
     id: 'prorrogas',
     titulo: 'Prórrogas',
     descripcion: 'Prórrogas otorgadas y solicitudes pendientes',
@@ -201,19 +192,10 @@ export const MODULOS = [
 
   /* ===================== ACCESOS ===================== */
   {
-    id: 'accesos-roles',
-    titulo: 'Tipos de usuario',
-    descripcion: 'Qué ve y qué modifica cada tipo de usuario',
-    ruta: '/accesos/tipos-usuario',
-    grupo: 'accesos',
-    roles: ['administrador'],
-    rolesEdicion: ['administrador'],
-  },
-  {
-    id: 'accesos-usuarios',
-    titulo: 'Usuarios',
-    descripcion: 'Alta, baja y rol de los agentes',
-    ruta: '/accesos/usuarios',
+    id: 'accesos',
+    titulo: 'Accesos',
+    descripcion: 'Usuarios (por id_persona) y qué puede hacer cada tipo',
+    ruta: '/accesos',
     grupo: 'accesos',
     roles: ['administrador', 'direccion'],
     rolesEdicion: ['administrador', 'direccion'],
@@ -234,15 +216,6 @@ export const MODULOS = [
     titulo: 'Informe 9 de Julio',
     descripcion: 'Carga asistida del listado de contratos de la prestataria',
     ruta: '/herramientas/informe-9dj',
-    grupo: 'herramientas',
-    roles: ['administrativo', 'coordinacion'],
-    rolesEdicion: ['administrativo', 'coordinacion'],
-  },
-  {
-    id: 'geocodificacion',
-    titulo: 'Geocodificación pendiente',
-    descripcion: 'Locales sin ubicación: hay que corregir la dirección',
-    ruta: '/herramientas/geocodificacion',
     grupo: 'herramientas',
     roles: ['administrativo', 'coordinacion'],
     rolesEdicion: ['administrativo', 'coordinacion'],
@@ -285,6 +258,7 @@ export const MODULOS = [
     roles: ['direccion'],
     rolesEdicion: ['direccion'],
   },
+
 
   /* ===================== PORTAL DEL TITULAR ===================== */
   {
@@ -453,7 +427,7 @@ export const ROL_ADMINISTRADOR = 'administrador';
 
 /* El módulo que ningún ajuste puede quitarle a un rol, ni siquiera apagar el
    rol entero. Por eso en nivelAcceso() se mira ANTES que rolHabilitado(). */
-const FIJOS = { [ROL_ADMINISTRADOR]: ['accesos-roles'] };
+const FIJOS = { [ROL_ADMINISTRADOR]: ['accesos'] };
 
 export function esPermisoFijo(idModulo, rol) {
   return (FIJOS[rol] || []).includes(idModulo);

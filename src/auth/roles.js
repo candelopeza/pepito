@@ -75,7 +75,13 @@ export const LISTA_ROLES = Object.values(ROLES);
 
 /* Arranca en coordinación: es el rol que ve la mayor parte del circuito y el
    más útil para mostrarle el sistema al área. */
-export const ROL_POR_DEFECTO = ROLES.coordinacion.id;
+/* >>> EL PÚBLICO ENTRA COMO TITULAR <<<
+   El sistema va a estar abierto al público desde CiDiTuc: cualquier persona
+   registrada que entre y NO sea personal habilitado del área cae al portal
+   del titular, con lo suyo (o con el aviso de que no tiene locales cargados).
+   Por eso el rol por defecto es titular: el personal del área elige su
+   usuario en la barra. */
+export const ROL_POR_DEFECTO = ROLES.titular.id;
 
 export function esRolValido(rol) {
   return Object.prototype.hasOwnProperty.call(ROLES, rol);

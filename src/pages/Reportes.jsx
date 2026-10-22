@@ -150,17 +150,17 @@ function Reportes() {
       {/* ================= RELEVAMIENTOS ================= */}
       <span>  </span>
       <div className="accesos-header">
-        <span>Relevamientos del período, por clasificación</span>
+        <span>Relevamientos</span>
       </div>
       <div className="grid-stats">
-        <Metrica valor={p.relevamientos} etiqueta="Relevamientos" />
+        <Metrica valor={p.relevamientos} etiqueta="Relevamientos realizados" />
         <Metrica valor={p.relevamientosGG} etiqueta="Clasificados Gran Generador" color="naranja" />
         <Metrica valor={p.relevamientosGM} etiqueta="Clasificados Generador Menor" color="azul" />
       </div>
 
       {/* ================= NOTIFICACIONES ================= */}
       <div className="accesos-header">
-        <span>Notificaciones emitidas y entregadas en el período, por instancia</span>
+        <span>Notificaciones</span>
       </div>
       <div className="grid-stats">
         <Metrica valor={p.notif1Emitidas} etiqueta="Primeras emitidas" />
@@ -184,7 +184,7 @@ function Reportes() {
       </div>
       {/* ================= DOCUMENTACIÓN ================= */}
       <div className="accesos-header">
-        <span>Documentación recibida en el período, por tipo</span>
+        <span>Documentación</span>
       </div>
       <div className="grid-stats">
         <Metrica valor={p.ddjj} etiqueta="Declaraciones juradas" color="verde" />

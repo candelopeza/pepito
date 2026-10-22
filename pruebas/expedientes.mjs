@@ -44,8 +44,22 @@ function seccion(titulo) {
   console.log(`\n=== ${titulo} ===`);
 }
 
+/* El fetch de Node reutiliza conexiones y el servidor corta las ociosas a los
+   5 segundos: un pedido sobre un socket ya muerto da ECONNRESET. Se reintenta
+   UNA vez con conexión nueva (en estas pruebas ningún pedido llega al servidor
+   cuando el socket muere al escribir). */
+async function conReintento(hacerPedido) {
+  try {
+    return await hacerPedido();
+  } catch (e) {
+    if (String(e?.cause?.code ?? '') !== 'ECONNRESET') throw e;
+    await new Promise((r) => setTimeout(r, 300));
+    return hacerPedido();
+  }
+}
+
 async function pedir(ruta, { metodo = 'GET', cuerpo, rol = 'coordinacion', nombre = USUARIO } = {}) {
-  const r = await fetch(`${BASE}${ruta}`, {
+  const r = await conReintento(() => fetch(`${BASE}${ruta}`, {
     method: metodo,
     headers: {
       'Content-Type': 'application/json',
@@ -53,7 +67,7 @@ async function pedir(ruta, { metodo = 'GET', cuerpo, rol = 'coordinacion', nombr
       'x-usuario-rol': rol,
     },
     body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-  });
+  }));
   return { estado: r.status, cuerpo: await r.json().catch(() => null) };
 }
 
@@ -131,10 +145,28 @@ if (!idLocal) {
   });
   verificar('la marca "sin expediente" NO sirve para saltearse la obligatoriedad en una carga nueva', conTilde.estado === 400, JSON.stringify(conTilde.cuerpo));
 
+  const emisionFutura = await pedir('/documentacion', {
+    metodo: 'POST',
+    cuerpo: { localId: idLocal, tipo: 'DDJJ', numero: 'DJ-FUTURA', fechaEmision: '2099-01-01', expedienteTramite: '888888/2026' },
+  });
+  verificar('una fecha de emisión futura se rechaza: el documento ya existe cuando se carga', emisionFutura.estado === 400 && /futura/.test(emisionFutura.cuerpo?.error ?? ''), JSON.stringify(emisionFutura.cuerpo));
+
   const conNumero = await pedir('/documentacion', {
     metodo: 'POST',
     cuerpo: { localId: idLocal, tipo: 'DDJJ', numero: 'DJ-PRUEBA-3', fechaEmision: '2026-10-14', expedienteTramite: 'EXP-PRUEBA-777/2026' },
   });
+  // Con esa DDJJ vigente, el local ya acredita: no corresponde registrarle
+  // otra documentación (ni a la oficina ni al titular) hasta que venza.
+  const otraEncima = await pedir('/documentacion', {
+    metodo: 'POST',
+    cuerpo: { localId: idLocal, tipo: 'CONTRATO', numero: 'C-ENCIMA', fechaEmision: '2026-10-14', fechaVencimiento: '2027-10-14', expedienteTramite: '777777/2026' },
+  });
+  verificar(
+    'con documentación vigente, registrar otra se rechaza (sería redundante o contradictorio)',
+    otraEncima.estado === 409 && /vigente|No corresponde/.test(otraEncima.cuerpo?.error ?? ''),
+    JSON.stringify(otraEncima.cuerpo),
+  );
+
   verificar(
     'con el número del trámite, la presentación entra y el número queda',
     conNumero.estado === 201 && conNumero.cuerpo?.expedienteTramite === 'EXP-PRUEBA-777/2026',
@@ -238,7 +270,10 @@ if (!candidato) {
   seccion('El número guardado no se edita: se corrige, con motivo y bitácora');
   {
     const numeroNuevo = `${900000 + Math.floor(Math.random() * 99999)}/${anio}`;
-    const sinMotivo = await pedir(`/expedientes/${idExpediente}/numero`, { metodo: 'PUT', cuerpo: { numero: numeroNuevo } });
+    const comoCoordinacion = await pedir(`/expedientes/${idExpediente}/numero`, { metodo: 'PUT', cuerpo: { numero: numeroNuevo, motivo: 'x' }, rol: 'coordinacion' });
+    verificar('coordinación NO puede tocar el número: es tarea del administrativo', comoCoordinacion.estado === 403, JSON.stringify(comoCoordinacion.cuerpo));
+
+    const sinMotivo = await pedir(`/expedientes/${idExpediente}/numero`, { metodo: 'PUT', cuerpo: { numero: numeroNuevo }, rol: 'administrativo' });
     verificar('corregir sin motivo se rechaza', sinMotivo.estado === 400, JSON.stringify(sinMotivo.cuerpo));
 
     // El numero de OTRO expediente no se puede usar: es el error mas caro.
@@ -248,6 +283,7 @@ if (!candidato) {
       const duplicado = await pedir(`/expedientes/${idExpediente}/numero`, {
         metodo: 'PUT',
         cuerpo: { numero: ajeno.numeroExpediente, motivo: 'prueba de duplicado' },
+        rol: 'administrativo',
       });
       verificar('el número de OTRO comercio se rechaza (el error más caro)', duplicado.estado === 409, JSON.stringify(duplicado.cuerpo));
     }
@@ -255,6 +291,7 @@ if (!candidato) {
     const corregido = await pedir(`/expedientes/${idExpediente}/numero`, {
       metodo: 'PUT',
       cuerpo: { numero: numeroNuevo, motivo: 'Error de tipeo en un dígito (prueba automática).' },
+      rol: 'administrativo',
     });
     verificar('con motivo, la corrección entra', corregido.estado === 200 && corregido.cuerpo?.numeroExpediente === numeroNuevo, JSON.stringify(corregido.cuerpo).slice(0, 120));
 

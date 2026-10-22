@@ -57,6 +57,9 @@ function Expediente() {
   } = useDatos();
   const { rol } = useRol();
   const puedeCargarNumero = puedeEditar(rol, 'expedientes', permisos);
+  // El NÚMERO (completar un provisorio o corregir uno cargado) es solo del
+  // personal administrativo: es quien habla con la mesa de entradas.
+  const puedeTocarNumero = ['administrativo', 'administrador'].includes(rol);
   // El expediente provisorio al que se le está cargando el número definitivo.
   const [definitivo, setDefinitivo] = useState(null);
   const [numero, setNumero] = useState('');
@@ -231,7 +234,7 @@ function Expediente() {
           String(row.numeroExpediente ?? '').startsWith('PROV-') ? (
             <span className="celda-apilada">
               <strong>{row.numeroExpediente}</strong>
-              {puedeCargarNumero ? (
+              {puedeTocarNumero ? (
                 <button
                   type="button"
                   className="btn-tabla"
@@ -253,7 +256,7 @@ function Expediente() {
               <strong>{row.numeroExpediente}</strong>
               {/* El número guardado no se edita: se CORRIGE, con motivo que
                   queda en la bitácora. */}
-              {puedeCargarNumero && (
+              {puedeTocarNumero && (
                 <button
                   type="button"
                   className="btn-tabla"
@@ -370,9 +373,7 @@ function Expediente() {
 
       {sinDebidoProceso.length > 0 && (
         <Aviso tipo="bloqueo" titulo={`${sinDebidoProceso.length} local(es) llegaron acá sin dos entregas fehacientes`}>
-          {sinDebidoProceso.map((l) => l.nombreLocal).join(' · ')}. Revisalos antes de elevar: ningún local debería llegar a
-          expediente sin que consten dos notificaciones con entrega efectiva. En el sistema viejo esto pasaba por el error B-1, que
-          leía el resultado de entrega de la columna equivocada.
+          {sinDebidoProceso.map((l) => l.nombreLocal).join(' · ')}.
         </Aviso>
       )}
 
@@ -407,7 +408,6 @@ function Expediente() {
       </div>
       {solicitados.length === 0 ? (
         <Vacio titulo="No hay solicitudes esperando">
-          Cuando un agente pide el número de un expediente (desde la tabla de arriba), la espera se sigue acá.
         </Vacio>
       ) : (
         <Grilla

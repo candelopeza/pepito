@@ -41,6 +41,8 @@ import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Grilla from '../components/ui/Grilla';
 import Aviso from '../components/ui/Aviso';
 import { CampoSelect } from '../components/ui/Campo';
+import SeccionGeocodificacion from '../components/SeccionGeocodificacion';
+import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { LISTA_ESTADOS, colorEstado, etiquetaEstado } from '../dominio/estados';
 
@@ -99,6 +101,10 @@ const COLUMNAS_SIN_UBICACION = [
 
 function Mapa() {
   const { localesConEstado, rubros, limiteMunicipal, limiteOficial } = useDatos();
+  const { rol } = useRol();
+  // La corrección de ubicaciones es de la oficina: para el resto, el mapa es
+  // solo de consulta y la sección no aparece.
+  const puedeCorregir = ['administrativo', 'coordinacion', 'administrador'].includes(rol);
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroRubro, setFiltroRubro] = useState('');
 
@@ -221,14 +227,13 @@ function Mapa() {
         </div>
       )}
 
-      
 
       {/* ---------- Los que no se pudieron ubicar ---------- */}
       {sinUbicacion.length > 0 && (
         <>
           <Aviso tipo="alerta" titulo={`${sinUbicacion.length} local(es) no aparecen en el mapa`}>
             No se pudo geocodificar su dirección. Quedan sin coordenada a propósito: no se les asigna un punto aproximado ni se usa
-            la coordenada del relevamiento. <Link to="/herramientas/geocodificacion">Corregir direcciones</Link>.
+            la coordenada del relevamiento.{puedeCorregir ? ' La corrección está acá abajo, en Geocodificación pendiente.' : ''}
           </Aviso>
 
           <Grilla
@@ -240,6 +245,10 @@ function Mapa() {
           />
         </>
       )}
+
+      {/* ---------- La corrección, en la misma pantalla que el problema ----------
+          Antes era la pestaña Herramientas → Geocodificación pendiente. */}
+      {puedeCorregir && <SeccionGeocodificacion />}
     </>
   );
 }

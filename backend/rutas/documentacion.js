@@ -54,6 +54,8 @@ import { archivosDisponibles, guardarImagen, leerDocumento } from '../archivos.j
 import { fmtFecha, hoyISO } from '../../src/dominio/fechas.js';
 import { ETIQUETA_DOCUMENTO } from '../../src/dominio/actuaciones.js';
 import { vencimientoDocumento } from '../../src/dominio/vigencias.js';
+import { ESTADOS_CON_DOCUMENTACION } from '../../src/dominio/reglas.js';
+import { etiquetaEstado } from '../../src/dominio/estados.js';
 
 const router = Router();
 
@@ -191,6 +193,18 @@ router.post('/', async (req, res, next) => {
       controlar: async ({ estado }, cx) => {
         if (esTitular && estado === 'EXENTO_CONFIRMADO') {
           return new ErrorActo(409, 'El local está exento: no tiene que presentar documentación.');
+        }
+        /* Con documentación vigente (o una presentación esperando validación)
+           no se registra otra: sería redundante, o contradictoria (una DDJJ
+           encima de un contrato vigente). Vale para la oficina y para el
+           titular por igual. */
+        if (ESTADOS_CON_DOCUMENTACION.includes(estado)) {
+          return new ErrorActo(
+            409,
+            estado === 'PRESENTACION_EN_REVISION'
+              ? 'Ya hay una presentación de este local esperando validación: primero hay que resolverla.'
+              : `El local ya tiene documentación vigente (${etiquetaEstado(estado)}): no corresponde registrar otra hasta que venza.`,
+          );
         }
         /* EL NÚMERO NO SE REPITE (sección 5.4: numeraciones con significado
            legal, sin reutilización). Una DDJJ es de un solo local: su número

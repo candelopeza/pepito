@@ -155,6 +155,18 @@ if (!idLocal) {
     metodo: 'POST',
     cuerpo: { localId: idLocal, tipo: 'DDJJ', numero: 'DJ-PRUEBA-3', fechaEmision: '2026-10-14', expedienteTramite: 'EXP-PRUEBA-777/2026' },
   });
+  // Con esa DDJJ vigente, el local ya acredita: no corresponde registrarle
+  // otra documentación (ni a la oficina ni al titular) hasta que venza.
+  const otraEncima = await pedir('/documentacion', {
+    metodo: 'POST',
+    cuerpo: { localId: idLocal, tipo: 'CONTRATO', numero: 'C-ENCIMA', fechaEmision: '2026-10-14', fechaVencimiento: '2027-10-14', expedienteTramite: '777777/2026' },
+  });
+  verificar(
+    'con documentación vigente, registrar otra se rechaza (sería redundante o contradictorio)',
+    otraEncima.estado === 409 && /vigente|No corresponde/.test(otraEncima.cuerpo?.error ?? ''),
+    JSON.stringify(otraEncima.cuerpo),
+  );
+
   verificar(
     'con el número del trámite, la presentación entra y el número queda',
     conNumero.estado === 201 && conNumero.cuerpo?.expedienteTramite === 'EXP-PRUEBA-777/2026',

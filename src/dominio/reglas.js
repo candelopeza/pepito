@@ -30,6 +30,7 @@
 import { hoyISO, plazoVencido } from './fechas.js';
 import { estaVigente } from './vigencias.js';
 import { correPlazo, deLocal } from './actuaciones.js';
+import { LISTA_ESTADOS } from './estados.js';
 
 /* ============================================================================
    DATOS REGISTRALES  (sección 4.3, "Datos registrales y debido proceso")
@@ -208,6 +209,16 @@ export function plazoEnCurso(local, actuaciones, refISO = hoyISO()) {
 
 /* Los resultados de entrega que hacen correr el plazo. */
 const ENTREGA_EFECTIVA = ['ENTREGADA', 'SIN_FIRMA', 'FIJADA'];
+/* Los estados en los que el local YA acredita, o tiene una presentación que
+   espera validación: no corresponde registrarle otra documentación. */
+export const ESTADOS_CON_DOCUMENTACION = [
+  'DDJJ_VIGENTE',
+  'DDJJ_RECICLAJE',
+  'CONTRATO_VIGENTE',
+  'CONTRATO_9DJ',
+  'PRESENTACION_EN_REVISION',
+];
+
 export const ACCIONES = [
   {
     id: 'confirmar-exencion',
@@ -299,7 +310,14 @@ export const ACCIONES = [
     id: 'registrar-documentacion',
     etiqueta: 'Registrar documentación',
     ayuda: 'DDJJ, DDJJ de reciclaje o contrato, con su expediente de trámite.',
-    estados: ['*'],
+    /* En cualquier estado SALVO cuando el local ya acredita (documentación
+       vigente hoy) o tiene una presentación esperando validación: registrarle
+       otra sería redundante o directamente contradictorio (una DDJJ encima
+       de un contrato vigente). Cuando esa documentación venza, el local
+       vuelve al circuito y la acción reaparece sola. */
+    estados: LISTA_ESTADOS.map((e) => e.codigo).filter(
+      (c) => !ESTADOS_CON_DOCUMENTACION.includes(c) && c !== 'EXENTO_CONFIRMADO',
+    ),
     roles: ['administrativo', 'coordinacion'],
   },
   {

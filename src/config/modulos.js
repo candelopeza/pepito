@@ -223,14 +223,42 @@ export const MODULOS = [
 
   /* ===================== CONFIGURACIÓN ===================== */
   {
-    id: 'configuracion',
-    titulo: 'Configuración',
-    descripcion: 'Rubros, feriados, plantilla de cédula y parámetros, en una sola pantalla',
-    ruta: '/configuracion',
+    id: 'config-rubros',
+    titulo: 'Rubros',
+    descripcion: 'Catálogo de rubros de los establecimientos',
+    ruta: '/config/rubros',
     grupo: 'configuracion',
     roles: ['coordinacion', 'direccion'],
     rolesEdicion: ['coordinacion', 'direccion'],
   },
+  {
+    id: 'config-feriados',
+    titulo: 'Feriados',
+    descripcion: 'Calendario para el cómputo de días hábiles',
+    ruta: '/config/feriados',
+    grupo: 'configuracion',
+    roles: ['coordinacion', 'direccion'],
+    rolesEdicion: ['coordinacion', 'direccion'],
+  },
+  {
+    id: 'config-plantilla',
+    titulo: 'Plantilla de cédula',
+    descripcion: 'Texto del documento de notificación',
+    ruta: '/config/plantilla',
+    grupo: 'configuracion',
+    roles: ['coordinacion', 'direccion'],
+    rolesEdicion: ['coordinacion', 'direccion'],
+  },
+  {
+    id: 'config-parametros',
+    titulo: 'Parámetros del sistema',
+    descripcion: 'Plazos de notificación y criterios de cómputo',
+    ruta: '/config/parametros',
+    grupo: 'configuracion',
+    roles: ['direccion'],
+    rolesEdicion: ['direccion'],
+  },
+
 
   /* ===================== PORTAL DEL TITULAR ===================== */
   {

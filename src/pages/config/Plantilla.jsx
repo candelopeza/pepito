@@ -18,6 +18,7 @@
    ============================================================================ */
 
 import { useState } from 'react';
+import PageHeader from '../../components/ui/PageHeader';
 import Aviso from '../../components/ui/Aviso';
 import { useDatos } from '../../datos/datosContexto';
 import { fmtFecha, hoyISO } from '../../dominio/fechas';
@@ -66,6 +67,7 @@ function Plantilla() {
 
   return (
     <>
+      <PageHeader etiqueta="CONFIGURACIÓN" titulo="PLANTILLA DE LA CÉDULA" botonVolver />
       {inexistentes.length > 0 && (
         <Aviso tipo="bloqueo" titulo="Hay variables que no existen">
           {inexistentes.map((c) => `{${c}}`).join(', ')}. Van a salir así en la cédula impresa. Revisá la lista de variables

@@ -72,7 +72,10 @@ import Informe9DJ from './pages/herramientas/Informe9DJ';
 import Accesos from './pages/Accesos';
 
 // --- Configuración ---
-import Configuracion from './pages/Configuracion';
+import Rubros from './pages/config/Rubros';
+import Feriados from './pages/config/Feriados';
+import Plantilla from './pages/config/Plantilla';
+import Parametros from './pages/config/Parametros';
 
 // --- Portal del titular y 404 ---
 import Portal from './pages/Portal';
@@ -126,11 +129,11 @@ function App() {
               <Route path="herramientas/geocodificacion" element={<Navigate to="/mapa" replace />} />
 
               {/* ---- Configuración (tablas maestras y parámetros) ---- */}
-              <Route path="configuracion" element={<RutaProtegida ruta="/configuracion"><Configuracion /></RutaProtegida>} />
-              <Route path="config/rubros" element={<Navigate to="/configuracion" replace />} />
-              <Route path="config/feriados" element={<Navigate to="/configuracion" replace />} />
-              <Route path="config/plantilla" element={<Navigate to="/configuracion" replace />} />
-              <Route path="config/parametros" element={<Navigate to="/configuracion" replace />} />
+              <Route path="config/rubros" element={<RutaProtegida ruta="/config/rubros"><Rubros /></RutaProtegida>} />
+              <Route path="config/feriados" element={<RutaProtegida ruta="/config/feriados"><Feriados /></RutaProtegida>} />
+              <Route path="config/plantilla" element={<RutaProtegida ruta="/config/plantilla"><Plantilla /></RutaProtegida>} />
+              <Route path="config/parametros" element={<RutaProtegida ruta="/config/parametros"><Parametros /></RutaProtegida>} />
+              <Route path="configuracion" element={<Navigate to="/config/rubros" replace />} />
 
               {/* ---- Portal del titular ---- */}
               <Route path="portal" element={<RutaProtegida ruta="/portal"><Portal /></RutaProtegida>} />

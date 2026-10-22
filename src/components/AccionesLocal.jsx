@@ -92,6 +92,9 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
     registrarExpediente,
     solicitarExpediente,
     reingresarAlCircuito,
+    volverANotificar,
+    cerrarLocal,
+    reabrirLocal,
     bloquearLocal,
     desbloquearLocal,
     corregirEntrega,
@@ -645,7 +648,7 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
                 (correo: <strong>{parametros.correoSolicitudExpedientes}</strong>)
               </>
             ) : (
-              <> (el correo de destino todavía no está definido: se carga en Configuración → Parámetros)</>
+              <> (por correo, por teléfono o en persona)</>
             )}
             . Acá queda la constancia: fecha, agente y canal.
           </p>
@@ -809,6 +812,127 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
           </div>
         </div>
       </Modal>
+
+      {/* ======================= VOLVER A NOTIFICAR =======================
+          Para los locales que llegaron a expediente sin las dos entregas
+          efectivas (ver la acción en dominio/reglas.js). */}
+      <Modal
+        abierto={abierta === 'volver-a-notificar'}
+        etiqueta="EXPEDIENTE"
+        titulo="Volver a notificar"
+        onCerrar={cerrar}
+      >
+        <div className="formulario formulario-modal">
+          <p>
+            En <strong>{local.nombreLocal}</strong> no constan las dos notificaciones entregadas, y sin eso no se puede
+            iniciar el expediente de multa. Vuelve a <strong>1° Notificación pendiente</strong> y la intimación arranca
+            de cero. Lo anterior queda en el historial.
+          </p>
+          <CampoTexto
+            id="vol-motivo"
+            etiqueta="Motivo (obligatorio)"
+            valor={form.motivo ?? ''}
+            onChange={(v) => escribir('motivo', v)}
+            error={faltaDato.motivo}
+            ayuda="Por ejemplo: la 2° notificación nunca se entregó (dato de AppSheet)."
+          />
+          <div className="form-acciones">
+            <button
+              type="button"
+              className="btn-primario"
+              onClick={async () => {
+                if (
+                  !completo([
+                    [
+                      'motivo',
+                      form.motivo?.trim(),
+                      'Escribí el motivo: es obligatorio y queda en el historial del local.',
+                    ],
+                  ])
+                )
+                  return;
+                if (await volverANotificar(local.id, form.motivo.trim())) terminar();
+              }}
+            >
+              Volver a notificar
+            </button>
+            <button type="button" className="btn-secundario" onClick={cerrar}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ======================= EL COMERCIO CERRÓ / VOLVIÓ A ABRIR =======================
+          Solo el administrador (ver las acciones en dominio/reglas.js). */}
+      {['cerrar-local', 'reabrir-local'].map((id) => {
+        const esCierre = id === 'cerrar-local';
+        return (
+          <Modal
+            key={id}
+            abierto={abierta === id}
+            etiqueta="PADRÓN"
+            titulo={esCierre ? 'Marcar el local como cerrado' : 'Reabrir el local'}
+            onCerrar={cerrar}
+          >
+            <div className="formulario formulario-modal">
+              <p>
+                {esCierre ? (
+                  <>
+                    <strong>{local.nombreLocal}</strong> deja de aparecer en el padrón, el mapa y las bandejas. No se
+                    borra nada: conserva su historial y se puede reabrir. Se encuentra en el padrón con Situación →
+                    Cerrados.
+                  </>
+                ) : (
+                  <>
+                    <strong>{local.nombreLocal}</strong> vuelve al padrón, al estado que le corresponde por sus
+                    trámites.
+                  </>
+                )}
+              </p>
+              <CampoTexto
+                id={`${id}-motivo`}
+                etiqueta="Motivo (obligatorio)"
+                valor={form.motivo ?? ''}
+                onChange={(v) => escribir('motivo', v)}
+                error={faltaDato.motivo}
+                ayuda={
+                  esCierre
+                    ? 'Por ejemplo: el comercio cerró, verificado en el relevamiento del 20/10.'
+                    : 'Por ejemplo: se marcó cerrado por error, o volvió a abrir.'
+                }
+              />
+              <div className="form-acciones">
+                <button
+                  type="button"
+                  className={esCierre ? 'btn-peligro' : 'btn-primario'}
+                  onClick={async () => {
+                    if (
+                      !completo([
+                        [
+                          'motivo',
+                          form.motivo?.trim(),
+                          'Escribí el motivo: es obligatorio y queda en el historial del local.',
+                        ],
+                      ])
+                    )
+                      return;
+                    const hecho = esCierre
+                      ? await cerrarLocal(local.id, form.motivo.trim())
+                      : await reabrirLocal(local.id, form.motivo.trim());
+                    if (hecho) terminar();
+                  }}
+                >
+                  {esCierre ? 'Marcar como cerrado' : 'Reabrir'}
+                </button>
+                <button type="button" className="btn-secundario" onClick={cerrar}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })}
 
       {/* ======================= BLOQUEO MANUAL ======================= */}
       <Modal

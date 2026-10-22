@@ -17,7 +17,7 @@
 import { diasEntre, hoyISO, sumarDias } from '../dominio/fechas.js';
 import { colorEstado, etiquetaEstado, grupoEstado } from '../dominio/estados.js';
 import { ACCIONES, accionesDisponibles, documentacionVigente, plazoEnCurso, resolverEstado } from '../dominio/reglas.js';
-import { deLocal } from '../dominio/actuaciones.js';
+import { deLocal, dosEntregasEfectivas } from '../dominio/actuaciones.js';
 
 /* Enriquece cada local con todo lo derivado. Es lo que consumen las grillas.
    Ojo: devuelve objetos NUEVOS, no toca los del store. */
@@ -72,6 +72,9 @@ export function conEstado(base, refISO = hoyISO()) {
       cantidadActuaciones: ordenadas.length,
       sinGeo: l.latitud === null || l.longitud === null,
       cedulaEnCurso: cedulas.length ? cedulas[cedulas.length - 1] : null,
+      // Debido proceso: sin las dos entregas efectivas no hay expediente
+      // (ver "Volver a notificar" en dominio/reglas.js).
+      sinDosEntregasEfectivas: !dosEntregasEfectivas(propias),
       solicitudProrroga: solicitudes.get(l.id) ?? null,
     };
   });

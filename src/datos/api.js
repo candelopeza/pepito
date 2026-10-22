@@ -221,11 +221,17 @@ export const api = {
   // Reemplaza un expediente PROV- por el número de la mesa de entradas.
   numeroDefinitivoExpediente: (id, numero, motivo) => put(`/expedientes/${id}/numero`, { numero, motivo }),
   reingresar: (localId, motivo) => post(`/locales/${localId}/reingreso`, { motivo }),
+  volverANotificar: (localId, motivo) => post(`/locales/${localId}/volver-a-notificar`, { motivo }),
+  // El comercio cerró / volvió a abrir (solo el administrador).
+  cerrarLocal: (localId, motivo) => post(`/locales/${localId}/cierre`, { motivo }),
+  reabrirLocal: (localId, motivo) => post(`/locales/${localId}/reapertura`, { motivo }),
 
   // --- herramientas ---------------------------------------------------------
   fusiones: () => get('/herramientas/fusiones'),
   fusionar: (idPrincipal, idDuplicado) => post('/herramientas/fusiones', { idPrincipal, idDuplicado }),
   geocodificar: () => post('/herramientas/geocodificar'),
+  // Busca una dirección en el mapa sin guardar nada (formulario del local).
+  ubicarDireccion: (direccion) => post('/herramientas/ubicar-direccion', { direccion }),
   recalcularEstados: () => post('/herramientas/recalcular-estados'),
   coordenadasFuera: () => get('/herramientas/coordenadas-fuera'),
   proponerCoordenadas: (ids) => post('/herramientas/coordenadas/propuestas', { ids }),

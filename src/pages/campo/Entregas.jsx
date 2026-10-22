@@ -166,8 +166,19 @@ function Entregas() {
         </>
       )}
 
-      {ruta.length === 0 ? (
+      {/* La lista son las cédulas asignadas A ESTE AGENTE (por su id en la
+          tabla de usuarios). Con el usuario de prueba, que no existe en la
+          base, nunca hay ninguna: se dice por qué en vez de "no tenés nada". */}
+      {ruta.length === 0 && !verTodas && !yo ? (
+        <Aviso tipo="alerta" titulo="Para ver tus cédulas, entrá firmando como un agente">
+          Estás con un usuario de prueba, que no existe en la base, y las cédulas se asignan a cada agente. Elegí tu usuario
+          con “Firmar como” en la barra (si no está, lo crea Dirección en Accesos → Usuarios).
+        </Aviso>
+      ) : ruta.length === 0 ? (
         <Vacio titulo="No tenés entregas pendientes">
+          {sinAsignar.length > 0 &&
+            !verTodas &&
+            `Hay ${sinAsignar.length} cédula(s) emitidas sin notificador: coordinación las asigna desde el tablero.`}
         </Vacio>
       ) : (
         <ol className="lista-entregas">

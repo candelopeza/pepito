@@ -371,7 +371,8 @@ function Expediente() {
       {sinDebidoProceso.length > 0 && (
         <Aviso tipo="bloqueo" titulo={`${sinDebidoProceso.length} local(es) llegaron acá sin dos entregas fehacientes`}>
           {sinDebidoProceso.map((l) => l.nombreLocal).join(' · ')}. Revisalos antes de relevar: ningún local debería llegar a
-          expediente sin que consten dos notificaciones con entrega efectiva.
+          expediente sin que consten dos notificaciones con entrega efectiva. Coordinación puede usar «Volver a notificar» en
+          las opciones de cada uno.
         </Aviso>
       )}
 

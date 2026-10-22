@@ -15,6 +15,7 @@
                  `tipos_usuario`              sql/07-tablas-accesos.sql
      impresion   columnas tramite.impresa_*   sql/04-columnas-opcionales.sql
      archivos    tabla `archivo`              sql/08-tabla-archivo.sql
+     titularCuil columna local.titular_cuil   sql/11-titular-cuil.sql
 
    >>> POR QUÉ ASÍ Y NO "QUE FALLE SI FALTA" <<<
    Si el backend diera por hecho que la tabla existe, una base sin el script
@@ -32,6 +33,7 @@ const VACIO = {
   accesos: false,
   impresion: false,
   archivos: false,
+  titularCuil: false,
   revisadoEn: null,
   error: null,
 };
@@ -47,7 +49,8 @@ export async function revisarCapacidades() {
          FROM information_schema.columns
         WHERE table_schema = DATABASE()
           AND (table_name IN ('auditoria', 'parametro', 'permisos_modulos', 'tipos_usuario', 'archivo')
-               OR (table_name = 'tramite' AND column_name IN ('impresa_por', 'impresa_en')))`,
+               OR (table_name = 'tramite' AND column_name IN ('impresa_por', 'impresa_en'))
+               OR (table_name = 'local' AND column_name = 'titular_cuil'))`,
     );
     const hay = (tabla, columna) =>
       filas.some((f) => String(f.tabla).toLowerCase() === tabla && (!columna || String(f.columna).toLowerCase() === columna));
@@ -58,6 +61,7 @@ export async function revisarCapacidades() {
       accesos: hay('permisos_modulos') && hay('tipos_usuario'),
       impresion: hay('tramite', 'impresa_por') && hay('tramite', 'impresa_en'),
       archivos: hay('archivo'),
+      titularCuil: hay('local', 'titular_cuil'),
       revisadoEn: new Date().toISOString(),
       error: null,
     };

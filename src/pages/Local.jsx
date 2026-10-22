@@ -60,7 +60,12 @@ const SITUACIONES = [
     etiqueta: 'En circuito de intimación',
     cumple: (l) => ['cola_emision', 'en_tramite', 'entrega', 'bloqueo'].includes(l.estadoGrupo),
   },
+  // Los cerrados (el comercio cerró) no están en el padrón: se ven solo con esta
+  // opción, para encontrarlos y reabrirlos (ver "Marcar como cerrado").
+  { id: 'cerrados', etiqueta: 'Cerrados', cumple: (l) => l.estado === 'INACTIVO_CERRADO' },
 ];
+
+const CERRADO = 'INACTIVO_CERRADO';
 
 const LOCAL_VACIO = {
   nombreLocal: '',
@@ -268,15 +273,22 @@ function Local() {
      Lo único que queda acá es el filtro que llega POR URL: el tablero manda a
      /locales?estado=COMPLETAR_DATOS y esa lista tiene que aparecer ya filtrada. */
   const situacion = SITUACIONES.find((x) => x.id === filtroSituacion);
+  /* El padrón son los locales que existen: los cerrados quedan afuera, salvo
+     que se pidan (Situación → Cerrados, o el estado "Inactivo / cerrado"). */
+  const verCerrados = filtroSituacion === 'cerrados' || filtroEstado === CERRADO;
+  const padron = useMemo(
+    () => (verCerrados ? localesConEstado : localesConEstado.filter((l) => l.estado !== CERRADO)),
+    [localesConEstado, verCerrados],
+  );
   const filas = useMemo(
     () =>
-      localesConEstado.filter(
+      padron.filter(
         (l) =>
           (!filtroEstado || l.estado === filtroEstado) &&
           (!filtroRubro || l.rubro === filtroRubro) &&
           (!situacion || situacion.cumple(l)),
       ),
-    [localesConEstado, filtroEstado, filtroRubro, situacion],
+    [padron, filtroEstado, filtroRubro, situacion],
   );
 
   // Las opciones salen del padrón: solo los estados y rubros que existen, con
@@ -312,7 +324,7 @@ function Local() {
       <PageHeader
         etiqueta="LOCALES"
         titulo="PADRÓN DE ESTABLECIMIENTOS"
-        subtitulo={`${filas.length} de ${localesConEstado.length} locales`}
+        subtitulo={`${filas.length} de ${padron.length} locales`}
         botonVolver
       />
 

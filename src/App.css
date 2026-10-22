@@ -2058,3 +2058,39 @@
    Usado en: components/AvisoInstalar.jsx (Inicio, solo en el teléfono). */
 .aviso-instalar-botones { display: flex; gap: 8px; flex-wrap: wrap; }
 .aviso-instalar-botones button { white-space: nowrap; }
+
+/* ========== 14.29 FORMULARIOS A UNA COLUMNA, TODOS LOS CAMPOS IGUALES ==========
+   En pantallas angostas .form-grilla pasa a una columna (14.16), pero los
+   campos que piden dos (ancho={2}: el nombre del local, las observaciones)
+   forzaban una segunda columna escondida. El resto quedaba apareado de a dos y
+   más angosto: en "Nuevo local", Razón social, Rubro, Domicilio fiscal y
+   Teléfono se veían más chicos que los demás. Acá cada campo ocupa todo el
+   ancho. El !important le gana al span que el campo trae escrito en su style. */
+@media (max-width: 900px) {
+  .form-grilla > * { grid-column: 1 / -1 !important; }
+}
+
+/* "Ubicar la dirección en el mapa" del formulario del local (FormLocal.jsx). */
+.ubicar-direccion { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.ubicar-direccion .texto-ok a { margin-left: 4px; }
+
+/* ========== 14.30 BOTONES Y ENLACES CÓMODOS PARA EL DEDO ==========
+   En pantallas táctiles, lo que se toca mide al menos 40px de alto (lo
+   recomendado para un dedo es 44-48px; con menos de 30px se erra seguido).
+   Antes medían 17-29px: los enlaces "Abrir el tablero de trabajo" y "Reportes
+   e indicadores" del Inicio, los botones de período y de orden (Reportes,
+   Tablero), los "Ver" y "Agregar observaciones" de la ficha, el nombre en las
+   tarjetas del padrón y la "Ficha" de Mis entregas. En la PC no cambia nada. */
+@media (pointer: coarse) {
+  .btn-tabla,
+  .selector-orden-opcion,
+  .entrega-acciones a,
+  .entrega-acciones button { min-height: 40px; }
+  .entrega-acciones a { display: inline-flex; align-items: center; justify-content: center; }
+  .accesos-header-link,
+  .inicio-pie-indicadores a,
+  .aviso-texto a,
+  .tarjeta-local-titulo .link-local { display: inline-block; padding: 10px 0; }
+  .main-content input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  .main-content select { min-height: 40px; }
+}

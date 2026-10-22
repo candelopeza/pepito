@@ -299,7 +299,9 @@ function DatosProvider({ children }) {
       try {
         const resultado = await llamada();
         await cargarTodo();
-        if (mensajeOk) setAviso({ tipo: 'success', texto: mensajeOk });
+        // mensajeOk puede ser una función del resultado, para avisos que
+        // dependen de lo que contestó el servidor (ver guardarLocal).
+        if (mensajeOk) setAviso(typeof mensajeOk === 'function' ? mensajeOk(resultado) : { tipo: 'success', texto: mensajeOk });
         // Siempre algo "verdadero" cuando salió bien, aunque el endpoint no
         // devuelva cuerpo: las pantallas cierran el formulario solo si esto
         // no es null, y así no se pierde lo escrito cuando falla.
@@ -455,10 +457,23 @@ function DatosProvider({ children }) {
   /* Alta y edición. La coordenada NO se manda: la obtiene el backend
      geocodificando la dirección declarada, que es la única fuente válida
      (sección 9.2 del pliego). */
+  /* Si se cargó o se cambió la dirección, el backend la busca en el mapa y
+     contesta `ubicacion`. Antes no se decía nada: el local quedaba sin
+     ubicación y recién se notaba en el mapa. */
   const guardarLocal = useCallback(
     (datos) =>
-      ejecutar(datos.id ? 'Local actualizado' : 'Local dado de alta', () =>
-        datos.id ? api.localEdicion(datos.id, datos) : api.localAlta(datos),
+      ejecutar(
+        (r) => {
+          const hecho = datos.id ? 'Local actualizado' : 'Local dado de alta';
+          if (!r?.ubicacion) return { tipo: 'success', texto: hecho };
+          return r.ubicacion.ok
+            ? { tipo: 'success', texto: `${hecho}. La dirección se ubicó en el mapa.` }
+            : {
+                tipo: 'info',
+                texto: `${hecho}, pero la dirección no se pudo ubicar en el mapa: ${r.ubicacion.motivo ?? 'sin motivo'} Revisala, o ubicala a mano en Herramientas → Geocodificación pendiente.`,
+              };
+        },
+        () => (datos.id ? api.localEdicion(datos.id, datos) : api.localAlta(datos)),
       ),
     [ejecutar],
   );
@@ -477,6 +492,17 @@ function DatosProvider({ children }) {
     (localId) => ejecutar('Se levantó el bloqueo', () => api.desbloquear(localId)),
     [ejecutar],
   );
+
+  /* Busca una dirección en el mapa SIN guardar nada (botón "Ubicar en el mapa"
+     del formulario del local). No muestra cartel: el formulario muestra el
+     resultado debajo del campo. */
+  const ubicarDireccion = useCallback(async (direccion) => {
+    try {
+      return await api.ubicarDireccion(direccion);
+    } catch (e) {
+      return { ok: false, motivo: esSinConexion(e) ? 'Sin conexión con el servidor: probá cuando vuelva la señal.' : e.message };
+    }
+  }, []);
 
   const geocodificarPendientes = useCallback(
     () =>
@@ -649,6 +675,22 @@ function DatosProvider({ children }) {
     [ejecutar],
   );
 
+  // El comercio cerró: sale del padrón y del mapa, conserva el historial.
+  const cerrarLocal = useCallback(
+    (localId, motivo) => ejecutar('Local marcado como cerrado', () => api.cerrarLocal(localId, motivo)),
+    [ejecutar],
+  );
+  const reabrirLocal = useCallback(
+    (localId, motivo) => ejecutar('Local reabierto', () => api.reabrirLocal(localId, motivo)),
+    [ejecutar],
+  );
+
+  // Sin las dos entregas efectivas: vuelve a 1° notificación (ver reglas.js).
+  const volverANotificar = useCallback(
+    (localId, motivo) => ejecutar('El local vuelve a 1° notificación pendiente', () => api.volverANotificar(localId, motivo)),
+    [ejecutar],
+  );
+
   /* ==========================================================================
      HERRAMIENTAS
      ========================================================================== */
@@ -809,6 +851,7 @@ function DatosProvider({ children }) {
       bloquearLocal,
       desbloquearLocal,
       geocodificarPendientes,
+      ubicarDireccion,
       crearRelevamiento,
       editarRelevamiento,
       revisarRelevamiento,
@@ -829,6 +872,9 @@ function DatosProvider({ children }) {
       novedadExpediente,
       numeroDefinitivoExpediente,
       reingresarAlCircuito,
+      volverANotificar,
+      cerrarLocal,
+      reabrirLocal,
       fusionarLocales,
       guardarEnCatalogo,
       eliminarDeCatalogo,
@@ -843,10 +889,10 @@ function DatosProvider({ children }) {
     [
       base, hoy, cargando, cargarTodo, localesConEstado,
       auditorias, cargarAuditoria, versionDatos, sinConexion, pendientes, sincronizar, descartarPendiente,
-      guardarLocal, eliminarLocal, bloquearLocal, desbloquearLocal, geocodificarPendientes,
+      guardarLocal, eliminarLocal, bloquearLocal, desbloquearLocal, geocodificarPendientes, ubicarDireccion,
       crearRelevamiento, editarRelevamiento, revisarRelevamiento, generarCedula, regenerarCedula, asignarNotificador,
       marcarImpresa, marcarImpresas, registrarEntrega, corregirEntrega, editarObservaciones, registrarDocumento, validarPresentacion, otorgarProrroga, solicitarProrroga,
-      registrarExpediente, numeroDefinitivoExpediente, solicitarExpediente, novedadExpediente, reingresarAlCircuito, fusionarLocales,
+      registrarExpediente, numeroDefinitivoExpediente, solicitarExpediente, novedadExpediente, reingresarAlCircuito, volverANotificar, cerrarLocal, reabrirLocal, fusionarLocales,
       guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla,
       guardarPermiso, restablecerPermisosDeRol, habilitarRol, reiniciarDemo, recalcularEstados,
     ],

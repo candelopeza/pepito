@@ -899,3 +899,125 @@ cloudflared.exe tunnel --url http://localhost:3001
 El backend de prueba tiene que estar corriendo con `CARPETA_FRONT` apuntando a
 un build hecho con `VITE_API_URL=/`. La dirección cambia cada vez que se abre
 el túnel y deja de andar al cerrarlo.
+
+## 17. Correcciones de la prueba en el teléfono (20 de octubre de 2026)
+
+**Campos más angostos en "Nuevo local"** (Razón social, Rubro, Domicilio
+fiscal, Teléfono). En pantallas de hasta 900px los formularios van a una
+columna, pero los campos que piden dos (`ancho={2}`: nombre, observaciones)
+forzaban una segunda columna escondida y el resto quedaba apareado de a dos.
+Ahora cada campo ocupa todo el ancho (`src/App.css`, 14.29). Vale para todos
+los formularios, también el de la entrega.
+
+**El CUIL del titular habilitado no se guardaba.** La tabla `local` de la base
+del área no tiene la columna: se escribía, se mandaba y se perdía; al volver a
+abrir aparecía vacío. Ahora:
+- `backend/sql/11-titular-cuil.sql` (OPCIONAL, aditivo) agrega la columna.
+  **Hay que correrlo en HeidiSQL en la base del área.**
+- Sin el script, el campo aparece bloqueado y dice que falta correrlo.
+- Con el script, se guarda, aparece al volver a abrir y el cambio queda en el
+  historial del local ("CUIL del titular habilitado: decía…, ahora…").
+- `capacidades.js` lo detecta solo (bandera `titularCuil`) y
+  `npm run verificar` informa si están corridos sql/10 y sql/11.
+
+**La dirección corregida no aparecía en el mapa.** El backend sí vuelve a
+buscar la coordenada al cambiar la dirección, pero no avisaba si no la
+encontraba. Ahora:
+- En el formulario del local hay un botón **"Ubicar la dirección en el mapa"**
+  que la busca ANTES de guardar y muestra dónde quedó (con un link al mapa) o
+  por qué no se encontró. No guarda nada (`POST /herramientas/ubicar-direccion`).
+- Al guardar, el cartel dice si la dirección se ubicó en el mapa o no, y por qué.
+- Si no se encuentra, el local queda en Herramientas → Geocodificación
+  pendiente, para ubicarlo a mano.
+- En el túnel de prueba no aparecía porque ese backend corría con
+  `GEOCODIFICADOR=ninguno`; ahora corre con Nominatim, como el del área.
+
+**Locales dados de baja:** la baja es lógica (`local.habilita = 0`, y también
+sus trámites). Hoy NO se ven en la aplicación, solo en HeidiSQL:
+`SELECT id_local, nombre_local, direccion_local FROM local WHERE habilita = 0;`
+
+**Correo para pedir números de expediente:** el parámetro
+`correoSolicitudExpedientes` está en la parte de Parámetros que se ocultó
+(`MOSTRAR_PLAZOS_Y_DECISIONES = false`). Mientras tanto se carga en HeidiSQL:
+`INSERT INTO parametro (clave, valor) VALUES ('correoSolicitudExpedientes', '"correo@smt.gob.ar"')`
+(el valor va entre comillas dobles: es JSON).
+
+**Volver a notificar** (decidido con DITEC, 20/10/2026). Para los locales que
+llegaron a "Generar expediente" (o "Expediente solicitado") SIN las dos
+notificaciones con entrega efectiva, casos de AppSheet (error B-1). Antes
+quedaban trabados: la app ofrecía pedir el número e iniciar el expediente, y
+el backend lo rechazaba. Ahora:
+- Coordinación ve **Volver a notificar** en las opciones de esos locales (y en
+  Expedientes → Expedientes para generar). Pide un motivo obligatorio.
+- El local vuelve a **1° Notificación pendiente** con un ciclo nuevo, como el
+  reingreso. Lo anterior queda en el historial con el motivo.
+- A esos locales ya no se les ofrece "Solicitar N° de expediente" ni
+  "Registrar expediente de multa".
+- `POST /locales/:id/volver-a-notificar` (coordinación). Si el local SÍ tiene
+  las dos entregas, responde 409: corresponde el expediente.
+- La cuenta de entregas está en `dosEntregasEfectivas()` de
+  `src/dominio/actuaciones.js`, con el mismo criterio que el backend.
+
+**Reactivar un local dado de baja** (no hay pantalla: se hace en HeidiSQL
+cuando el área avisa cuál). La baja desactiva el local y TODOS sus trámites:
+```sql
+-- 1. Confirmar que es el local (y que no es una ficha fusionada en Duplicados:
+--    si la observación dice "FUSIONADO EN LOCAL ...", NO se reactiva).
+SELECT id_local, nombre_local, direccion_local, observacion FROM local WHERE id_local = 123;
+-- 2. Reactivar el local.
+UPDATE local SET habilita = 1 WHERE id_local = 123;
+-- 3. Reactivar sus trámites, MENOS las presentaciones rechazadas, que estaban
+--    desactivadas desde antes de la baja.
+UPDATE tramite SET habilita = 1
+ WHERE id_local = 123 AND habilita = 0
+   AND (observaciones IS NULL OR observaciones NOT LIKE '%Rechazada por%');
+```
+Lo hecho en HeidiSQL no queda en el historial de la app: conviene anotar en la
+observación del local quién lo pidió y cuándo.
+
+**Otros ajustes del 20/10:**
+- La ayuda de "Otorgar prórroga" decía "solo con las dos notificaciones
+  agotadas"; desde el 14/10 vale también con la primera.
+- El estado `INACTIVO_CERRADO` (lo usa el área) se muestra como "Inactivo /
+  cerrado" en vez del código.
+- "Solicitar N° de expediente" ya no manda a Parámetros a cargar el correo
+  (esa parte está oculta): dice que el pedido se hace por correo, por teléfono
+  o en persona, y el canal se elige en la ventana.
+- En pantallas táctiles, botones y enlaces miden al menos 40px de alto
+  (`src/App.css`, 14.30).
+
+## 18. Local cerrado y compresión (21 de octubre de 2026)
+
+**El comercio cerró: "Marcar como cerrado" / "Reabrir local".** Solo el
+**administrador** del sistema (decidido con DITEC; coordinación no, por ahora).
+- Usa el estado INACTIVO que la base del área ya tenía (`local.id_estado = 6`,
+  en pantalla "Inactivo / cerrado"). No hace falta ningún script.
+- El local sale del **padrón**, del **mapa**, de las **bandejas** y de la
+  **emisión automática**. No se borra nada: conserva todo su historial.
+- Se lo encuentra en el padrón con **Situación → Cerrados** (o eligiendo el
+  estado "Inactivo / cerrado"). Desde su ficha, **Reabrir local**.
+- Las dos acciones piden motivo, que queda en el historial.
+- Al reabrir vuelve al estado que tenía: el estado anterior sale del historial
+  del cierre. Un exento vuelve a exento; uno con trámites, a lo que digan sus
+  trámites. Un local que ya venía cerrado de AppSheet vuelve a "Revisión de
+  datos" y desde ahí deciden sus trámites.
+- Distinto de la **baja** (error de carga o duplicado: oculta también el
+  historial, se revierte solo en HeidiSQL) y del **bloqueo manual** (una pausa
+  mientras se revisa algo: el local sigue en el padrón).
+- Backend: `POST /locales/:id/cierre` y `POST /locales/:id/reapertura`
+  (`backend/rutas/locales.js`). Acciones `cerrar-local` y `reabrir-local` en
+  `src/dominio/reglas.js` (con `roles: []`: solo el administrador).
+- El local que en la base del área ya figuraba como inactivo dejó de verse en
+  el padrón: está en Situación → Cerrados.
+
+**Compresión.** El backend manda todo comprimido (paquete `compression`,
+`backend/servidor.js`). Con los datos del área, lo que la app baja al abrirse y
+después de cada guardado pasó de unos 1.970 KB a 188 KB; la app compilada, de
+1,9 MB a unos 580 KB. En el teléfono con poca señal es la diferencia entre
+esperar 15 segundos y uno o dos, y gasta diez veces menos datos. Se apaga con
+`COMPRIMIR=no` en `backend/.env` (si el servidor de Sistemas ya comprime).
+**Quien baje estos cambios tiene que correr `npm install` en `backend/`** (es
+una dependencia nueva).
+
+`npm audit` avisa de una vulnerabilidad moderada en `uuid`, que ya estaba (no
+la trae `compression`).

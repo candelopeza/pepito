@@ -58,6 +58,25 @@ export function correPlazo(resultado) {
   return Boolean(resultadoEntrega(resultado)?.corre);
 }
 
+/* ¿Constan las DOS notificaciones con entrega efectiva en el ciclo actual?
+   Es la condición del debido proceso para el expediente de multa. Mismo
+   criterio que constaEntrega() de backend/rutas/prorrogas-expedientes.js: una
+   notificación sin resultado conocido pero con fecha de entrega también
+   cuenta (datos que vienen de AppSheet). Si los dos dijeran cosas distintas,
+   un local podría quedar sin expediente y sin "Volver a notificar". */
+export function dosEntregasEfectivas(actuaciones) {
+  const ciclo = Math.max(1, ...actuaciones.map((a) => Number(a.ciclo) || 1));
+  const consta = (n) =>
+    actuaciones.some(
+      (a) =>
+        a.tipo === 'NOTIFICACION' &&
+        a.instancia === n &&
+        (Number(a.ciclo) || 1) === ciclo &&
+        (['ENTREGADA', 'SIN_FIRMA', 'FIJADA'].includes(a.resultado) || (!a.resultado && a.fechaEntrega)),
+    );
+  return consta(1) && consta(2);
+}
+
 /* ============================================================================
    NÚMERO DE CÉDULA
    ----------------------------------------------------------------------------

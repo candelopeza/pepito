@@ -274,7 +274,13 @@ function Usuarios() {
               etiqueta="Tipo de usuario"
               valor={editando.rol}
               onChange={(v) => setEditando({ ...editando, rol: v })}
-              opciones={LISTA_ROLES.map((r) => ({
+              /* El rol administrador solo lo da otro administrador (el backend lo
+                 rechaza igual): a la Dirección no se le ofrece, así no lo elige
+                 para enterarse recién al guardar. Si el usuario editado ya es
+                 administrador, la opción queda para que se vea su rol. */
+              opciones={LISTA_ROLES.filter(
+                (r) => r.id !== 'administrador' || rol === 'administrador' || editando.rol === 'administrador',
+              ).map((r) => ({
                 id: r.id,
                 etiqueta: rolHabilitado(r.id, permisos) ? r.etiqueta : `${r.etiqueta} (deshabilitado)`,
               }))}

@@ -49,12 +49,27 @@ function formatearCuit(valor) {
 const FORMATO_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onCancelar }) {
-  const { rubros } = useDatos();
+  const { rubros, capacidades, ubicarDireccion } = useDatos();
   const [datos, setDatos] = useState(local);
   const [errores, setErrores] = useState({});
+  // El resultado de "Ubicar en el mapa": { ok, latitud, longitud } o { ok: false, motivo }.
+  const [ubicacion, setUbicacion] = useState(null);
+  const [buscando, setBuscando] = useState(false);
+  // Sin la columna (sql/11) el CUIL del titular no tiene dónde guardarse.
+  const guardaCuilTitular = Boolean(capacidades?.titularCuil);
 
   function cambiar(campo, valor) {
     setDatos((previo) => ({ ...previo, [campo]: valor }));
+    // Otra dirección: el resultado de la búsqueda anterior ya no vale.
+    if (campo === 'direccion') setUbicacion(null);
+  }
+
+  /* La misma búsqueda que hace el servidor al guardar, pero antes: así se ve
+     si la dirección se encuentra y dónde, y se corrige antes de guardar. */
+  async function buscarEnElMapa() {
+    setBuscando(true);
+    setUbicacion(await ubicarDireccion(datos.direccion.trim()));
+    setBuscando(false);
   }
 
   function validar() {
@@ -69,6 +84,9 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
     }
     if (datos.email?.trim() && !FORMATO_EMAIL.test(datos.email.trim())) {
       nuevos.email = 'Ese correo no parece válido.';
+    }
+    if (datos.titularCuil?.trim() && !FORMATO_CUIT.test(datos.titularCuil.trim())) {
+      nuevos.titularCuil = 'El CUIL tiene 11 números. Escribilo de corrido: los guiones se ponen solos.';
     }
     return nuevos;
   }
@@ -164,6 +182,33 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           soloLectura={soloLectura}
 
         />
+        {!soloLectura && (
+          <div className="form-grupo ubicar-direccion" style={{ gridColumn: 'span 2' }}>
+            <button
+              type="button"
+              className="btn-secundario"
+              disabled={buscando || !datos.direccion?.trim()}
+              onClick={buscarEnElMapa}
+            >
+              {buscando ? 'Buscando…' : 'Ubicar la dirección en el mapa'}
+            </button>
+            {ubicacion &&
+              (ubicacion.ok ? (
+                <span className="texto-ok">
+                  Se encontró ({ubicacion.latitud}, {ubicacion.longitud}).{' '}
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${ubicacion.latitud},${ubicacion.longitud}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Ver dónde quedó
+                  </a>
+                </span>
+              ) : (
+                <span className="form-error">{ubicacion.motivo}</span>
+              ))}
+          </div>
+        )}
 
         {/* ---------- Contacto ---------- */}
         <Campo
@@ -195,7 +240,13 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           etiqueta="CUIL del titular habilitado"
           valor={datos.titularCuil}
           onChange={(v) => cambiar('titularCuil', formatearCuit(v))}
-          soloLectura={soloLectura}
+          error={errores.titularCuil}
+          soloLectura={soloLectura || !guardaCuilTitular}
+          ayuda={
+            guardaCuilTitular || soloLectura
+              ? undefined
+              : 'Esta base todavía no lo guarda: falta correr backend/sql/11-titular-cuil.sql en HeidiSQL.'
+          }
           teclado="numeric"
         />
 

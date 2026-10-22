@@ -34,6 +34,7 @@ import BuscadorLocal from '../components/BuscadorLocal';
 import FormDocumento from '../components/FormDocumento';
 import HistorialActuaciones from '../components/HistorialActuaciones';
 import { useRol } from '../auth/rolContexto';
+import Validaciones from './Validaciones';
 import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
 import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
@@ -46,6 +47,9 @@ function Documentacion() {
   const { rol } = useRol();
   const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, usuarios, registrarDocumento, permisos } = useDatos();
   const puedeCargar = puedeEditar(rol, 'documentacion', permisos);
+  // Validar es decidir: lo hacen administrativo y coordinación. El resto ve
+  // la tabla de documentación sin la bandeja.
+  const puedeValidar = ['administrativo', 'coordinacion', 'administrador'].includes(rol);
 
   const [modal, setModal] = useState(false);
   const [paso, setPaso] = useState(0);
@@ -73,7 +77,11 @@ function Documentacion() {
           const local = localesConEstado.find((l) => l.id === a.localId);
           return {
             ...a,
-            nombreLocal: local?.nombreLocal ?? `Local ${a.localId}`,
+            /* Muchos locales de la migración no tienen nombre comercial
+               cargado (solo razón social): sin este respaldo, la columna
+               quedaba en blanco y parecía que el documento no tenía local. */
+            nombreLocal: local?.nombreLocal || local?.razonSocial || `Local N° ${a.localId}`,
+            razonSocialLocal: local?.razonSocial ?? '',
             estadoLocal: local?.estado ?? null,
             vigente: a.validado !== false && estaVigente(a.fechaVencimiento),
           };
@@ -89,9 +97,14 @@ function Documentacion() {
         flex: 1,
         minWidth: 180,
         renderCell: ({ row }) => (
-          <Link to={`/locales/${row.localId}`} className="link-local">
-            {row.nombreLocal}
-          </Link>
+          <span className="celda-apilada">
+            <Link to={`/locales/${row.localId}`} className="link-local">
+              {row.nombreLocal}
+            </Link>
+            {row.razonSocialLocal && row.razonSocialLocal !== row.nombreLocal && (
+              <small className="celda-sub">{row.razonSocialLocal}</small>
+            )}
+          </span>
         ),
       },
       {
@@ -117,7 +130,26 @@ function Documentacion() {
           ),
       },
       { field: 'fechaEmision', headerName: 'Emisión', width: 115, valueFormatter: (value) => fmtFecha(value) },
-      { field: 'fechaVencimiento', headerName: 'Vencimiento', width: 125, valueFormatter: (value) => fmtFecha(value) },
+      {
+        field: 'fechaVencimiento',
+        headerName: 'Vencimiento',
+        width: 160,
+        // El CSV exporta lo que diga el formatter; sin él salía la fecha cruda.
+        valueFormatter: (value) => (value ? fmtFecha(value) : ''),
+        renderCell: ({ row }) => {
+          if (row.fechaVencimiento) return fmtFecha(row.fechaVencimiento);
+          // Un contrato del informe 9DJ no vence por fecha: vale mientras el
+          // último informe de la prestataria lo sostenga (modelo de foto).
+          if (row.origen === 'INFORME_9DJ') {
+            return (
+              <span className="texto-gris" title="Vale mientras el último informe de la prestataria lo sostenga; no se rige por fecha.">
+                lo sostiene el informe
+              </span>
+            );
+          }
+          return <span className="texto-gris">—</span>;
+        },
+      },
       {
         field: 'vigencia',
         headerName: 'Vigencia',
@@ -166,6 +198,10 @@ function Documentacion() {
         subtitulo={`${documentos.length} documento(s) registrados · ${documentos.filter((d) => d.vigente).length} vigentes`}
         botonVolver
       />
+
+      {/* La bandeja de validación vive acá: es la misma materia que la tabla
+          de abajo, antes separada en su propia pestaña. */}
+      {puedeValidar && <Validaciones />}
 
       {sinExpediente > 0 && (
         <Aviso tipo="alerta" titulo={`${sinExpediente} documentos sin número de expediente de trámite`}>

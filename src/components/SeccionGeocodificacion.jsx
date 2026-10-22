@@ -1,28 +1,18 @@
 /* ============================================================================
-   pages/herramientas/Geocodificacion.jsx
-   (URL: /#/herramientas/geocodificacion)
+   SeccionGeocodificacion.jsx  —  LA REVISIÓN DE UBICACIONES, DENTRO DEL MAPA
    ----------------------------------------------------------------------------
-   Sección 9.2 del pliego. La vista de revisión de los locales que quedaron sin
-   ubicación.
+   Sección 9.2 del pliego. Antes era una pestaña aparte (Herramientas →
+   Geocodificación pendiente); ahora vive al pie del MAPA, que es donde el
+   problema se ve: el hueco del mapa y su corrección en la misma pantalla.
+   Solo la ven los roles que pueden corregir (la monta Mapa.jsx).
 
-   >>> LA REGLA QUE JUSTIFICA QUE ESTA PANTALLA EXISTA <<<
+   >>> LA REGLA QUE JUSTIFICA QUE ESTA SECCIÓN EXISTA <<<
    "Cuando la dirección no puede geocodificarse, el local queda sin ubicación y
    debe aparecer en una vista de revisión para que la oficina corrija la
    dirección. NO debe completarse con un valor aproximado ni con la coordenada
    del relevamiento."
 
-   Es más fácil poner un punto aproximado y que el mapa "no tenga huecos". Pero
-   un punto aproximado en un mapa se lee como un dato: alguien va a rutear una
-   entrega hacia ahí. Preferimos el hueco visible.
-
-   VALIDACIÓN TERRITORIAL: toda coordenada obtenida se valida contra el
-   polígono del ejido municipal (backend/limite-municipal.js) y la que cae
-   afuera NO se guarda.
-   [NO PORTAR] El recuadro que usa el sistema viejo (lat -28,0 a -26,0 / lng
-   -66,5 a -64,0) abarca toda la provincia y deja pasar locales de otros
-   departamentos: sirve como filtro previo, no como validación.
-
-   ESTA PANTALLA TIENE DOS PARTES:
+   DOS PARTES:
      arriba  los locales SIN ubicación, para corregirles la dirección
      abajo   los que TIENEN una ubicación que no se corresponde con su
              dirección (RevisionCoordenadas), para recalcularla
@@ -30,16 +20,15 @@
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import PageHeader from '../../components/ui/PageHeader';
-import Grilla from '../../components/ui/Grilla';
-import Badge from '../../components/ui/Badge';
-import { Vacio } from '../../components/ui/Aviso';
-import Modal from '../../components/ui/Modal';
-import FormLocal from '../../components/FormLocal';
-import RevisionCoordenadas from '../../components/RevisionCoordenadas';
-import { useDatos } from '../../datos/datosContexto';
+import Grilla from './ui/Grilla';
+import Badge from './ui/Badge';
+import { Vacio } from './ui/Aviso';
+import Modal from './ui/Modal';
+import FormLocal from './FormLocal';
+import RevisionCoordenadas from './RevisionCoordenadas';
+import { useDatos } from '../datos/datosContexto';
 
-function Geocodificacion() {
+function SeccionGeocodificacion() {
   const { localesConEstado, guardarLocal, geocodificarPendientes } = useDatos();
   const [editando, setEditando] = useState(null);
 
@@ -105,17 +94,14 @@ function Geocodificacion() {
 
   return (
     <>
-      <PageHeader
-        etiqueta="HERRAMIENTAS"
-        titulo="GEOCODIFICACIÓN PENDIENTE"
-        subtitulo={`${sinGeo.length} de ${total} locales sin ubicación`}
-        botonVolver
-        acciones={
-          <button type="button" className="btn-secundario" onClick={geocodificarPendientes}>
-            Reintentar geocodificación
-          </button>
-        }
-      />
+      <div className="accesos-header">
+        <span>
+          Geocodificación pendiente ({sinGeo.length} de {total} locales sin ubicación)
+        </span>
+        <button type="button" className="btn-secundario" onClick={geocodificarPendientes}>
+          Reintentar geocodificación
+        </button>
+      </div>
       {sinGeo.length === 0 ? (
         <Vacio titulo="Todos los locales tienen ubicación">
           No hay direcciones para corregir.
@@ -154,4 +140,4 @@ function Geocodificacion() {
   );
 }
 
-export default Geocodificacion;
+export default SeccionGeocodificacion;

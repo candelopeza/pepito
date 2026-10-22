@@ -45,7 +45,9 @@ const PUERTO = Number(process.env.PUERTO) || 3000;
 
 /* --- middlewares generales ------------------------------------------------ */
 // El front (Vite) corre en otro puerto: sin esto el navegador bloquea los fetch.
-app.use(cors({ origin: process.env.ORIGEN_FRONT || true }));
+// ORIGEN_FRONT admite varios origenes separados por coma: el front se abre
+// desde la PC (localhost) y desde los celulares de la red (la IP de la PC).
+app.use(cors({ origin: process.env.ORIGEN_FRONT ? process.env.ORIGEN_FRONT.split(',').map((o) => o.trim()) : true }));
 
 /* --- todo lo que sale, comprimido -----------------------------------------
    Cada vez que se abre la app, y DESPUÉS DE CADA GUARDADO, el front vuelve a

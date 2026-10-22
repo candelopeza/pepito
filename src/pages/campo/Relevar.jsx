@@ -89,8 +89,9 @@ const VACIO = { direccionRelevada: '', nombreLocal: '', rubro: '', clasificacion
 
 function Relevar() {
   const navegar = useNavigate();
-  const { usuario } = useRol();
+  const { usuario, rol } = useRol();
   const {
+    parametros,
     rubros,
     relevamientos,
     localPorId,
@@ -226,6 +227,10 @@ function Relevar() {
      base (selector "firmar como" de la barra): con el usuario de prueba no hay
      forma de saber de quién es cada carga. */
   const hoy = hoyISO();
+  /* La ventana de corrección del relevador: hasta la hora límite del día.
+     Coordinación corrige sin esta restricción (desde el padrón). */
+  const horaLimite = Number(parametros?.horaLimiteCorreccionRelevador) || 14;
+  const ventanaCerrada = rol === 'relevador' && new Date().getHours() >= horaLimite;
   const misCargasDeHoy = usuario.id
     ? relevamientos.filter((r) => r.idUsuario === usuario.id && String(r.fechaHora ?? '').slice(0, 10) === hoy && !r.revisadoEn)
     : [];
@@ -344,20 +349,30 @@ function Relevar() {
         </div>
       </form>
 
-      {/* ---------- Mis cargas de hoy: las que todavía puedo corregir ---------- */}
+      {/* ---------- Mis cargas de hoy: las que todavía puedo corregir ----------
+          La ventana del relevador cierra a la hora límite (parámetro): después
+          el botón desaparece y la corrección es de la oficina. El servidor
+          controla lo mismo. */}
       {misCargasDeHoy.length > 0 && (
         <>
           <div className="accesos-header">
             <span>Mis cargas de hoy ({misCargasDeHoy.length})</span>
           </div>
+          {ventanaCerrada && (
+            <Aviso tipo="info" titulo={`Las correcciones del día cierran a las ${horaLimite}:00`}>
+              Tus cargas quedaron registradas. Si hay algo para corregir, lo hace la oficina desde el padrón.
+            </Aviso>
+          )}
           <ul className="lista-cola">
             {misCargasDeHoy.map((r) => (
               <li key={r.id}>
                 <strong>{localPorId(r.localId)?.nombreLocal ?? r.direccionRelevada}</strong>
                 <span>{fmtFechaHora(r.fechaHora)}</span>
-                <button type="button" className="btn-tabla" onClick={() => corregir(r)}>
-                  Corregir
-                </button>
+                {!ventanaCerrada && (
+                  <button type="button" className="btn-tabla" onClick={() => corregir(r)}>
+                    Corregir
+                  </button>
+                )}
               </li>
             ))}
           </ul>

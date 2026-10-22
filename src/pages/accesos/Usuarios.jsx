@@ -41,7 +41,6 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
-import PageHeader from '../../components/ui/PageHeader';
 import Aviso from '../../components/ui/Aviso';
 import Badge from '../../components/ui/Badge';
 import Grilla from '../../components/ui/Grilla';
@@ -61,7 +60,7 @@ function Usuarios() {
   const navegar = useNavigate();
   const { usuarios, actuaciones, relevamientos, permisos, guardarEnCatalogo, eliminarDeCatalogo } = useDatos();
 
-  const soloLectura = !puedeEditar(rol, 'accesos-usuarios', permisos);
+  const soloLectura = !puedeEditar(rol, 'accesos', permisos);
   const veTipos = puedeVerRuta(rol, '/accesos/tipos-usuario', permisos);
 
   const [buscar, setBuscar] = useState('');
@@ -210,12 +209,11 @@ function Usuarios() {
 
   return (
     <>
-      <PageHeader
-        etiqueta="ACCESOS"
-        titulo="USUARIOS"
-        subtitulo={`${usuarios.filter((u) => u.activo).length} activo(s) de ${usuarios.length}`}
-        botonVolver
-      />
+      <div className="accesos-header">
+        <span>
+          Usuarios: {usuarios.filter((u) => u.activo).length} activo(s) de {usuarios.length}
+        </span>
+      </div>
 
       {sinCorreoInstitucional.length > 0 && (
         <Aviso tipo="alerta" titulo={`${sinCorreoInstitucional.length} usuario(s) activos con correo no institucional`}>

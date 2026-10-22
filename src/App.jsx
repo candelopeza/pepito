@@ -34,7 +34,7 @@
    hablarlo con quien despliega.
    ============================================================================ */
 
-import { HashRouter, Route, Routes } from 'react-router-dom';
+import { Navigate, HashRouter, Route, Routes } from 'react-router-dom';
 
 import RolProvider from './auth/RolProvider';
 import DatosProvider from './datos/DatosProvider';
@@ -53,7 +53,6 @@ import LocalFicha from './pages/LocalFicha';
 import Relevamiento from './pages/Relevamiento';
 import Notificaciones from './pages/Notificaciones';
 import Documentacion from './pages/Documentacion';
-import Validaciones from './pages/Validaciones';
 import Prorrogas from './pages/Prorrogas';
 import Expediente from './pages/Expediente';
 
@@ -68,11 +67,9 @@ import Entregas from './pages/campo/Entregas';
 // --- Herramientas ---
 import Duplicados from './pages/herramientas/Duplicados';
 import Informe9DJ from './pages/herramientas/Informe9DJ';
-import Geocodificacion from './pages/herramientas/Geocodificacion';
 
 // --- Accesos (control de usuarios y de lo que ve cada tipo de usuario) ---
-import TiposUsuario from './pages/accesos/TiposUsuario';
-import Usuarios from './pages/accesos/Usuarios';
+import Accesos from './pages/Accesos';
 
 // --- Configuración ---
 import Rubros from './pages/config/Rubros';
@@ -109,7 +106,8 @@ function App() {
               <Route path="relevamientos" element={<RutaProtegida ruta="/relevamientos"><Relevamiento /></RutaProtegida>} />
               <Route path="notificaciones" element={<RutaProtegida ruta="/notificaciones"><Notificaciones /></RutaProtegida>} />
               <Route path="documentacion" element={<RutaProtegida ruta="/documentacion"><Documentacion /></RutaProtegida>} />
-              <Route path="validaciones" element={<RutaProtegida ruta="/validaciones"><Validaciones /></RutaProtegida>} />
+              {/* Validar vive dentro de Documentación: los marcadores viejos siguen andando. */}
+              <Route path="validaciones" element={<Navigate to="/documentacion" replace />} />
               <Route path="prorrogas" element={<RutaProtegida ruta="/prorrogas"><Prorrogas /></RutaProtegida>} />
               <Route path="expedientes" element={<RutaProtegida ruta="/expedientes"><Expediente /></RutaProtegida>} />
               <Route path="mapa" element={<RutaProtegida ruta="/mapa"><Mapa /></RutaProtegida>} />
@@ -121,18 +119,21 @@ function App() {
 
               {/* ---- Herramientas ---- */}
               {/* ---- Accesos ---- */}
-              <Route path="accesos/tipos-usuario" element={<RutaProtegida ruta="/accesos/tipos-usuario"><TiposUsuario /></RutaProtegida>} />
-              <Route path="accesos/usuarios" element={<RutaProtegida ruta="/accesos/usuarios"><Usuarios /></RutaProtegida>} />
+              <Route path="accesos" element={<RutaProtegida ruta="/accesos"><Accesos /></RutaProtegida>} />
+              <Route path="accesos/tipos-usuario" element={<Navigate to="/accesos" replace />} />
+              <Route path="accesos/usuarios" element={<Navigate to="/accesos" replace />} />
 
               <Route path="herramientas/duplicados" element={<RutaProtegida ruta="/herramientas/duplicados"><Duplicados /></RutaProtegida>} />
               <Route path="herramientas/informe-9dj" element={<RutaProtegida ruta="/herramientas/informe-9dj"><Informe9DJ /></RutaProtegida>} />
-              <Route path="herramientas/geocodificacion" element={<RutaProtegida ruta="/herramientas/geocodificacion"><Geocodificacion /></RutaProtegida>} />
+              {/* La pestaña se integró al Mapa: los marcadores viejos siguen andando. */}
+              <Route path="herramientas/geocodificacion" element={<Navigate to="/mapa" replace />} />
 
               {/* ---- Configuración (tablas maestras y parámetros) ---- */}
               <Route path="config/rubros" element={<RutaProtegida ruta="/config/rubros"><Rubros /></RutaProtegida>} />
               <Route path="config/feriados" element={<RutaProtegida ruta="/config/feriados"><Feriados /></RutaProtegida>} />
               <Route path="config/plantilla" element={<RutaProtegida ruta="/config/plantilla"><Plantilla /></RutaProtegida>} />
               <Route path="config/parametros" element={<RutaProtegida ruta="/config/parametros"><Parametros /></RutaProtegida>} />
+              <Route path="configuracion" element={<Navigate to="/config/rubros" replace />} />
 
               {/* ---- Portal del titular ---- */}
               <Route path="portal" element={<RutaProtegida ruta="/portal"><Portal /></RutaProtegida>} />

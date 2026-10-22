@@ -118,6 +118,7 @@ function Parametros() {
       plazoNotif2: Number(form.plazoNotif2),
       topeProrrogaDias: Number(form.topeProrrogaDias),
       maxProrrogasPorLocal: Number(form.maxProrrogasPorLocal),
+      horaLimiteCorreccionRelevador: Number(form.horaLimiteCorreccionRelevador ?? 14),
     });
     // "Guardado." solo si el servidor lo guardó. Antes aparecía siempre.
     setGuardado(Boolean(r));
@@ -270,6 +271,16 @@ function Parametros() {
                 valor={form.maxProrrogasPorLocal}
                 onChange={(v) => cambiar('maxProrrogasPorLocal', v)}
                 ayuda="PENDIENTE con el área legal. Hoy solo avisa, no bloquea."
+              />
+              <Campo
+                id="par-hora-relevador"
+                etiqueta="Hora de cierre de correcciones del relevador"
+                tipo="number"
+                min={0}
+                max={23}
+                valor={form.horaLimiteCorreccionRelevador ?? 14}
+                onChange={(v) => cambiar('horaLimiteCorreccionRelevador', v)}
+                ayuda="Hasta esa hora puede corregir SUS cargas del día; después corrige la oficina. 14 = hasta las 14:00."
               />
               <Campo
                 id="par-correo-expedientes"

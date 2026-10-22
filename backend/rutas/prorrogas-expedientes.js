@@ -292,7 +292,10 @@ router.post('/locales/:id/expedientes', requiereRol('administrativo', 'coordinac
    Solo sobre un PROV-: un número de la mesa de entradas no se cambia por
    esta vía. El número nuevo no puede estar usado en otro expediente. Queda en
    el historial qué provisorio se reemplazó y por cuál. */
-router.put('/expedientes/:id/numero', requiereRol('administrativo', 'coordinacion'), async (req, res, next) => {
+/* Corregir o completar el NÚMERO es tarea del personal administrativo, que es
+   quien habla con la mesa de entradas. Coordinación decide el circuito
+   (reingresos, prórrogas), no toca números. */
+router.put('/expedientes/:id/numero', requiereRol('administrativo'), async (req, res, next) => {
   try {
     const tramite = await tramitePorId(Number(req.params.id));
     if (!tramite || tramite.tipo !== 'EXPEDIENTE') return res.status(404).json({ error: 'No existe ese expediente' });

@@ -61,6 +61,11 @@ export const PARAMETROS = {
      Dirección lo edita desde Configuración → Parámetros sin tocar código. */
   correoSolicitudExpedientes: '',
 
+  /* Hasta qué hora del día puede el relevador corregir SUS cargas de la
+     jornada. Pasada esa hora (y siempre que sea otro día), la corrección la
+     hace la oficina desde el padrón. 14 = hasta las 14:00. */
+  horaLimiteCorreccionRelevador: 14,
+
   /* ¿El portal del titular muestra los NÚMEROS de expediente (el de multa y el
      del trámite de cada presentación)? PENDIENTE: decisión de la Dirección.
      A favor de mostrarlos: el titular tiene derecho a saber qué expediente se

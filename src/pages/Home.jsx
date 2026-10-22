@@ -97,10 +97,6 @@ function pieDePlazos(locales) {
 function Home() {
   const { rol, datosRol, usuario } = useRol();
 
-  /* El titular no tiene un "inicio" de oficina: su pantalla es el portal.
-     Quien entre sin ser personal del área (el público, vía CiDiTuc) cae acá
-     con rol titular y va directo a lo suyo. */
-  if (rol === 'titular') return <Navigate to="/portal" replace />;
   const { bandejasPara, presentacionesPendientes, indicadores, permisos, usuarios } = useDatos();
 
   // Quién soy en la tabla de usuarios, igual que en Entregas: las cédulas se
@@ -176,6 +172,12 @@ function Home() {
     month: 'long',
     day: 'numeric',
   });
+
+  /* El titular no tiene un "inicio" de oficina: su pantalla es el portal.
+     Quien entre sin ser personal del área (el público, vía CiDiTuc) cae acá
+     con rol titular y va directo a lo suyo. Va después de todos los hooks:
+     React exige que se llamen en el mismo orden en cada render. */
+  if (rol === 'titular') return <Navigate to="/portal" replace />;
 
   return (
     <>

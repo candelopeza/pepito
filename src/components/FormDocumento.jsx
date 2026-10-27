@@ -34,6 +34,10 @@ import { useDatos } from '../datos/datosContexto';
 import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
 import { fmtFecha, hoyISO } from '../dominio/fechas';
 import { vencimientoAnual } from '../dominio/vigencias';
+import { URL_API } from '../datos/api';
+
+// El formulario en blanco de la DDJJ de reciclaje (backend/datos/plantillas/).
+const URL_PLANTILLA_DDJJ_RECICLAJE = `${URL_API}/plantillas/ddjj-reciclaje.pdf`;
 
 function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
   const { parametros, capacidades } = useDatos();
@@ -124,8 +128,28 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
 
       {desdePortal && (
         <Aviso tipo="info" titulo="La presentación entra en una bandeja de validación">
-          El estado del local no cambia hasta que un agente de la oficina apruebe la documentación. El plazo en curso sigue
-          corriendo mientras eso pasa.
+          El estado del local no cambia hasta que un agente de la oficina apruebe la documentación. Si presentás dentro
+          del plazo, el plazo queda en pausa mientras la oficina la revisa: la demora de la revisión no corre en tu contra.
+        </Aviso>
+      )}
+
+      {/* El Form D.A 03 en blanco: el titular lo baja, lo completa y lo
+          adjunta como documento respaldatorio. Lo sirve el backend desde
+          backend/datos/plantillas/. Se muestra también a la oficina, por si
+          tiene que mandárselo a alguien. */}
+      {datos.tipo === 'DDJJ_RECICLAJE' && (
+        <Aviso
+          tipo="info"
+          titulo="Plantilla de la DDJJ de reciclaje (Form D.A 03)"
+          accion={
+            <a href={URL_PLANTILLA_DDJJ_RECICLAJE} target="_blank" rel="noopener" download="DDJJ-reciclaje-Form-DA03.pdf">
+              Descargar plantilla
+            </a>
+          }
+        >
+          {desdePortal
+            ? 'Descargá el formulario, completalo con los datos de tu local, firmalo y adjuntalo acá abajo como documento respaldatorio.'
+            : 'El formulario en blanco que el titular tiene que completar y firmar. Lo que se adjunta es el formulario completo.'}
         </Aviso>
       )}
 
@@ -140,12 +164,21 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
           ancho={2}
         />
 
+        {/* El número que lleva el documento mismo (el N° del Form D.A 03, el
+            del contrato). Identifica a esa presentación: con él se detecta si
+            la misma DDJJ ya se cargó en este u otro local. NO es el número del
+            expediente: ese es el del trámite que le dio curso. */}
         <Campo
           id="doc-numero"
           etiqueta="Número del documento"
           valor={datos.numero}
           onChange={(v) => cambiar('numero', v)}
           error={errores.numero}
+          ayuda={
+            desdePortal
+              ? 'El N° que figura en el formulario (o en el contrato). No es el del expediente.'
+              : 'El N° impreso en el documento (Form D.A 03 o contrato). Sirve para no cargar dos veces la misma presentación.'
+          }
         />
 
         {/* >>> EL EXPEDIENTE DEL TRÁMITE ES OBLIGATORIO Y NO SE INVENTA <<<

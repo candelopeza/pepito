@@ -249,11 +249,16 @@ router.post('/', async (req, res, next) => {
           observaciones: datos.observaciones ?? '',
         });
 
+        // El origen dice QUIÉN cargó el documento: el titular desde el portal
+        // o un agente de la oficina (que lo recibió en papel o por mail). El
+        // tercer valor, INFORME_9DJ, lo pone el módulo del informe. Antes se
+        // guardaba siempre "presentado por el titular", y en Documentación
+        // no se podía distinguir una carga de la oficina.
         await cx.execute(
           `INSERT INTO documentacion
              (id_tramite, id_tdocumentacion, numero, origen, fecha_emision, fecha_vencimiento, habilita)
-           VALUES (?, ?, ?, 'PRESENTADO_TITULAR', ?, ?, 1)`,
-          [id, idTdoc, numero, datos.fechaEmision, vencimiento || null],
+           VALUES (?, ?, ?, ?, ?, ?, 1)`,
+          [id, idTdoc, numero, esTitular ? 'PRESENTADO_TITULAR' : 'CARGADO_OFICINA', datos.fechaEmision, vencimiento || null],
         );
         if (adjunto) {
           await guardarImagen(cx, req, { idTramite: id, imagen: adjunto, tipoArchivo: 'documento', nombreOriginal: datos.adjuntoNombre });

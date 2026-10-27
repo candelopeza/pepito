@@ -146,10 +146,16 @@ export function armarNumeroCedula(entrada, referencia) {
   return completarNumeroCedula(entrada);
 }
 
+/* Quién cargó el documento. Lo decide el backend según el rol del que lo
+   registra: el titular desde el portal, un agente desde Documentación o la
+   ficha, o el módulo del informe de la prestataria. */
 export const ORIGENES_DOCUMENTO = [
   { id: 'PRESENTADO_TITULAR', etiqueta: 'Presentado por el titular' },
+  { id: 'CARGADO_OFICINA',    etiqueta: 'Cargado por la oficina' },
   { id: 'INFORME_9DJ',        etiqueta: 'Informado por 9 de Julio' },
 ];
+
+export const ETIQUETA_ORIGEN = Object.fromEntries(ORIGENES_DOCUMENTO.map((o) => [o.id, o.etiqueta]));
 
 /* ---------------------------------------------------------------- consultas
    [NO PORTAR] El sistema viejo determinaba "la más reciente" por el orden

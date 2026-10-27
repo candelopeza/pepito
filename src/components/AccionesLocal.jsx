@@ -44,7 +44,7 @@ import FormEntrega from './FormEntrega';
 import VistaCedula from './VistaCedula';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
-import { accionesDisponibles, faltantesRegistrales } from '../dominio/reglas';
+import { accionesDisponibles, faltantesRegistrales, requiereDatosRegistrales } from '../dominio/reglas';
 import { Link } from 'react-router-dom';
 import { puedeEditar, puedeVerRuta } from '../config/modulos';
 
@@ -110,6 +110,9 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
   const [anclaMenu, setAnclaMenu] = useState(null);
 
   const faltan = faltantesRegistrales(local);
+  // La cédula se traba por datos faltantes solo cuando es la segunda.
+  const bloqueaCedula =
+    faltan.length > 0 && requiereDatosRegistrales('generar-cedula', false, local.estado?.startsWith('NOTIF2') ? 2 : 1);
 
   /* La cédula sobre la que operan asignar / entrega / regenerar: la ÚLTIMA
      emitida (con número), si todavía no tiene una entrega efectiva. Incluye
@@ -315,8 +318,9 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
           <strong>{local.nombreLocal}</strong> entra en la cola de emisión de la primera cédula.
         </p>
         {faltan.length > 0 && (
-          <Aviso tipo="alerta" titulo="Faltan datos registrales">
-            Falta {faltan.join(', ')}. Podés habilitarlo, pero no vas a poder emitir la cédula hasta cargarlos.
+          <Aviso tipo="info" titulo="Faltan datos registrales">
+            Falta {faltan.join(', ')}. La primera cédula se puede emitir igual; esos datos van a hacer falta recién para
+            la segunda.
           </Aviso>
         )}
       </Confirmar>
@@ -340,21 +344,24 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
       </Modal>
 
       {/* ======================= EMISIÓN DE CÉDULAS ======================= */}
+      {/* Los datos registrales se exigen para la SEGUNDA cédula, no para la
+          primera (requiereDatosRegistrales en dominio/reglas.js). */}
       <Confirmar
         abierto={abierta === 'generar-cedula'}
         titulo="Generar la cédula de notificación"
-        textoConfirmar={faltan.length > 0 ? 'No se puede generar' : 'Generar cédula'}
+        textoConfirmar={bloqueaCedula ? 'No se puede generar' : 'Generar cédula'}
+        deshabilitado={bloqueaCedula}
         onCancelar={cerrar}
         onConfirmar={() => {
-          if (faltan.length > 0) return;
+          if (bloqueaCedula) return;
           generarCedula(local.id);
           terminar();
         }}
       >
-        {faltan.length > 0 ? (
+        {bloqueaCedula ? (
           <Aviso tipo="bloqueo" titulo="Faltan datos registrales">
-            Falta {faltan.join(', ')}. La cédula tiene que individualizar correctamente al sujeto obligado: sin esos
-            datos la notificación es impugnable. Completá el padrón y volvé.
+            Falta {faltan.join(', ')}. La segunda cédula tiene que individualizar correctamente al sujeto obligado: sin
+            esos datos la notificación es impugnable. Completá el padrón y volvé.
           </Aviso>
         ) : (
           <>

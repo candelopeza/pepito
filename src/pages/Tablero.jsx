@@ -129,8 +129,10 @@ const COLUMNAS_BANDEJA = [
 const ANCHO_BANDEJA = anchoDeColumnas(COLUMNAS_BANDEJA);
 
 function Bandeja({ bandeja }) {
-  // Arranca abierta si tiene algo: si está vacía no vale la pena el espacio.
-  const [abierta, setAbierta] = useState(bandeja.locales.length > 0);
+  // Todas arrancan cerradas: el tablero se lee por los contadores de cada
+  // bandeja y se abre solo la que se va a trabajar. Antes se abrían todas las
+  // que tenían algo y la página era una tabla detrás de otra.
+  const [abierta, setAbierta] = useState(false);
 
   return (
     <section className="bandeja" style={{ maxWidth: ANCHO_BANDEJA }}>

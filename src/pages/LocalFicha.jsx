@@ -174,8 +174,8 @@ function LocalFicha() {
 
       {faltan.length > 0 && (
         <Aviso tipo="alerta" titulo="Faltan datos registrales">
-          Falta {faltan.join(', ')}. Sin esos datos no se puede emitir una cédula que individualice correctamente al sujeto
-          obligado, y el local no puede avanzar a segunda notificación.
+          Falta {faltan.join(', ')}. La primera cédula sale igual (pide nombre y dirección), pero sin esos datos el local no
+          puede avanzar a segunda notificación.
         </Aviso>
       )}
 

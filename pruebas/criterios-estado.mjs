@@ -14,7 +14,7 @@
    existen todavía (una prórroga que vence mañana, una DDJJ del 29 de febrero).
    ============================================================================ */
 
-import { estadoDeLocal, ID_ESTADO } from '../backend/mapeo.js';
+import { estadoDeLocal, faltantesParaEmitir, ID_ESTADO } from '../backend/mapeo.js';
 
 let ok = 0;
 let fallas = 0;
@@ -171,6 +171,21 @@ verificar(
     HOY,
   ),
   'COMPLETAR_DATOS',
+);
+
+// Lo decidió la Dirección (26/10/2026): la primera cédula solo pide nombre y
+// dirección (lo primero es que le llegue); la segunda, además, CUIT, razón social y rubro.
+const sinDatos = local({ nombreLocal: 'KIOSCO', direccion: 'CALLE 1 100', cuit: '', razonSocial: '', rubro: 'SIN INFORMAR' });
+verificar('la primera cédula se emite solo con nombre y dirección', faltantesParaEmitir(sinDatos, 1).join(', '), '');
+verificar(
+  'la segunda cédula pide CUIT, razón social y rubro',
+  faltantesParaEmitir(sinDatos, 2).join(', '),
+  'CUIT, razón social, rubro',
+);
+verificar(
+  'sin dirección no se emite ni la primera',
+  faltantesParaEmitir({ ...sinDatos, direccion: ' ' }, 1).join(', '),
+  'dirección',
 );
 
 /* ==========================================================================

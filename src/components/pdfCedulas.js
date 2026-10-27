@@ -24,7 +24,8 @@
 
    QUIÉN Y CUÁNDO: abajo a la izquierda de cada hoja va "Generado el ... a las
    ... por ...", con el usuario que lo generó (el de la barra de arriba; con
-   CiDiTuc, el de su inicio de sesión).
+   CiDiTuc, el de su inicio de sesión). Las cédulas NO lo llevan (lo pidió la
+   Dirección: PIE_GENERADO_EN_CEDULAS en dominio/cedulaOficial.js).
 
    Se arma en el navegador con jsPDF y jspdf-autotable. Se cargan recién al
    generar el primer PDF, para no demorar la apertura de la aplicación.
@@ -35,6 +36,9 @@ import { RESULTADOS_ENTREGA } from '../dominio/actuaciones.js';
 import { fmtFecha, hoyISO } from '../dominio/fechas.js';
 import { ordenarPorProximidad } from '../dominio/geo.js';
 import { ESTADOS, etiquetaEstado } from '../dominio/estados.js';
+import { COPIAS_OFICIALES, FORMATO_OFICIAL, LOGOS, PIE_GENERADO_EN_CEDULAS, contenidoCedulaOficial } from '../dominio/cedulaOficial.js';
+import logoMunicipio from '../assets/cedula/logo-municipio.png';
+import logoAmbiente from '../assets/cedula/logo-ambiente.png';
 
 /* Cuántas copias de cada cédula. Con 2 sale ORIGINAL (queda en el local) y
    DUPLICADO (vuelve a la oficina con la constancia firmada). */
@@ -155,7 +159,7 @@ function dibujarCedula(doc, { cedula, local, notificador, plantilla, copia, gene
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(GRIS);
-  doc.text(generado, MARGEN, A4.alto - PIE_DESDE_ABAJO);
+  if (generado) doc.text(generado, MARGEN, A4.alto - PIE_DESDE_ABAJO);
   if (copia) doc.text(apto(copia), A4.ancho - MARGEN, A4.alto - PIE_DESDE_ABAJO, { align: 'right' });
   doc.setTextColor(0);
 }
@@ -232,19 +236,285 @@ function dibujarConstancia(doc, y0, notificador) {
   linea(doc, x + 4, y + 7.8, fin - 4);
 }
 
-/* Las cédulas, una por hoja (o dos con COPIAS_POR_CEDULA = 2).
+/* ===========================================================================
+   EL FORMATO OFICIAL DE LA DIRECCIÓN DE AMBIENTE (26/10/2026)
+   ---------------------------------------------------------------------------
+   La Dirección pasó el modelo de las dos notificaciones (PRIMERA y SEGUNDA) y
+   se imprime así, fijo: título y número arriba, los dos logos, Fecha / Hora /
+   Sr./a para completar a mano, los datos del local, el texto con las
+   ordenanzas (los casilleros van vacíos: se tildan a mano según el rubro), las
+   firmas y las observaciones. La primera lleva las tres firmas en una fila; la
+   segunda, la del Director arriba y las de recepción y notificador abajo.
+
+   TRES COPIAS IGUALES de cada cédula, una por hoja: para el local, para la
+   Dirección de Ambiente y para el expediente.
+
+   El texto y los datos salen de dominio/cedulaOficial.js, el mismo que usa la
+   pantalla "Ver cédula": lo que se revisa y lo que se imprime no pueden
+   diferir. Ahí están FORMATO_OFICIAL (en false vuelve el formato anterior: el
+   texto de Configuración → Plantilla de cédula con la constancia de
+   notificación, que quedó intacto más arriba) y la cantidad de copias.
+
+   LOS LOGOS: src/assets/cedula/logo-municipio.png y logo-ambiente.png,
+   recortados de la imagen del encabezado que pasó la Dirección. Van dentro de
+   la app (Vite los incrusta en el index.html), así que salen también sin señal
+   o abriendo el archivo con doble clic. Para cambiarlos: reemplazar esos dos
+   archivos y compilar de nuevo. Si una imagen no carga, en su lugar va el
+   nombre en texto y la cédula se imprime igual.
+   =========================================================================== */
+/* Prepara un logo para el PDF, con su tamaño en píxeles (para no deformarlo).
+   null si no carga. */
+async function cargarLogo(url) {
+  try {
+    const respuesta = await fetch(url);
+    if (!respuesta.ok) return null;
+    const blob = await respuesta.blob();
+    const datos = await new Promise((resolver, rechazar) => {
+      const lector = new FileReader();
+      lector.onload = () => resolver(lector.result);
+      lector.onerror = rechazar;
+      lector.readAsDataURL(blob);
+    });
+    const { ancho, alto } = await new Promise((resolver, rechazar) => {
+      const img = new Image();
+      img.onload = () => resolver({ ancho: img.naturalWidth, alto: img.naturalHeight });
+      img.onerror = rechazar;
+      img.src = datos;
+    });
+    return { datos, ancho, alto, tipo: 'PNG' };
+  } catch {
+    return null;
+  }
+}
+
+/* El logo dentro de su caja, sin deformarlo. Sin archivo, el nombre en texto. */
+function dibujarLogo(doc, logo, caja, textoSinLogo, alinear) {
+  if (logo) {
+    const escala = Math.min(caja.ancho / logo.ancho, caja.alto / logo.alto);
+    const ancho = logo.ancho * escala;
+    const alto = logo.alto * escala;
+    const x = alinear === 'derecha' ? caja.x + caja.ancho - ancho : caja.x;
+    // 'FAST': comprimida sin perder calidad (sin esto, cada logo pesa ~200 KB en el PDF).
+    doc.addImage(logo.datos, logo.tipo, x, caja.y + (caja.alto - alto) / 2, ancho, alto, undefined, 'FAST');
+    return;
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  const lineas = textoSinLogo.map(apto);
+  const x = alinear === 'derecha' ? caja.x + caja.ancho : caja.x;
+  lineas.forEach((t, i) => doc.text(t, x, caja.y + 6 + i * 4.2, { align: alinear === 'derecha' ? 'right' : 'left' }));
+}
+
+/* Un párrafo con partes en negrita, justificado como en el modelo. `partes`:
+   [{ t: 'texto', e: 'normal' | 'bold' | 'italic' | 'bolditalic' }]. Las
+   palabras pegadas entre partes (una negrita seguida de ":") quedan juntas.
+   Con dibujar = false solo mide: devuelve dónde termina. */
+function parrafo(doc, partes, { x, y, ancho, tam, justificar = true, dibujar = true, sangria = 0 }) {
+  const interlinea = tam * 0.3528 * 1.22;
+  // Unidades: palabras (con su estilo) que van juntas, separadas por espacios.
+  const unidades = [];
+  let actual = [];
+  for (const p of partes) {
+    for (const trozo of String(p.t).split(/(\s+)/)) {
+      if (!trozo) continue;
+      if (/^\s+$/.test(trozo)) {
+        if (actual.length) unidades.push(actual);
+        actual = [];
+      } else {
+        actual.push({ t: apto(trozo), e: p.e ?? 'normal' });
+      }
+    }
+  }
+  if (actual.length) unidades.push(actual);
+
+  doc.setFontSize(tam);
+  const medir = (u) =>
+    u.reduce((suma, pieza) => {
+      doc.setFont('times', pieza.e);
+      return suma + doc.getTextWidth(pieza.t);
+    }, 0);
+  doc.setFont('times', 'normal');
+  const espacio = doc.getTextWidth(' ');
+
+  const lineas = [];
+  let linea = [];
+  let largo = 0;
+  for (const u of unidades) {
+    const w = medir(u);
+    const disponible = ancho - (lineas.length === 0 ? sangria : 0);
+    if (linea.length && largo + espacio + w > disponible) {
+      lineas.push({ unidades: linea, largo });
+      linea = [];
+      largo = 0;
+    }
+    largo += (linea.length ? espacio : 0) + w;
+    linea.push({ u, w });
+  }
+  if (linea.length) lineas.push({ unidades: linea, largo, ultima: true });
+
+  let yy = y;
+  lineas.forEach((l, i) => {
+    if (dibujar) {
+      const inicio = x + (i === 0 ? sangria : 0);
+      const disponible = ancho - (i === 0 ? sangria : 0);
+      const huecos = l.unidades.length - 1;
+      const extra = justificar && !l.ultima && huecos > 0 ? (disponible - l.largo) / huecos : 0;
+      let xx = inicio;
+      for (const { u, w } of l.unidades) {
+        let xp = xx;
+        for (const pieza of u) {
+          doc.setFont('times', pieza.e);
+          doc.text(pieza.t, xp, yy);
+          xp += doc.getTextWidth(pieza.t);
+        }
+        xx += w + espacio + extra;
+      }
+    }
+    yy += interlinea;
+  });
+  return yy;
+}
+
+/* Línea de puntos para completar a mano (como los "………" del modelo). */
+function puntos(doc, x1, y, x2) {
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.25);
+  doc.setLineDashPattern([0.35, 0.9], 0);
+  doc.line(x1, y, x2, y);
+  doc.setLineDashPattern([], 0);
+}
+
+/* El cuerpo de la cédula oficial, desde los datos del local hasta el último
+   párrafo. Devuelve dónde termina. Con dibujar = false solo mide (para elegir
+   el tamaño de letra que entra en una hoja). */
+function cuerpoOficial(doc, contenido, { x, y, ancho, tam, dibujar }) {
+  const opciones = { x, ancho, tam, dibujar };
+  const salto = tam * 0.3528 * 0.55;
+
+  // Los datos del local: la primera en un párrafo, la segunda en dos renglones.
+  contenido.datos.forEach((renglon, i) => {
+    const partes = renglon.flatMap((d) => [{ t: d.etiqueta + ': ', e: 'bold' }, { t: d.valor + '  ' }]);
+    y = parrafo(doc, partes, { ...opciones, y: y + (i ? salto : 0), justificar: false });
+  });
+  y += salto * 2;
+  for (const p of contenido.parrafos) y = parrafo(doc, p, { ...opciones, y });
+
+  // Las ordenanzas, cada una con su casillero vacío para tildar a mano.
+  const lado = tam * 0.3528 * 0.78;
+  for (const { titulo, texto } of contenido.ordenanzas) {
+    y += salto;
+    if (dibujar) {
+      doc.setDrawColor(0);
+      doc.setLineWidth(0.25);
+      doc.rect(x, y - lado * 0.95, lado, lado);
+    }
+    y = parrafo(doc, [{ t: titulo, e: 'bold' }, { t: texto }], { ...opciones, y, sangria: lado + 1.6 });
+  }
+  for (const p of contenido.cierre) y = parrafo(doc, p, { ...opciones, y });
+  return y;
+}
+
+/* Una copia de la cédula oficial: una hoja. */
+function dibujarCedulaOficial(doc, { cedula, local }, { logos, generado }) {
+  const x = 18;
+  const fin = ZONA.ancho - 18;
+  const ancho = fin - x;
+  const contenido = contenidoCedulaOficial(cedula, local);
+  const { instancia } = contenido;
+
+  // Título y número
+  doc.setFont('times', 'bold');
+  doc.setFontSize(12.5);
+  doc.text(contenido.titulo, x + ancho * 0.38, 17, { align: 'center' });
+  doc.setFontSize(11);
+  doc.text(apto(`N°: ${contenido.numero}`), fin, 17, { align: 'right' });
+
+  // Los logos, a la misma altura. El de Ambiente, como en el modelo, un poco
+  // más de la mitad de alto que el del Municipio.
+  dibujarLogo(doc, logos.municipio, { x: x + 4, y: 21, ancho: 58, alto: 22 }, LOGOS.municipio.texto, 'izquierda');
+  dibujarLogo(doc, logos.ambiente, { x: fin - 62, y: 25.5, ancho: 58, alto: 13 }, LOGOS.ambiente.texto, 'derecha');
+
+  // Fecha y hora (a mano)
+  let y = 50;
+  doc.setFont('times', 'bold');
+  doc.setFontSize(10.5);
+  doc.text('Fecha:', fin - 92, y);
+  doc.setFont('times', 'normal');
+  doc.text('........./........./.........', fin - 79, y);
+  doc.setFont('times', 'bold');
+  doc.text('Hora:', fin - 36, y);
+  puntos(doc, fin - 25, y + 0.6, fin);
+
+  // Sr./a (a mano)
+  y += 9;
+  doc.text('Sr./a:', x, y);
+  puntos(doc, x + 11, y + 0.6, fin);
+
+  // El cuerpo: se elige el tamaño de letra más grande que deja entrar las
+  // firmas y las observaciones en la misma hoja.
+  const inicioCuerpo = y + 7;
+  const firmasYObservaciones = instancia === 1 ? 34 : 52;
+  const limite = ZONA.alto - 16 - firmasYObservaciones;
+  const tam = [10.5, 10, 9.5, 9, 8.5].find((t) => cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam: t, dibujar: false }) <= limite) ?? 8.5;
+  y = cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam, dibujar: true });
+
+  // Firmas
+  doc.setFont('times', 'bold');
+  doc.setFontSize(10.5);
+  if (instancia === 1) {
+    y += 20;
+    doc.text('Firma Recepción', x + ancho / 6, y, { align: 'center' });
+    doc.text('Firma Notificador', x + ancho / 2, y, { align: 'center' });
+    doc.text('Firma Director/ Sub director', x + (ancho * 5) / 6, y, { align: 'center' });
+  } else {
+    y += 16;
+    puntos(doc, x, y, x + 60);
+    y += 6;
+    doc.text('Firma Director/ Sub director', fin, y, { align: 'right' });
+    y += 14;
+    puntos(doc, x, y, x + 55);
+    puntos(doc, x + 80, y, x + 135);
+    y += 5;
+    doc.text('Firma Recepción', x + 27.5, y, { align: 'center' });
+    doc.text('Firma Notificador', x + 107.5, y, { align: 'center' });
+  }
+
+  // Observaciones
+  y += 11;
+  doc.text('OBSERVACIONES:', x, y);
+  puntos(doc, x + 33, y + 0.6, fin);
+  puntos(doc, x, y + 7, fin);
+
+  // Pie: quién la generó y cuándo (sección 6.4), chico y en gris. Hoy apagado
+  // en las cédulas (PIE_GENERADO_EN_CEDULAS): `generado` llega vacío.
+  if (generado) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(GRIS);
+    doc.text(generado, x, ZONA.alto - 8);
+    doc.setTextColor(0);
+  }
+}
+
+/* Las cédulas. Formato oficial: tres copias iguales de cada una, una por hoja.
+   Formato anterior: una por hoja (o dos con COPIAS_POR_CEDULA = 2).
    `items`: [{ cedula, local, notificador }]. */
 export async function pdfCedulas(items, plantilla, { generadoPor = '' } = {}) {
   const { jsPDF } = await jsPdf();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: HOJA.formato });
   doc.setProperties({ title: 'Cédulas de notificación', author: 'Dirección de Ambiente' });
-  const generado = leyendaGenerado(generadoPor);
+  const generado = PIE_GENERADO_EN_CEDULAS ? leyendaGenerado(generadoPor) : '';
+  const logos = FORMATO_OFICIAL
+    ? { municipio: await cargarLogo(logoMunicipio), ambiente: await cargarLogo(logoAmbiente) }
+    : null;
+  const copias = FORMATO_OFICIAL ? COPIAS_OFICIALES : COPIAS_POR_CEDULA;
   let primera = true;
   for (const item of items) {
-    for (let n = 0; n < COPIAS_POR_CEDULA; n += 1) {
+    for (let n = 0; n < copias; n += 1) {
       if (!primera) doc.addPage();
       primera = false;
-      dibujarCedula(doc, { ...item, plantilla, generado, copia: COPIAS_POR_CEDULA > 1 ? ROTULO_COPIA[n] : null });
+      if (FORMATO_OFICIAL) dibujarCedulaOficial(doc, item, { logos, generado });
+      else dibujarCedula(doc, { ...item, plantilla, generado, copia: copias > 1 ? ROTULO_COPIA[n] : null });
     }
   }
   return doc;

@@ -353,7 +353,7 @@ function Expediente() {
         renderCell: ({ row }) => row.local && <AccionesLocal local={row.local} compacto />,
       },
     ],
-    [puedeCargarNumero],
+    [puedeCargarNumero, puedeTocarNumero],
   );
   const provisorios = iniciados.filter((a) => String(a.numeroExpediente ?? '').startsWith('PROV-'));
 

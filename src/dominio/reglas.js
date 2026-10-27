@@ -40,16 +40,40 @@ import { LISTA_ESTADOS } from './estados.js';
    CUIT, razón social y rubro, la notificación es impugnable.
    ============================================================================ */
 export function datosRegistralesCompletos(local) {
-  return Boolean(local?.cuit?.trim() && local?.razonSocial?.trim() && local?.rubro?.trim());
+  return faltantesRegistrales(local).length === 0;
 }
+
+/* El rubro "SIN INFORMAR" es como viene de la base un rubro vacío (la fila 1
+   del catálogo): cuenta como faltante, igual que en backend/mapeo.js. */
+export const rubroSinInformar = (rubro) => !String(rubro ?? '').trim() || String(rubro).trim().toUpperCase() === 'SIN INFORMAR';
 
 export function faltantesRegistrales(local) {
   const faltan = [];
   if (!local?.cuit?.trim()) faltan.push('CUIT');
   if (!local?.razonSocial?.trim()) faltan.push('razón social');
-  if (!local?.rubro?.trim()) faltan.push('rubro');
+  if (rubroSinInformar(local?.rubro)) faltan.push('rubro');
   return faltan;
 }
+
+/* QUÉ PIDE CADA CÉDULA (lo decidió la Dirección, 26/10/2026)
+   La primera solo necesita el nombre del local y la dirección: lo primero es
+   asegurarse de que le llegue, y muchos no tienen el resto o no lo dan. La
+   segunda ya pide todo: además, CUIT, razón social y rubro. En false, las dos
+   piden todo, como antes.
+   `registrales`: el backend pasa los suyos (allá el rubro SIN INFORMAR cuenta
+   como faltante, ver backend/mapeo.js). */
+export const PRIMERA_SOLO_NOMBRE_Y_DIRECCION = true;
+
+export function faltantesParaCedula(local, instancia, registrales = faltantesRegistrales(local)) {
+  const faltan = [];
+  if (!String(local?.nombreLocal ?? '').trim()) faltan.push('nombre del local');
+  if (!String(local?.direccion ?? '').trim()) faltan.push('dirección');
+  return instancia === 2 || !PRIMERA_SOLO_NOMBRE_Y_DIRECCION ? [...faltan, ...registrales] : faltan;
+}
+
+/* Qué cédula le toca a un local en la cola de emisión: la segunda si está
+   en NOTIF2_PENDIENTE, si no la primera. */
+export const instanciaPorEmitir = (local) => (String(local?.estado ?? '').startsWith('NOTIF2') ? 2 : 1);
 
 /* ============================================================================
    DOCUMENTACIÓN VIGENTE

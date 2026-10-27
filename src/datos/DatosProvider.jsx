@@ -470,7 +470,7 @@ function DatosProvider({ children }) {
             ? { tipo: 'success', texto: `${hecho}. La dirección se ubicó en el mapa.` }
             : {
                 tipo: 'info',
-                texto: `${hecho}, pero la dirección no se pudo ubicar en el mapa: ${r.ubicacion.motivo ?? 'sin motivo'} Revisala, o ubicala a mano en Herramientas → Geocodificación pendiente.`,
+                texto: `${hecho}, pero la dirección no se pudo ubicar en el mapa: ${r.ubicacion.motivo ?? 'sin motivo'} Revisala, o ubicala a mano en el Mapa (Geocodificación pendiente).`,
               };
         },
         () => (datos.id ? api.localEdicion(datos.id, datos) : api.localAlta(datos)),

@@ -1293,7 +1293,14 @@
   border: 1px solid currentColor; font-size: 13px; white-space: nowrap;
   text-decoration: none; transition: background 0.2s ease;
 }
-.aviso-accion a:hover { background: rgba(255, 255, 255, 0.65); }
+.aviso-accion a:hover { background: rgba(255, 255, 255, 0.65); }
+/* En pantalla angosta la acción baja debajo del texto. La regla del @media de
+   768px de más arriba no alcanzaba: estas, que vienen después, la pisaban, y
+   el texto se encogía en vez de dejarle el renglón al botón. */
+@media (max-width: 768px) {
+  .aviso-con-accion .aviso-cuerpo { flex-basis: 220px; }
+  .aviso-accion { margin-left: 0; }
+}
 
 .aviso-info    { background: #e3f2fd; border-color: #1976d2; color: #0d47a1; }
 .aviso-ok      { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; }
@@ -2094,3 +2101,36 @@
   .main-content input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
   .main-content select { min-height: 40px; }
 }
+
+/* ========== 14.31 LA CÉDULA CON EL MODELO OFICIAL (pantalla "Ver cédula") ==========
+   Usado en: components/VistaCedula.jsx. Es el mismo contenido que sale impreso
+   (dominio/cedulaOficial.js), con la letra y el armado del modelo de la
+   Dirección de Ambiente, para revisarla antes de imprimir. */
+.cedula-oficial {
+  background: white; border: 1px solid #cfd8dc; border-radius: 4px; color: #111;
+  padding: 24px 28px; margin-bottom: 12px;
+  font-family: 'Times New Roman', Times, serif; font-size: 14px; line-height: 1.35;
+}
+.cedula-oficial p { margin: 0 0 8px; }
+.cedula-oficial .justificado { text-align: justify; }
+.cedula-oficial-titulo { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; margin-bottom: 8px; }
+.cedula-oficial-titulo strong:first-child { flex: 1; text-align: center; }
+.cedula-oficial-logos { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 10px; }
+.cedula-oficial-logo { max-height: 70px; max-width: 45%; object-fit: contain; }
+/* El de Ambiente, como en el modelo: un poco más de la mitad de alto. */
+.cedula-oficial-logo.derecha { max-height: 41px; }
+.cedula-oficial-logo-texto { display: flex; flex-direction: column; font-family: Arial, sans-serif; font-weight: 700; font-size: 12px; }
+.cedula-oficial-logo-texto.derecha { text-align: right; }
+.cedula-oficial-fecha { text-align: right; }
+.cedula-oficial-firmas { display: flex; gap: 12px; margin: 34px 0 14px; }
+.cedula-oficial-firmas.tres { justify-content: space-between; }
+.cedula-oficial-firmas.director { justify-content: flex-end; margin-bottom: 6px; }
+.cedula-oficial-firmas.dos { justify-content: flex-start; gap: 60px; margin-top: 24px; }
+@media (max-width: 600px) {
+  .cedula-oficial { padding: 14px 12px; font-size: 13px; }
+  .cedula-oficial-firmas.tres { flex-direction: column; gap: 22px; }
+}
+/* Las líneas para completar a mano (Sr./a, Observaciones): punteadas y del
+   ancho que haya, para que en el teléfono no se salgan del papel. */
+.cedula-oficial-renglon { display: flex; align-items: flex-end; gap: 6px; }
+.cedula-oficial-puntos { flex: 1; min-width: 40px; height: 1em; border-bottom: 2px dotted #444; }

@@ -14,7 +14,7 @@
    ============================================================================ */
 import { vencimientoHabil, plazoVencido } from '../src/dominio/fechas.js';
 import { vencimientoAnual, estaVigente } from '../src/dominio/vigencias.js';
-import { resolverEstado } from '../src/dominio/reglas.js';
+import { requiereDatosRegistrales, resolverEstado } from '../src/dominio/reglas.js';
 import { armarNumeroCedula, completarNumeroCedula, mismoNumeroCedula, numeroCedula } from '../src/dominio/actuaciones.js';
 
 let ok = 0;
@@ -154,6 +154,14 @@ chequear('lo vacío no coincide con ninguna cédula', mismoNumeroCedula('', 'CED
 chequear('675 es la cédula 0001-675 de la base', mismoNumeroCedula('675', '0001-675'), true);
 chequear('676 NO es la cédula 0001-675', mismoNumeroCedula('676', '0001-675'), false);
 chequear('escribiendo 675 se arma 0001-675', armarNumeroCedula('675', '0001-675'), '0001-675');
+
+// Datos registrales: la PRIMERA cédula sale con nombre y dirección del local;
+// la SEGUNDA individualiza al sujeto obligado y exige CUIT y razón social.
+chequear('la primera cédula no exige datos registrales', requiereDatosRegistrales('generar-cedula', false, 1), false);
+chequear('la segunda cédula sí exige datos registrales', requiereDatosRegistrales('generar-cedula', false, 2), true);
+chequear('regenerar la segunda cédula exige lo mismo que emitirla', requiereDatosRegistrales('regenerar-cedula', false, 2), true);
+chequear('el expediente exige datos solo si el parámetro lo pide', requiereDatosRegistrales('registrar-expediente', false), false);
+chequear('con el parámetro prendido, el expediente exige datos', requiereDatosRegistrales('registrar-expediente', true), true);
 
 console.log(`\n${ok} criterio(s) cumplidos · ${mal} falla(s)`);
 if (mal) process.exit(1);

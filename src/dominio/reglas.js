@@ -58,8 +58,9 @@ export function faltantesRegistrales(local) {
 /* QUÉ PIDE CADA CÉDULA (lo decidió la Dirección, 26/10/2026)
    La primera solo necesita el nombre del local y la dirección: lo primero es
    asegurarse de que le llegue, y muchos no tienen el resto o no lo dan. La
-   segunda ya pide todo: además, CUIT, razón social y rubro. En false, las dos
-   piden todo, como antes.
+   segunda ya pide todo: además, CUIT, razón social y rubro. Si se piden o no
+   los datos registrales lo decide requiereDatosRegistrales (más abajo), que
+   es la misma regla. En false, las dos piden todo, como antes.
    `registrales`: el backend pasa los suyos (allá el rubro SIN INFORMAR cuenta
    como faltante, ver backend/mapeo.js). */
 export const PRIMERA_SOLO_NOMBRE_Y_DIRECCION = true;
@@ -68,7 +69,8 @@ export function faltantesParaCedula(local, instancia, registrales = faltantesReg
   const faltan = [];
   if (!String(local?.nombreLocal ?? '').trim()) faltan.push('nombre del local');
   if (!String(local?.direccion ?? '').trim()) faltan.push('dirección');
-  return instancia === 2 || !PRIMERA_SOLO_NOMBRE_Y_DIRECCION ? [...faltan, ...registrales] : faltan;
+  const pideRegistrales = !PRIMERA_SOLO_NOMBRE_Y_DIRECCION || requiereDatosRegistrales('generar-cedula', false, instancia);
+  return pideRegistrales ? [...faltan, ...registrales] : faltan;
 }
 
 /* Qué cédula le toca a un local en la cola de emisión: la segunda si está
@@ -445,11 +447,22 @@ export function accionesDisponibles(codigoEstado, rol, local) {
   });
 }
 
-/* ¿Corresponde exigir datos registrales antes de este acto?
-   El Anexo B.2 lo deja como decisión pendiente para el expediente y para la
-   reentrada por vencimiento. Sale del parámetro `exigirDatosSiempre`. */
-export function requiereDatosRegistrales(idAccion, exigirDatosSiempre) {
-  if (idAccion === 'generar-cedula') return true;
+/* ¿Corresponde exigir datos registrales (CUIT, razón social, rubro) antes de
+   este acto?
+
+   CÉDULAS: la PRIMERA se emite con lo que se relevó en la calle (nombre del
+   local y dirección): es un aviso al comercio y no hace falta frenarla por
+   un CUIT que todavía no se consiguió. La SEGUNDA es la previa al expediente
+   de multa y tiene que individualizar al sujeto obligado: sin CUIT y razón
+   social es impugnable. Por eso el circuito pasa por COMPLETAR_DATOS recién
+   después de que vence la primera (resolverEstado), y acá se exige con
+   `instancia` 2. `regenerar-cedula` sigue la misma regla que la cédula que
+   reemplaza.
+
+   EXPEDIENTE Y REINGRESO: el Anexo B.2 lo deja como decisión pendiente. Sale
+   del parámetro `exigirDatosSiempre`. */
+export function requiereDatosRegistrales(idAccion, exigirDatosSiempre, instancia = 1) {
+  if (idAccion === 'generar-cedula' || idAccion === 'regenerar-cedula') return instancia === 2;
   if (!exigirDatosSiempre) return false;
   return ['registrar-expediente', 'reingresar-circuito'].includes(idAccion);
 }

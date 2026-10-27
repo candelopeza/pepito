@@ -932,15 +932,31 @@
    OJO: acá el rojo NO quiere decir "esto borra algo", es solo el color que
    pide el diseño. Si más adelante se agrega un botón de eliminar de verdad,
    conviene que se distinga de este. */
+/* Mismo tamaño y forma que el primario: solo cambia el color. Antes no
+   tenía padding ni radio y, fuera de un .formulario-modal (que se los
+   agrega a todos sus botones), "Dar de baja" salía como un texto rojo
+   chiquito sin marco. Dentro del modal, la regla de arriba sigue mandando. */
 .btn-peligro {
   background: #f44336;
   color: white;
   border: none;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
   font-family: inherit;
   transition: 0.2s;
 }
 .btn-peligro:hover { background: #d32f2f; }
+
+/* Un botón deshabilitado tiene que verse deshabilitado (confirmar sin
+   motivo, generar sin datos): atenuado y sin mano. */
+.btn-primario:disabled,
+.btn-secundario:disabled,
+.btn-peligro:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primario:disabled:hover { background: #1976d2; }
+.btn-peligro:disabled:hover { background: #f44336; }
 
 
 /* ========== 13. DOCUMENTACIÓN — ALTA GUIADA ==========
@@ -1293,7 +1309,7 @@
   border: 1px solid currentColor; font-size: 13px; white-space: nowrap;
   text-decoration: none; transition: background 0.2s ease;
 }
-.aviso-accion a:hover { background: rgba(255, 255, 255, 0.65); }
+.aviso-accion a:hover { background: rgba(255, 255, 255, 0.65); }
 /* En pantalla angosta la acción baja debajo del texto. La regla del @media de
    768px de más arriba no alcanzaba: estas, que vienen después, la pisaban, y
    el texto se encogía en vez de dejarle el renglón al botón. */

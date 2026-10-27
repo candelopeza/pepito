@@ -172,6 +172,12 @@ if (!idLocal) {
     conNumero.estado === 201 && conNumero.cuerpo?.expedienteTramite === 'EXP-PRUEBA-777/2026',
     JSON.stringify(conNumero.cuerpo).slice(0, 150),
   );
+  // La cargó coordinación, no el titular: el origen tiene que decirlo.
+  verificar(
+    'lo que carga la oficina queda con origen "cargado por la oficina", no "presentado por el titular"',
+    conNumero.cuerpo?.origen === 'CARGADO_OFICINA',
+    `origen=${conNumero.cuerpo?.origen}`,
+  );
 }
 
 /* ===========================================================================

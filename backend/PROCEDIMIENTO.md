@@ -1109,6 +1109,14 @@ rubro.
   `faltantesParaEmitir` de `backend/mapeo.js`).
 - `PRIMERA_SOLO_NOMBRE_Y_DIRECCION = false` en `src/dominio/reglas.js` vuelve
   a pedir todo en las dos.
+- Cande hizo el mismo cambio en paralelo (`requiereDatosRegistrales` con la
+  instancia, PR #20). Al mezclar (27/10/2026) quedó una sola regla:
+  `faltantesParaCedula` pide nombre y dirección, y para CUIT, razón social y
+  rubro le pregunta a `requiereDatosRegistrales`. De cande quedaron además el
+  botón "Generar cédula" deshabilitado cuando faltan datos y sus textos.
+- En esa mezcla `src/App.css` chocaba entero: un salto de línea mal formado
+  (`\r\r\n`) hizo que Git dejara de tratarlo como texto y el commit lo subió
+  con saltos de Windows. Se dejó con saltos normales (`\n`), como en `main`.
 - En la primera cédula impresa, lo que falta sale como **renglón de puntos**
   para completarlo a mano si el titular lo da en la entrega.
 - Pasar a la segunda sigue igual: si al vencer la primera faltan CUIT, razón

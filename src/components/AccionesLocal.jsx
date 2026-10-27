@@ -323,8 +323,9 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
           </Aviso>
         ) : (
           faltan.length > 0 && (
-            <Aviso tipo="info" titulo={`La primera cédula sale igual; falta ${faltan.join(', ')}`}>
-              Hay que cargarlo antes de la segunda notificación.
+            <Aviso tipo="info" titulo="Faltan datos registrales">
+              Falta {faltan.join(', ')}. La primera cédula se puede emitir igual; esos datos van a hacer falta recién
+              para la segunda.
             </Aviso>
           )
         )}
@@ -349,10 +350,13 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
       </Modal>
 
       {/* ======================= EMISIÓN DE CÉDULAS ======================= */}
+      {/* Los datos registrales se exigen para la SEGUNDA cédula, no para la
+          primera (requiereDatosRegistrales en dominio/reglas.js). */}
       <Confirmar
         abierto={abierta === 'generar-cedula'}
         titulo="Generar la cédula de notificación"
         textoConfirmar={faltanParaCedula.length > 0 ? 'No se puede generar' : 'Generar cédula'}
+        deshabilitado={faltanParaCedula.length > 0}
         onCancelar={cerrar}
         onConfirmar={() => {
           if (faltanParaCedula.length > 0) return;

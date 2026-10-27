@@ -194,7 +194,7 @@ CREATE TABLE actuaciones (
   -- DDJJ / DDJJ_RECICLAJE / CONTRATO
   numero              VARCHAR(40) NULL,
   fecha_emision       DATE NULL,
-  origen              ENUM('PRESENTADO_TITULAR','INFORME_9DJ') NULL,
+  origen              ENUM('PRESENTADO_TITULAR','CARGADO_OFICINA','INFORME_9DJ') NULL, -- quién lo cargó: titular por el portal, oficina, informe de la prestataria
   expediente_tramite  VARCHAR(30) NULL,            -- expediente CiDiTuc de la presentación (NO el de multa)
   archivo             VARCHAR(300) NULL,
   validado            TINYINT(1) NULL,

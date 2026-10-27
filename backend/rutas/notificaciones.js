@@ -58,6 +58,7 @@ import { tiene } from '../capacidades.js';
 import { ErrorActo, ejecutarActo } from '../actos.js';
 import { archivosDisponibles, existeHash, guardarImagen, leerImagen } from '../archivos.js';
 import { fmtFecha, hoyISO, vencimientoHabil } from '../../src/dominio/fechas.js';
+import { requiereDatosRegistrales } from '../../src/dominio/reglas.js';
 import { resultadoEntrega } from '../../src/dominio/actuaciones.js';
 
 const router = Router();
@@ -143,10 +144,13 @@ export async function emitirCedula(req, idLocal, { automatica = null } = {}) {
     // El Sistema no tiene tipo de usuario: lo habilita la Dirección al
     // prender la emisión automática o el respaldo en Parámetros.
     rolHabilitadoAunque: automatica ? () => true : null,
-    controlar: async ({ local }) =>
-      datosRegistralesCompletos(local)
-        ? null
-        : new ErrorActo(400, `No se puede emitir la cédula: faltan ${faltantesRegistrales(local).join(', ')}`),
+    // Los datos registrales se exigen para la segunda cédula, no para la
+    // primera (ver requiereDatosRegistrales en src/dominio/reglas.js).
+    controlar: async ({ local, estado }) =>
+      requiereDatosRegistrales('generar-cedula', false, estado.startsWith('NOTIF2') ? 2 : 1) &&
+      !datosRegistralesCompletos(local)
+        ? new ErrorActo(400, `No se puede emitir la segunda cédula: faltan ${faltantesRegistrales(local).join(', ')}`)
+        : null,
     motivo: (r) =>
       `${automatica ?? 'Emisión'} de la ${r.instancia === 1 ? 'primera' : 'segunda'} cédula N° ${r.numero}`,
     trabajo: async (cx, { local, actuaciones, estado }) => {
@@ -222,8 +226,8 @@ router.post('/:id/regenerar', requiereRol('administrativo', 'coordinacion'), asy
         if (RESULTADOS_EFECTIVOS.includes(actual.resultado)) {
           return new ErrorActo(409, 'La cédula ya se entregó y su plazo corre: no se puede reemplazar.');
         }
-        if (!datosRegistralesCompletos(local)) {
-          return new ErrorActo(400, `No se puede emitir la cédula: faltan ${faltantesRegistrales(local).join(', ')}`);
+        if (requiereDatosRegistrales('regenerar-cedula', false, actual.instancia) && !datosRegistralesCompletos(local)) {
+          return new ErrorActo(400, `No se puede emitir la segunda cédula: faltan ${faltantesRegistrales(local).join(', ')}`);
         }
         return null;
       },

@@ -421,11 +421,22 @@ export function accionesDisponibles(codigoEstado, rol, local) {
   });
 }
 
-/* ¿Corresponde exigir datos registrales antes de este acto?
-   El Anexo B.2 lo deja como decisión pendiente para el expediente y para la
-   reentrada por vencimiento. Sale del parámetro `exigirDatosSiempre`. */
-export function requiereDatosRegistrales(idAccion, exigirDatosSiempre) {
-  if (idAccion === 'generar-cedula') return true;
+/* ¿Corresponde exigir datos registrales (CUIT, razón social, rubro) antes de
+   este acto?
+
+   CÉDULAS: la PRIMERA se emite con lo que se relevó en la calle (nombre del
+   local y dirección): es un aviso al comercio y no hace falta frenarla por
+   un CUIT que todavía no se consiguió. La SEGUNDA es la previa al expediente
+   de multa y tiene que individualizar al sujeto obligado: sin CUIT y razón
+   social es impugnable. Por eso el circuito pasa por COMPLETAR_DATOS recién
+   después de que vence la primera (resolverEstado), y acá se exige con
+   `instancia` 2. `regenerar-cedula` sigue la misma regla que la cédula que
+   reemplaza.
+
+   EXPEDIENTE Y REINGRESO: el Anexo B.2 lo deja como decisión pendiente. Sale
+   del parámetro `exigirDatosSiempre`. */
+export function requiereDatosRegistrales(idAccion, exigirDatosSiempre, instancia = 1) {
+  if (idAccion === 'generar-cedula' || idAccion === 'regenerar-cedula') return instancia === 2;
   if (!exigirDatosSiempre) return false;
   return ['registrar-expediente', 'reingresar-circuito'].includes(idAccion);
 }

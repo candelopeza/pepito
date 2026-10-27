@@ -37,7 +37,7 @@ import { useRol } from '../auth/rolContexto';
 import Validaciones from './Validaciones';
 import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
-import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
+import { ETIQUETA_DOCUMENTO, ETIQUETA_ORIGEN, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
 import { estaVigente } from '../dominio/vigencias';
 import { fmtFecha } from '../dominio/fechas';
 
@@ -168,8 +168,15 @@ function Documentacion() {
         field: 'origen',
         headerName: 'Origen',
         width: 175,
+        // Lo que vino por el informe de la prestataria se destaca; el resto
+        // dice quién lo cargó (titular por el portal u oficina). Los documentos
+        // históricos sin origen se muestran como del titular.
         renderCell: ({ value }) =>
-          value === 'INFORME_9DJ' ? <Badge color="azul">Informe 9 de Julio</Badge> : <span>Presentado por el titular</span>,
+          value === 'INFORME_9DJ' ? (
+            <Badge color="azul">Informe 9 de Julio</Badge>
+          ) : (
+            <span>{ETIQUETA_ORIGEN[value] ?? ETIQUETA_ORIGEN.PRESENTADO_TITULAR}</span>
+          ),
       },
       { field: 'usuario', headerName: 'Cargado por', width: 150 },
       {

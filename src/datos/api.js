@@ -22,6 +22,8 @@
 const BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
 // Para los mensajes: con BASE vacía (mismo servidor) se nombra la dirección de la página.
 const DONDE = BASE || (typeof location !== 'undefined' ? location.origin : 'este servidor');
+// La misma dirección, para armar enlaces directos (una plantilla para descargar).
+export const URL_API = BASE;
 
 /* ---------------------------------------------------------------------------
    QUIÉN PIDE

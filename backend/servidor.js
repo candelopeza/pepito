@@ -79,6 +79,15 @@ if (CARPETA_FRONT) {
     console.warn(`[front] CARPETA_FRONT=${process.env.CARPETA_FRONT}: no hay index.html ahí. ¿Falta npm run build?`);
   }
 }
+/* --- plantillas para descargar ------------------------------------------
+   Formularios en blanco que el titular baja, completa y vuelve a adjuntar:
+   hoy, el Form D.A 03 (DDJJ de separación de residuos secos y limpios) que
+   el portal ofrece al presentar una DDJJ de reciclaje. Son archivos
+   públicos del área, no datos de nadie: por eso van antes de identificar
+   al usuario y sin pasar por la base. Para agregar otro, se copia el PDF a
+   backend/datos/plantillas/ y se lo enlaza desde el front. */
+app.use('/plantillas', express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), 'datos', 'plantillas')));
+
 // Lee el JSON que manda el front en el body de los POST/PUT. El límite deja
 // lugar a la foto de una entrega (achicada en el celular antes de enviarla).
 // El limite deja lugar a la foto de una entrega (achicada en el celular) y

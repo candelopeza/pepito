@@ -87,7 +87,7 @@
        documentación y expedientes" entre las tareas del administrativo (7.2).
    ============================================================================ */
 
-import { ROLES_CONSTANCIA_ARCA, URL_CONSTANCIA_ARCA } from '../dominio/reglas.js';
+import { CONSTANCIA_ARCA_SOLO_EN_FICHA, ROLES_CONSTANCIA_ARCA, URL_CONSTANCIA_ARCA } from '../dominio/reglas.js';
 
 export const MODULOS = [
   /* ===================== OPERATIVO ===================== */
@@ -351,16 +351,20 @@ export const ACCIONES_RAPIDAS = [
     ruta: '/documentacion',
     roles: ['administrativo', 'coordinacion'],
   },
-  {
-    // Para controlar la inscripción del titular al revisar la documentación
-    // (30/10/2026). En la bandeja y en la ficha el botón además copia el CUIT.
-    id: 'constancia-arca',
-    titulo: 'Constancia de Inscripción ARCA',
-    descripcion: 'Link a la página de ARCA',
-    externa: URL_CONSTANCIA_ARCA,
-    logo: 'ARCA',
-    roles: ROLES_CONSTANCIA_ARCA,
-  },
+  // Para controlar la inscripción del titular al revisar la documentación
+  // (30/10/2026). Hoy va solo en la ficha del local (CONSTANCIA_ARCA_SOLO_EN_FICHA).
+  ...(CONSTANCIA_ARCA_SOLO_EN_FICHA
+    ? []
+    : [
+        {
+          id: 'constancia-arca',
+          titulo: 'Constancia de Inscripción ARCA',
+          descripcion: 'Link a la página de ARCA',
+          externa: URL_CONSTANCIA_ARCA,
+          logo: 'ARCA',
+          roles: ROLES_CONSTANCIA_ARCA,
+        },
+      ]),
   {
     id: 'mis-relevamientos',
     titulo: 'Mis relevamientos',

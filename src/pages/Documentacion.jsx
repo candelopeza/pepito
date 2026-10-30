@@ -115,7 +115,15 @@ function Documentacion() {
         width: 175,
         valueFormatter: (value) => ETIQUETA_DOCUMENTO[value] ?? value,
       },
-      { field: 'numero', headerName: 'Número', width: 135 },
+      {
+        field: 'numero',
+        headerName: 'Número',
+        width: 135,
+        // Lo presentado por el portal recibe el número al aprobarse, como el expediente.
+        renderCell: ({ row }) =>
+          row.numero ||
+          (row.validado === false && COORDINACION_COMPLETA_PRESENTACION ? <Badge color="amarillo">Se carga al aprobar</Badge> : ''),
+      },
       {
         field: 'expedienteTramite',
         headerName: 'Expediente de trámite',

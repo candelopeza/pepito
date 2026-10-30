@@ -141,8 +141,9 @@ router.post('/', async (req, res, next) => {
     if (!req.usuario) return res.status(401).json({ error: 'Falta identificar al usuario' });
 
     const esTitular = req.usuario.rol === 'titular';
-    // El titular ya no indica tipo ni expediente: los completa coordinación al
-    // aprobar (COORDINACION_COMPLETA_PRESENTACION, src/dominio/reglas.js).
+    // El titular ya no indica tipo, número ni expediente: los completa
+    // coordinación al aprobar (COORDINACION_COMPLETA_PRESENTACION,
+    // src/dominio/reglas.js). Si los manda igual, se guardan.
     const completaCoordinacion = esTitular && COORDINACION_COMPLETA_PRESENTACION;
     const datos = { ...(req.body ?? {}) };
     if (completaCoordinacion && !datos.tipo) datos.tipo = TIPO_PROVISORIO_PORTAL;
@@ -153,7 +154,12 @@ router.post('/', async (req, res, next) => {
     if (!idTdoc) {
       return res.status(400).json({ error: `Tipo inválido. Valores posibles: ${Object.keys(TDOC_POR_TIPO).join(', ')}` });
     }
-    if (!String(datos.numero ?? '').trim()) return res.status(400).json({ error: 'Falta el número del documento' });
+    const numero = String(datos.numero ?? '').trim();
+    if (!numero && !completaCoordinacion) return res.status(400).json({ error: 'Falta el número del documento' });
+    // documentacion.numero es varchar(50) en la base del área.
+    if (numero.length > 50) {
+      return res.status(400).json({ error: 'El número del documento es demasiado largo (máximo 50 caracteres).' });
+    }
     if (!esFechaISO(datos.fechaEmision)) return res.status(400).json({ error: 'Falta la fecha de emisión del documento, o no es válida' });
     if (datos.fechaEmision > hoy) return res.status(400).json({ error: 'La fecha de emisión no puede ser futura' });
     if (datos.tipo === 'CONTRATO') {
@@ -226,7 +232,6 @@ router.post('/', async (req, res, next) => {
     const params = await parametros();
     const vencimiento = vencimientoDocumento(datos, params.modoBisiesto);
     const etiqueta = ETIQUETA_DOCUMENTO[datos.tipo] ?? datos.tipo;
-    const numero = String(datos.numero).trim();
 
     const { idTramite } = await ejecutarActo(req, {
       idLocal,
@@ -250,10 +255,11 @@ router.post('/', async (req, res, next) => {
         }
         // El número no se repite (numeroRepetido, arriba). Se lee dentro de la
         // transacción y en fila, así dos cargas simultáneas no pasan las dos.
-        return numeroRepetido(cx, { tipo: datos.tipo, numero, idLocal });
+        // Sin número (portal), se controla al aprobar.
+        return numero ? numeroRepetido(cx, { tipo: datos.tipo, numero, idLocal }) : null;
       },
       motivo: (r) =>
-        `${etiqueta} N° ${numero} ${validado ? 'registrada' : 'presentada, pendiente de validación'}${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''} · ${r.expediente ? `expediente de trámite ${r.expediente}` : 'el expediente lo carga coordinación'}`,
+        `${etiqueta}${numero ? ` N° ${numero}` : ''} ${validado ? 'registrada' : 'presentada, pendiente de validación'}${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''} · ${r.expediente ? `expediente de trámite ${r.expediente}` : 'el expediente lo carga coordinación'}`,
       trabajo: async (cx, { actuaciones }) => {
         const ciclo = Math.max(1, ...actuaciones.map((a) => Number(a.ciclo) || 1));
         const expediente = expedienteManual;
@@ -278,7 +284,7 @@ router.post('/', async (req, res, next) => {
           `INSERT INTO documentacion
              (id_tramite, id_tdocumentacion, numero, origen, fecha_emision, fecha_vencimiento, habilita)
            VALUES (?, ?, ?, ?, ?, ?, 1)`,
-          [id, idTdoc, numero, esTitular ? 'PRESENTADO_TITULAR' : 'CARGADO_OFICINA', datos.fechaEmision, vencimiento || null],
+          [id, idTdoc, numero || null, esTitular ? 'PRESENTADO_TITULAR' : 'CARGADO_OFICINA', datos.fechaEmision, vencimiento || null],
         );
         if (adjunto) {
           await guardarImagen(cx, req, { idTramite: id, imagen: adjunto, tipoArchivo: 'documento', nombreOriginal: datos.adjuntoNombre });
@@ -301,11 +307,13 @@ router.post('/', async (req, res, next) => {
    parte del expediente. Una presentación ya validada no se vuelve a validar.
 
    AL APROBAR, COORDINACIÓN COMPLETA LO QUE EL TITULAR YA NO CARGA
-   (COORDINACION_COMPLETA_PRESENTACION): { tipo, expedienteTramite,
+   (COORDINACION_COMPLETA_PRESENTACION): { tipo, numero, expedienteTramite,
    fechaVencimiento }. El expediente es obligatorio para aprobar: es el
-   respaldo de la acreditación. El tipo, si no se manda, queda el presentado;
-   si cambia, el vencimiento se calcula con el tipo nuevo (el contrato trae
-   el suyo) y se vuelve a controlar que el número no esté repetido.
+   respaldo de la acreditación; el número del documento también (desde el
+   30/10/2026 el titular no lo carga). El tipo, si no se manda, queda el
+   presentado; si cambia, el vencimiento se calcula con el tipo nuevo (el
+   contrato trae el suyo). Si cambia el tipo o el número, se vuelve a
+   controlar que el número no esté repetido.
 
    Solo valida coordinación (ROLES_QUE_VALIDAN); hasta el 28/10/2026 también
    administrativo. */
@@ -344,6 +352,7 @@ router.post('/:id/validacion', requiereRol(...ROLES_QUE_VALIDAN), async (req, re
 
     // Lo que completa coordinación al aprobar. Lo que no manda queda como se presentó.
     let tipo = tramite.tipo;
+    let numero = String(tramite.numero ?? '').trim();
     let expediente = String(tramite.expedienteTramite ?? '').trim();
     let vencimiento = tramite.fechaVencimiento;
     if (aprobar) {
@@ -352,6 +361,15 @@ router.post('/:id/validacion', requiereRol(...ROLES_QUE_VALIDAN), async (req, re
           return res.status(400).json({ error: `Tipo inválido. Valores posibles: ${Object.keys(TDOC_POR_TIPO).join(', ')}` });
         }
         tipo = req.body.tipo;
+      }
+      const numeroNuevo = String(req.body?.numero ?? '').trim();
+      if (numeroNuevo) numero = numeroNuevo;
+      if (!numero) {
+        return res.status(400).json({ error: 'Para aprobar, cargá el número del documento.' });
+      }
+      // documentacion.numero es varchar(50) en la base del área.
+      if (numero.length > 50) {
+        return res.status(400).json({ error: 'El número del documento es demasiado largo (máximo 50 caracteres).' });
       }
       const expedienteNuevo = String(req.body?.expedienteTramite ?? '').trim();
       if (expedienteNuevo) expediente = expedienteNuevo;
@@ -378,16 +396,16 @@ router.post('/:id/validacion', requiereRol(...ROLES_QUE_VALIDAN), async (req, re
     await ejecutarActo(req, {
       idLocal: tramite.localId,
       nombre: aprobar ? 'aprobar-presentacion' : 'rechazar-presentacion',
-      // Si cambió el tipo, también se puede repetir el número (otro tipo, otra numeración).
+      // Un número nuevo, o el mismo con otro tipo (otra numeración), puede estar repetido.
       controlar:
-        aprobar && tipo !== tramite.tipo
-          ? (_antes, cx) => numeroRepetido(cx, { tipo, numero: tramite.numero, idLocal: tramite.localId, excepto: tramite.id })
+        aprobar && (tipo !== tramite.tipo || numero !== String(tramite.numero ?? '').trim())
+          ? (_antes, cx) => numeroRepetido(cx, { tipo, numero, idLocal: tramite.localId, excepto: tramite.id })
           : undefined,
       motivo: aprobar
-        ? `${etiqueta} N° ${tramite.numero ?? '—'} aprobada · expediente de trámite ${expediente}` +
+        ? `${etiqueta} N° ${numero} aprobada · expediente de trámite ${expediente}` +
           `${tipo !== tramite.tipo ? ` (presentada como ${etiquetaPresentada})` : ''}` +
           `${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''}${observaciones ? `: ${observaciones}` : ''}`
-        : `${etiquetaPresentada} N° ${tramite.numero ?? '—'} rechazada${observaciones ? `: ${observaciones}` : ''}`,
+        : `${etiquetaPresentada}${tramite.numero ? ` N° ${tramite.numero}` : ''} rechazada${observaciones ? `: ${observaciones}` : ''}`,
       forzarRegistro: !aprobar,
       trabajo: async (cx) => {
         if (aprobar) {
@@ -399,11 +417,10 @@ router.post('/:id/validacion', requiereRol(...ROLES_QUE_VALIDAN), async (req, re
               WHERE id_tramite = ?`,
             [ID_ESTADO.DOC_VIGENTE, nota, expediente, vencimiento || null, tramite.id],
           );
-          await cx.execute('UPDATE documentacion SET id_tdocumentacion = ?, fecha_vencimiento = ? WHERE id_tramite = ?', [
-            TDOC_POR_TIPO[tipo],
-            vencimiento || null,
-            tramite.id,
-          ]);
+          await cx.execute(
+            'UPDATE documentacion SET id_tdocumentacion = ?, numero = ?, fecha_vencimiento = ? WHERE id_tramite = ?',
+            [TDOC_POR_TIPO[tipo], numero, vencimiento || null, tramite.id],
+          );
         } else {
           const nota = recortarObservacion(
             `${tramite.observaciones ? `${tramite.observaciones} · ` : ''}Rechazada por ${firmante(req)}.${observaciones ? ` ${observaciones}` : ''}`,

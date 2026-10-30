@@ -46,8 +46,8 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
   // (PDF o foto) y la oficina lo puede ver al validar. Sin ella, se escribe el
   // nombre del archivo como antes.
   const adjuntaArchivo = Boolean(capacidades?.archivos);
-  // Desde el portal el titular no elige el tipo ni carga el expediente: los
-  // completa coordinación al aprobar (src/dominio/reglas.js).
+  // Desde el portal el titular no elige el tipo ni carga el número ni el
+  // expediente: los completa coordinación al aprobar (src/dominio/reglas.js).
   const completaCoordinacion = desdePortal && COORDINACION_COMPLETA_PRESENTACION;
 
   const [datos, setDatos] = useState({
@@ -74,7 +74,7 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
 
   function validar() {
     const e = {};
-    if (!datos.numero.trim()) e.numero = 'El número del documento es obligatorio.';
+    if (!completaCoordinacion && !datos.numero.trim()) e.numero = 'El número del documento es obligatorio.';
     // El expediente del trámite es OBLIGATORIO: sin él no se puede reconstruir
     // qué trámite respalda la acreditación. Acá no hay excepción: la marca
     // "sin expediente registrado" es SOLO para documentos que ya existían de
@@ -174,18 +174,20 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
             del contrato). Identifica a esa presentación: con él se detecta si
             la misma DDJJ ya se cargó en este u otro local. NO es el número del
             expediente: ese es el del trámite que le dio curso. */}
-        <Campo
-          id="doc-numero"
-          etiqueta="Número del documento"
-          valor={datos.numero}
-          onChange={(v) => cambiar('numero', v)}
-          error={errores.numero}
-          ayuda={
-            desdePortal
-              ? 'El N° que figura en el formulario (o en el contrato). No es el del expediente.'
-              : 'El N° impreso en el documento (Form D.A 03 o contrato). Sirve para no cargar dos veces la misma presentación.'
-          }
-        />
+        {!completaCoordinacion && (
+          <Campo
+            id="doc-numero"
+            etiqueta="Número del documento"
+            valor={datos.numero}
+            onChange={(v) => cambiar('numero', v)}
+            error={errores.numero}
+            ayuda={
+              desdePortal
+                ? 'El N° que figura en el formulario (o en el contrato). No es el del expediente.'
+                : 'El N° impreso en el documento (Form D.A 03 o contrato). Sirve para no cargar dos veces la misma presentación.'
+            }
+          />
+        )}
 
         {/* >>> EL EXPEDIENTE DEL TRÁMITE ES OBLIGATORIO Y NO SE INVENTA <<<
             Presentar inicia un trámite POR FUERA del sistema, y ese trámite

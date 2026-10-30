@@ -1123,3 +1123,42 @@ rubro.
   social o rubro, el local queda en "Completar datos".
 - El rubro "SIN INFORMAR" (así guarda la base un rubro vacío) ahora cuenta
   como faltante también en las pantallas, igual que en el servidor.
+
+## 22. La documentación del portal la completa coordinación (28 de octubre de 2026)
+
+**El titular ya no carga el tipo de documentación ni el número de
+expediente.** Presenta el documento (número, fecha de emisión, el PDF o la
+foto y observaciones) y coordinación, al aprobarlo, elige el tipo y carga el
+expediente: ese número existe recién cuando coordinación inicia el trámite.
+
+- Mientras espera, la presentación entra como "DDJJ de reciclaje"
+  (`TIPO_PROVISORIO_PORTAL`): es el Form D.A 03, lo que presenta casi todo el
+  mundo, y así la plantilla de cande sigue apareciendo en el portal. No cuenta
+  para nada hasta que se aprueba.
+- **Sin expediente no se aprueba.** En el diálogo de Aprobar de la bandeja
+  (Documentación) están el tipo, el N° de expediente y, si es un contrato, su
+  vencimiento. Si el tipo cambia, el vencimiento se calcula con el tipo nuevo
+  y se vuelve a controlar que el número no esté repetido. El historial dice
+  qué expediente cargó y con qué tipo se había presentado.
+- **Aprueba o rechaza solo coordinación** (`ROLES_QUE_VALIDAN`), también en
+  el servidor. Administrativo sigue viendo la bandeja, sin la columna de
+  decisión. El administrador pasa siempre.
+- La carga desde la oficina (Documentación y ficha del local) sigue igual:
+  pide tipo y expediente.
+- `COORDINACION_COMPLETA_PRESENTACION = false` en `src/dominio/reglas.js`
+  vuelve a pedirle las dos cosas al titular.
+
+**Botón "Constancia ARCA"** (`src/components/ConstanciaArca.jsx`, nuevo).
+Al lado del CUIT, en la bandeja de validación y en la ficha del local. Abre la
+consulta de constancias de inscripción de ARCA en otra pestaña y copia el
+CUIT: esa página pide el CUIT y un captcha, así que no se puede abrir con el
+CUIT ya puesto; se pega con Ctrl+V. Lo ve solo coordinación
+(`ROLES_CONSTANCIA_ARCA`) y el administrador.
+
+**Inicio de coordinación (30 de octubre de 2026).** En las acciones rápidas,
+coordinación ya no tiene "Nuevo relevamiento" (no releva: se le sacó la
+tarjeta, el módulo de campo sigue en su menú) y tiene una tarjeta
+**"Constancia de Inscripción ARCA"** que abre la página de ARCA en otra
+pestaña. Las tarjetas que llevan a una página de afuera usan `externa` y
+`logo` en `ACCIONES_RAPIDAS` (`src/config/modulos.js`); quién la ve sale de
+`ROLES_CONSTANCIA_ARCA`.

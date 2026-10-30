@@ -222,8 +222,9 @@ export const api = {
 
   // --- documentación --------------------------------------------------------
   registrarDocumento: (datos) => post('/documentacion', datos),
-  validarPresentacion: (id, aprobar, observaciones) =>
-    post(`/documentacion/${id}/validacion`, { aprobar, observaciones }),
+  // Al aprobar, `completar` trae lo que carga coordinación: { tipo, expedienteTramite, fechaVencimiento }.
+  validarPresentacion: (id, aprobar, observaciones, completar = {}) =>
+    post(`/documentacion/${id}/validacion`, { ...completar, aprobar, observaciones }),
 
   // --- prórrogas y expedientes ---------------------------------------------
   otorgarProrroga: (localId, datos) => post(`/locales/${localId}/prorrogas`, datos),

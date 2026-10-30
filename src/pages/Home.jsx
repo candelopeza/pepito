@@ -246,17 +246,35 @@ function Home() {
               no tienen número (no cuentan nada, arrancan algo) y llevan el "+"
               adelante. Ver App.css sección 7.b. */}
           <div className="grid-acciones">
-            {acciones.map((a) => (
-              <Link key={a.id} to={a.ruta} className="card-accion">
-                <span className="card-accion-signo" aria-hidden="true">
-                  +
-                </span>
-                <span className="card-accion-texto">
-                  <strong>{a.titulo}</strong>
-                  <small>{a.descripcion}</small>
-                </span>
-              </Link>
-            ))}
+            {acciones.map((a) => {
+              const contenido = (
+                <>
+                  {/* Una página de afuera (ARCA) lleva su nombre en un cuadrado en vez del "+". */}
+                  {a.logo ? (
+                    <span className="card-accion-logo" aria-hidden="true">
+                      {a.logo}
+                    </span>
+                  ) : (
+                    <span className="card-accion-signo" aria-hidden="true">
+                      +
+                    </span>
+                  )}
+                  <span className="card-accion-texto">
+                    <strong>{a.titulo}</strong>
+                    <small>{a.descripcion}</small>
+                  </span>
+                </>
+              );
+              return a.externa ? (
+                <a key={a.id} href={a.externa} target="_blank" rel="noreferrer" className="card-accion">
+                  {contenido}
+                </a>
+              ) : (
+                <Link key={a.id} to={a.ruta} className="card-accion">
+                  {contenido}
+                </Link>
+              );
+            })}
           </div>
         </>
       )}

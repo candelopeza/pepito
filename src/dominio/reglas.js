@@ -246,6 +246,26 @@ export const ESTADOS_CON_DOCUMENTACION = [
   'PRESENTACION_EN_REVISION',
 ];
 
+/* LO QUE PRESENTA EL TITULAR LO COMPLETA COORDINACIÓN (pedido del 28/10/2026).
+   El titular sube el documento sin decir de qué tipo es ni el número de
+   expediente: ese número existe recién cuando coordinación inicia el trámite.
+   Al aprobar, coordinación elige el tipo y carga el expediente, y sin
+   expediente no se aprueba. En false, el portal vuelve a pedirle las dos
+   cosas al titular, como antes. */
+export const COORDINACION_COMPLETA_PRESENTACION = true;
+/* El tipo con el que entra la presentación mientras espera: el Form D.A 03,
+   que es lo que presenta casi todo el mundo. No cuenta para nada hasta que
+   coordinación lo confirma o lo cambia al aprobar. */
+export const TIPO_PROVISORIO_PORTAL = 'DDJJ_RECICLAJE';
+/* Quién aprueba o rechaza lo que entra por el portal (hasta el 28/10/2026
+   también administrativo, que ahora ve la bandeja sin decidir). El
+   administrador pasa siempre. */
+export const ROLES_QUE_VALIDAN = ['coordinacion'];
+/* Quién ve el botón de la constancia de inscripción de ARCA (en la bandeja,
+   la ficha del local y las acciones rápidas del Inicio), y a dónde lleva. */
+export const ROLES_CONSTANCIA_ARCA = ['coordinacion'];
+export const URL_CONSTANCIA_ARCA = 'https://seti.afip.gob.ar/padron-puc-constancia-internet/ConsultaConstanciaAction.do';
+
 export const ACCIONES = [
   {
     id: 'confirmar-exencion',

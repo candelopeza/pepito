@@ -624,9 +624,9 @@ function DatosProvider({ children }) {
   );
 
   const validarPresentacion = useCallback(
-    (actuacionId, aprobar, observaciones = '') =>
+    (actuacionId, aprobar, observaciones = '', completar = {}) =>
       ejecutar(aprobar ? 'Presentación aprobada' : 'Presentación rechazada', () =>
-        api.validarPresentacion(actuacionId, aprobar, observaciones),
+        api.validarPresentacion(actuacionId, aprobar, observaciones, completar),
       ),
     [ejecutar],
   );

@@ -18,6 +18,12 @@
    El aprobar/rechazar está implementado en el store (validarPresentacion) y no
    acá: aprobar hace que el documento empiece a contar como vigente, y eso
    cambia el estado del local por la vía normal del motor de reglas.
+
+   AL APROBAR, COORDINACIÓN COMPLETA EL TIPO Y EL EXPEDIENTE (28/10/2026): el
+   titular ya no los carga en el portal (COORDINACION_COMPLETA_PRESENTACION,
+   src/dominio/reglas.js). Sin expediente no se aprueba. Decide solo
+   coordinación (ROLES_QUE_VALIDAN); administrativo ve la bandeja sin la
+   columna de decisión.
    ============================================================================ */
 
 import { useMemo, useState } from 'react';
@@ -26,20 +32,43 @@ import Grilla from '../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import Confirmar from '../components/ui/Confirmar';
-import { CampoTexto } from '../components/ui/Campo';
+import Campo, { CampoSelect, CampoTexto } from '../components/ui/Campo';
 import ArchivoGuardado from '../components/ArchivoGuardado';
+import ConstanciaArca from '../components/ConstanciaArca';
 import { useDatos } from '../datos/datosContexto';
-import { ETIQUETA_DOCUMENTO } from '../dominio/actuaciones';
+import { useRol } from '../auth/rolContexto';
+import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
+import { COORDINACION_COMPLETA_PRESENTACION, ROLES_QUE_VALIDAN } from '../dominio/reglas';
+import { vencimientoDocumento } from '../dominio/vigencias';
 import { fmtFecha } from '../dominio/fechas';
 
 function Validaciones() {
-  const { presentacionesPendientes, localPorId, validarPresentacion, capacidades } = useDatos();
+  const { presentacionesPendientes, localPorId, validarPresentacion, capacidades, parametros } = useDatos();
+  const { rol } = useRol();
+  const puedeDecidir = rol === 'administrador' || ROLES_QUE_VALIDAN.includes(rol);
   const [decision, setDecision] = useState(null);
   // El motivo del rechazo es obligatorio: el titular tiene que saber qué
   // corregir, y queda en el historial del local.
   const [motivo, setMotivo] = useState('');
+  // Lo que completa coordinación al aprobar: { tipo, expedienteTramite, fechaVencimiento }.
+  const [completar, setCompletar] = useState({ tipo: '', expedienteTramite: '', fechaVencimiento: '' });
 
   const pendientes = presentacionesPendientes();
+
+  /* El vencimiento que va a quedar, con la misma cuenta que hace el servidor:
+     el contrato trae el suyo; si el tipo no cambió queda el presentado; si
+     cambió, se calcula con el tipo nuevo. */
+  const p = decision?.p;
+  const vencimientoPropuesto = !p
+    ? ''
+    : completar.tipo === 'CONTRATO'
+      ? completar.fechaVencimiento
+      : completar.tipo === p.tipo
+        ? p.fechaVencimiento
+        : vencimientoDocumento({ tipo: completar.tipo, fechaEmision: p.fechaEmision }, parametros?.modoBisiesto);
+  const faltaParaAprobar =
+    !completar.expedienteTramite.trim() ||
+    (completar.tipo === 'CONTRATO' && !(completar.fechaVencimiento > (p?.fechaEmision ?? '')));
 
   /* Las columnas necesitan localPorId y setDecision, así que se arman adentro.
      Cada fila es una PRESENTACIÓN, no un local: por eso casi todas las columnas
@@ -59,7 +88,11 @@ function Validaciones() {
               <Link to={`/locales/${row.localId}`} className="link-local">
                 {local?.nombreLocal ?? `Local ${row.localId}`}
               </Link>
-              <small className="celda-sub">{local?.razonSocial}</small>
+              <small className="celda-sub">
+                {local?.razonSocial}
+                {local?.cuit ? ` · CUIT ${local.cuit}` : ''}
+              </small>
+              {local?.cuit && <ConstanciaArca cuit={local.cuit} />}
             </span>
           );
         },
@@ -87,7 +120,14 @@ function Validaciones() {
         field: 'expedienteTramite',
         headerName: 'Expediente de trámite',
         width: 180,
-        renderCell: ({ row }) => row.expedienteTramite ?? <Badge color="rojo">No registrado</Badge>,
+        // Lo que llega del portal ya no lo trae: lo carga coordinación al aprobar.
+        renderCell: ({ row }) =>
+          row.expedienteTramite ||
+          (COORDINACION_COMPLETA_PRESENTACION ? (
+            <Badge color="amarillo">Se carga al aprobar</Badge>
+          ) : (
+            <Badge color="rojo">No registrado</Badge>
+          )),
       },
       {
         field: 'vigencia',
@@ -132,6 +172,11 @@ function Validaciones() {
               className="btn-tabla"
               onClick={() => {
                 setMotivo('');
+                setCompletar({
+                  tipo: row.tipo,
+                  expedienteTramite: row.expedienteTramite ?? '',
+                  fechaVencimiento: row.tipo === 'CONTRATO' ? (row.fechaVencimiento ?? '') : '',
+                });
                 setDecision({ p: row, local: localPorId(row.localId), aprobar: true });
               }}
             >
@@ -150,8 +195,8 @@ function Validaciones() {
           </span>
         ),
       },
-    ],
-    [localPorId],
+    ].filter((c) => puedeDecidir || c.field !== 'decision'),
+    [localPorId, puedeDecidir],
   );
 
   return (
@@ -181,19 +226,56 @@ function Validaciones() {
         titulo={decision?.aprobar ? 'Aprobar la presentación' : 'Rechazar la presentación'}
         textoConfirmar={decision?.aprobar ? 'Aprobar' : 'Rechazar'}
         peligro={!decision?.aprobar}
-        deshabilitado={Boolean(decision) && !decision.aprobar && !motivo.trim()}
+        deshabilitado={Boolean(decision) && (decision.aprobar ? faltaParaAprobar : !motivo.trim())}
         onCancelar={() => setDecision(null)}
         onConfirmar={async () => {
+          const datos = decision.aprobar
+            ? {
+                tipo: completar.tipo,
+                expedienteTramite: completar.expedienteTramite.trim(),
+                ...(completar.tipo === 'CONTRATO' ? { fechaVencimiento: completar.fechaVencimiento } : {}),
+              }
+            : {};
           // Se cierra solo si se guardó.
-          if (await validarPresentacion(decision.p.id, decision.aprobar, motivo.trim())) setDecision(null);
+          if (await validarPresentacion(decision.p.id, decision.aprobar, motivo.trim(), datos)) setDecision(null);
         }}
       >
         {decision?.aprobar ? (
-          <p>
-            La {ETIQUETA_DOCUMENTO[decision.p.tipo]} N° {decision.p.numero} pasa a contar como documentación vigente hasta el{' '}
-            {fmtFecha(decision.p.fechaVencimiento)}. <strong>{decision.local?.nombreLocal}</strong> sale del circuito sancionatorio
-            y su notificación en curso queda sin efecto.
-          </p>
+          <>
+            <div className="form-grilla">
+              <CampoSelect
+                id="val-tipo"
+                etiqueta="Tipo de documentación"
+                valor={completar.tipo}
+                onChange={(v) => setCompletar((c) => ({ ...c, tipo: v }))}
+                opciones={TIPOS_DOCUMENTO.map((t) => ({ id: t, etiqueta: ETIQUETA_DOCUMENTO[t] }))}
+                vacio={null}
+              />
+              <Campo
+                id="val-expediente"
+                etiqueta="N° de expediente del trámite"
+                valor={completar.expedienteTramite}
+                onChange={(v) => setCompletar((c) => ({ ...c, expedienteTramite: v }))}
+                largoMaximo={50}
+              />
+              {completar.tipo === 'CONTRATO' && (
+                <Campo
+                  id="val-vencimiento"
+                  etiqueta="Vencimiento del contrato"
+                  tipo="date"
+                  valor={completar.fechaVencimiento}
+                  onChange={(v) => setCompletar((c) => ({ ...c, fechaVencimiento: v }))}
+                  min={decision.p.fechaEmision}
+                />
+              )}
+            </div>
+            <p>
+              La {ETIQUETA_DOCUMENTO[completar.tipo]} N° {decision.p.numero} pasa a contar como documentación vigente
+              {vencimientoPropuesto ? ` hasta el ${fmtFecha(vencimientoPropuesto)}` : ''}.{' '}
+              <strong>{decision.local?.nombreLocal}</strong> sale del circuito sancionatorio y su notificación en curso queda sin
+              efecto.
+            </p>
+          </>
         ) : (
           <>
             <p>

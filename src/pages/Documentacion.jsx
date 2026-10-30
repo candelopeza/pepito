@@ -39,6 +39,7 @@ import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
 import { ETIQUETA_DOCUMENTO, ETIQUETA_ORIGEN, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
 import { estaVigente } from '../dominio/vigencias';
+import { COORDINACION_COMPLETA_PRESENTACION } from '../dominio/reglas';
 import { fmtFecha } from '../dominio/fechas';
 
 const PASOS = ['Seleccionar local', 'Situación del proceso', 'Documento'];
@@ -47,8 +48,9 @@ function Documentacion() {
   const { rol } = useRol();
   const { actuaciones, localesConEstado, localPorId, actuacionesDeLocal, usuarios, registrarDocumento, permisos } = useDatos();
   const puedeCargar = puedeEditar(rol, 'documentacion', permisos);
-  // Validar es decidir: lo hacen administrativo y coordinación. El resto ve
-  // la tabla de documentación sin la bandeja.
+  // La bandeja la ven administrativo y coordinación, pero desde el 28/10/2026
+  // aprueba o rechaza solo coordinación (Validaciones.jsx). El resto ve la
+  // tabla de documentación sin la bandeja.
   const puedeValidar = ['administrativo', 'coordinacion', 'administrador'].includes(rol);
 
   const [modal, setModal] = useState(false);
@@ -125,6 +127,9 @@ function Documentacion() {
             <span className="texto-gris" title="Los contratos informados por la prestataria no tienen expediente de presentación">
               no aplica
             </span>
+          ) : row.validado === false && COORDINACION_COMPLETA_PRESENTACION ? (
+            // Lo presentado por el portal recibe el número al aprobarse.
+            <Badge color="amarillo">Se carga al aprobar</Badge>
           ) : (
             <Badge color="rojo">No registrado</Badge>
           ),
@@ -195,7 +200,14 @@ function Documentacion() {
      forma de entender por qué faltaba una fila. */
   const filas = documentos;
 
-  const sinExpediente = documentos.filter((d) => !d.expedienteTramite && d.origen !== 'INFORME_9DJ').length;
+  // Las presentaciones que esperan validación no cuentan: el número lo carga
+  // coordinación al aprobarlas (COORDINACION_COMPLETA_PRESENTACION).
+  const sinExpediente = documentos.filter(
+    (d) =>
+      !d.expedienteTramite &&
+      d.origen !== 'INFORME_9DJ' &&
+      !(d.validado === false && COORDINACION_COMPLETA_PRESENTACION),
+  ).length;
 
   return (
     <>

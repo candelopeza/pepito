@@ -470,7 +470,7 @@ function DatosProvider({ children }) {
             ? { tipo: 'success', texto: `${hecho}. La dirección se ubicó en el mapa.` }
             : {
                 tipo: 'info',
-                texto: `${hecho}, pero la dirección no se pudo ubicar en el mapa: ${r.ubicacion.motivo ?? 'sin motivo'} Revisala, o ubicala a mano en Herramientas → Geocodificación pendiente.`,
+                texto: `${hecho}, pero la dirección no se pudo ubicar en el mapa: ${r.ubicacion.motivo ?? 'sin motivo'} Revisala, o ubicala a mano en el Mapa (Geocodificación pendiente).`,
               };
         },
         () => (datos.id ? api.localEdicion(datos.id, datos) : api.localAlta(datos)),
@@ -552,7 +552,7 @@ function DatosProvider({ children }) {
   /* ==========================================================================
      NOTIFICACIONES  (etapas 3 y 4)
      ========================================================================== */
-  /* `medio`: papel (como siempre), correo o ambos (sql/12). El aviso depende
+  /* `medio`: papel (como siempre), correo o ambos (sql/13). El aviso depende
      de lo que contestó el servidor: la cédula puede haberse emitido y el
      correo no haber salido. */
   const avisoDeCorreo = (verbo) => (r) => {
@@ -636,9 +636,9 @@ function DatosProvider({ children }) {
   );
 
   const validarPresentacion = useCallback(
-    (actuacionId, aprobar, observaciones = '') =>
+    (actuacionId, aprobar, observaciones = '', completar = {}) =>
       ejecutar(aprobar ? 'Presentación aprobada' : 'Presentación rechazada', () =>
-        api.validarPresentacion(actuacionId, aprobar, observaciones),
+        api.validarPresentacion(actuacionId, aprobar, observaciones, completar),
       ),
     [ejecutar],
   );

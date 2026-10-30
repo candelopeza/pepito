@@ -1,5 +1,5 @@
 -- ============================================================================
--- backend/sql/12-notificacion-por-correo.sql
+-- backend/sql/13-notificacion-por-correo.sql
 -- ----------------------------------------------------------------------------
 -- OPCIONAL. Habilita mandar la cedula de notificacion por correo electronico
 -- al local, cuando tiene un correo cargado en el padron.

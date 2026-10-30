@@ -199,10 +199,16 @@ chequear(
   accionesRapidasPara('coordinacion', sinRelevamientos).some((a) => a.id === 'nuevo-relevamiento'),
   false,
 );
+// Coordinación no releva (decisión del 30/10/2026): la tarjeta es del relevador.
 chequear(
-  'con todo prendido, sí la ve',
-  accionesRapidasPara('coordinacion', { modulos: {}, rolesDeshabilitados: [] }).some((a) => a.id === 'nuevo-relevamiento'),
+  'con todo prendido, el relevador sí la ve',
+  accionesRapidasPara('relevador', { modulos: {}, rolesDeshabilitados: [] }).some((a) => a.id === 'nuevo-relevamiento'),
   true,
+);
+chequear(
+  'y con Relevamientos apagado para el relevador, tampoco la ve',
+  accionesRapidasPara('relevador', { modulos: { relevamientos: { relevador: 'no' } }, rolesDeshabilitados: [] }).some((a) => a.id === 'nuevo-relevamiento'),
+  false,
 );
 
 console.log(`\n${ok} criterio(s) cumplidos · ${mal} falla(s)`);

@@ -144,7 +144,7 @@ router.post('/', requiereRol('administrativo', 'coordinacion'), async (req, res,
         ],
       );
       // El CUIL del titular habilitado (portal), solo si la base tiene la
-      // columna: sql/11-titular-cuil.sql.
+      // columna: sql/12-titular-cuil.sql.
       if (tiene('titularCuil') && datos.titularCuil?.trim()) {
         await cx.execute('UPDATE local SET titular_cuil = ? WHERE id_local = ?', [datos.titularCuil.trim(), resultado.insertId]);
       }
@@ -193,7 +193,7 @@ router.put('/:id', requiereRol('administrativo', 'coordinacion'), async (req, re
     cambio('domicilioFiscal', 'domicilio_fiscal', 'domicilio fiscal');
     cambio('email', 'email_local', 'correo');
     cambio('telefono', 'telefono_local', 'teléfono');
-    // Sin la columna (sql/11) el dato no tiene dónde guardarse: se ignora.
+    // Sin la columna (sql/12) el dato no tiene dónde guardarse: se ignora.
     if (tiene('titularCuil')) cambio('titularCuil', 'titular_cuil', 'CUIL del titular habilitado');
     cambio('observaciones', 'observacion', 'observaciones del padrón', (v) => (v ? recortarObservacion(v) : null));
     if (distinto(datos.rubro, actual.rubro)) {

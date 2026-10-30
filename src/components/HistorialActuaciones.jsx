@@ -75,7 +75,7 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
             {a.impresaEn ? `Impresa por ${a.impresaPor}` : <span className="hist-pendiente">Sin imprimir</span>}
           </Dato>
         )}
-        {/* Notificación por correo (sql/12): a quién y cuándo se mandó. */}
+        {/* Notificación por correo (sql/13): a quién y cuándo se mandó. */}
         {a.correoEnviadoEn && (
           <Dato etiqueta="Correo electrónico">
             Enviada a {a.correoEnviadoA} el {fmtFechaHora(a.correoEnviadoEn)}

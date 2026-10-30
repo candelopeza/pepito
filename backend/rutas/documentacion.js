@@ -54,7 +54,12 @@ import { archivosDisponibles, guardarImagen, leerDocumento } from '../archivos.j
 import { fmtFecha, hoyISO } from '../../src/dominio/fechas.js';
 import { ETIQUETA_DOCUMENTO } from '../../src/dominio/actuaciones.js';
 import { vencimientoDocumento } from '../../src/dominio/vigencias.js';
-import { ESTADOS_CON_DOCUMENTACION } from '../../src/dominio/reglas.js';
+import {
+  COORDINACION_COMPLETA_PRESENTACION,
+  ESTADOS_CON_DOCUMENTACION,
+  ROLES_QUE_VALIDAN,
+  TIPO_PROVISORIO_PORTAL,
+} from '../../src/dominio/reglas.js';
 import { etiquetaEstado } from '../../src/dominio/estados.js';
 
 const router = Router();
@@ -67,6 +72,35 @@ const TDOC_POR_TIPO = {
 };
 
 const esFechaISO = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+
+/* EL NÚMERO NO SE REPITE (sección 5.4: numeraciones con significado legal,
+   sin reutilización). Una DDJJ es de un solo local: su número no puede estar
+   en otro. Un contrato con la prestataria puede cubrir varios locales del
+   mismo titular, así que se controla dentro del local. Las presentaciones
+   rechazadas (dadas de baja) no cuentan: el titular puede volver a presentar
+   la misma. `excepto` deja afuera la presentación que se está aprobando.
+   Devuelve el ErrorActo, o null si el número está libre. */
+async function numeroRepetido(cx, { tipo, numero, idLocal, excepto = null }) {
+  const idTdoc = TDOC_POR_TIPO[tipo];
+  const etiqueta = ETIQUETA_DOCUMENTO[tipo] ?? tipo;
+  const [repetido] = await consultarEn(
+    cx,
+    `SELECT t.id_local FROM documentacion d
+       JOIN tramite t ON t.id_tramite = d.id_tramite
+      WHERE d.id_tdocumentacion = ? AND d.numero = ? AND d.habilita = 1 AND t.habilita = 1
+        ${tipo === 'CONTRATO' ? 'AND t.id_local = ?' : ''}
+        ${excepto ? 'AND d.id_tramite <> ?' : ''}
+      LIMIT 1`,
+    [idTdoc, numero, ...(tipo === 'CONTRATO' ? [idLocal] : []), ...(excepto ? [excepto] : [])],
+  );
+  if (!repetido) return null;
+  return new ErrorActo(
+    409,
+    Number(repetido.idLocal) === idLocal
+      ? `${etiqueta} N° ${numero} ya está registrada en este local.`
+      : `${etiqueta} N° ${numero} ya está registrada en el local N° ${repetido.idLocal}. Revisá el número.`,
+  );
+}
 
 /* GET /documentacion/pendientes  ->  la bandeja de validación del portal. */
 router.get('/pendientes', async (_req, res, next) => {
@@ -106,7 +140,12 @@ router.post('/', async (req, res, next) => {
   try {
     if (!req.usuario) return res.status(401).json({ error: 'Falta identificar al usuario' });
 
-    const datos = req.body ?? {};
+    const esTitular = req.usuario.rol === 'titular';
+    // El titular ya no indica tipo ni expediente: los completa coordinación al
+    // aprobar (COORDINACION_COMPLETA_PRESENTACION, src/dominio/reglas.js).
+    const completaCoordinacion = esTitular && COORDINACION_COMPLETA_PRESENTACION;
+    const datos = { ...(req.body ?? {}) };
+    if (completaCoordinacion && !datos.tipo) datos.tipo = TIPO_PROVISORIO_PORTAL;
     const idLocal = Number(datos.localId);
     const idTdoc = TDOC_POR_TIPO[datos.tipo];
     const hoy = hoyISO();
@@ -146,11 +185,16 @@ router.post('/', async (req, res, next) => {
        abona el timbrado. Según la respuesta, cambia la etiqueta del campo, o
        pasa a opcional, o se evalúa un circuito de pago (hoy descartado: el
        sistema no cobra, no verifica pagos ni contempla presentaciones
-       impagas). */
+       impagas).
+
+       Desde el 28/10/2026 el titular presenta SIN expediente: el número
+       existe recién cuando coordinación inicia el trámite, y lo carga al
+       aprobar (la aprobación sí lo exige, ver /:id/validacion). La carga de
+       la oficina lo sigue pidiendo acá. */
     const expedienteManual = String(datos.expedienteTramite ?? '').trim();
     // Los contratos del informe 9DJ no pasan por acá (los rechaza el guard de
     // abajo con su propio mensaje): no se les exige expediente de trámite.
-    if (!expedienteManual && datos.origen !== 'INFORME_9DJ') {
+    if (!expedienteManual && datos.origen !== 'INFORME_9DJ' && !completaCoordinacion) {
       return res.status(400).json({
         error: 'Falta el número de expediente del trámite: es el que se obtiene al iniciar la presentación en el municipio.',
       });
@@ -162,8 +206,6 @@ router.post('/', async (req, res, next) => {
         error: 'Los contratos informados por la prestataria se cargan desde Herramientas → Informe 9 de Julio, no desde acá.',
       });
     }
-
-    const esTitular = req.usuario.rol === 'titular';
 
     /* EL DOCUMENTO RESPALDATORIO (sección 6.3: "adjuntando el documento"). Se
        guarda si la base tiene la tabla `archivo` (sql/08). Con la tabla, el
@@ -206,34 +248,12 @@ router.post('/', async (req, res, next) => {
               : `El local ya tiene documentación vigente (${etiquetaEstado(estado)}): no corresponde registrar otra hasta que venza.`,
           );
         }
-        /* EL NÚMERO NO SE REPITE (sección 5.4: numeraciones con significado
-           legal, sin reutilización). Una DDJJ es de un solo local: su número
-           no puede estar en otro. Un contrato con la prestataria puede cubrir
-           varios locales del mismo titular, así que se controla dentro del
-           local. Las presentaciones rechazadas (dadas de baja) no cuentan:
-           el titular puede volver a presentar la misma. Se lee dentro de la
-           transacción y en fila, así dos cargas simultáneas no pasan las dos. */
-        const [repetido] = await consultarEn(
-          cx,
-          `SELECT t.id_local FROM documentacion d
-             JOIN tramite t ON t.id_tramite = d.id_tramite
-            WHERE d.id_tdocumentacion = ? AND d.numero = ? AND d.habilita = 1 AND t.habilita = 1
-              ${datos.tipo === 'CONTRATO' ? 'AND t.id_local = ?' : ''}
-            LIMIT 1`,
-          datos.tipo === 'CONTRATO' ? [idTdoc, numero, idLocal] : [idTdoc, numero],
-        );
-        if (repetido) {
-          return new ErrorActo(
-            409,
-            Number(repetido.idLocal) === idLocal
-              ? `${etiqueta} N° ${numero} ya está registrada en este local.`
-              : `${etiqueta} N° ${numero} ya está registrada en el local N° ${repetido.idLocal}. Revisá el número.`,
-          );
-        }
-        return null;
+        // El número no se repite (numeroRepetido, arriba). Se lee dentro de la
+        // transacción y en fila, así dos cargas simultáneas no pasan las dos.
+        return numeroRepetido(cx, { tipo: datos.tipo, numero, idLocal });
       },
       motivo: (r) =>
-        `${etiqueta} N° ${numero} ${validado ? 'registrada' : 'presentada, pendiente de validación'}${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''} · expediente de trámite ${r.expediente}`,
+        `${etiqueta} N° ${numero} ${validado ? 'registrada' : 'presentada, pendiente de validación'}${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''} · ${r.expediente ? `expediente de trámite ${r.expediente}` : 'el expediente lo carga coordinación'}`,
       trabajo: async (cx, { actuaciones }) => {
         const ciclo = Math.max(1, ...actuaciones.map((a) => Number(a.ciclo) || 1));
         const expediente = expedienteManual;
@@ -243,7 +263,7 @@ router.post('/', async (req, res, next) => {
           idTtramite: ID_TTRAMITE.PRESENTACION_DOCUMENTACION,
           idUsuario: req.usuario?.id ?? null,
           nroCiclo: ciclo,
-          numeroReferencia: expediente,
+          numeroReferencia: expediente || null,
           fechaInicio: hoy,
           fechaVencimiento: vencimiento || null,
           observaciones: datos.observaciones ?? '',
@@ -278,8 +298,18 @@ router.post('/', async (req, res, next) => {
    Aprobada pasa a VIGENTE y recién ahí saca al local del circuito.
    Rechazada se da de baja lógica: la presentación queda registrada, pero no
    cuenta. No se borra, porque haber presentado algo y que se lo rechacen es
-   parte del expediente. Una presentación ya validada no se vuelve a validar. */
-router.post('/:id/validacion', requiereRol('administrativo', 'coordinacion'), async (req, res, next) => {
+   parte del expediente. Una presentación ya validada no se vuelve a validar.
+
+   AL APROBAR, COORDINACIÓN COMPLETA LO QUE EL TITULAR YA NO CARGA
+   (COORDINACION_COMPLETA_PRESENTACION): { tipo, expedienteTramite,
+   fechaVencimiento }. El expediente es obligatorio para aprobar: es el
+   respaldo de la acreditación. El tipo, si no se manda, queda el presentado;
+   si cambia, el vencimiento se calcula con el tipo nuevo (el contrato trae
+   el suyo) y se vuelve a controlar que el número no esté repetido.
+
+   Solo valida coordinación (ROLES_QUE_VALIDAN); hasta el 28/10/2026 también
+   administrativo. */
+router.post('/:id/validacion', requiereRol(...ROLES_QUE_VALIDAN), async (req, res, next) => {
   try {
     const tramite = await tramitePorId(Number(req.params.id));
     if (!tramite) return res.status(404).json({ error: 'No existe esa presentación' });
@@ -310,21 +340,68 @@ router.post('/:id/validacion', requiereRol('administrativo', 'coordinacion'), as
     if (!aprobar && !observaciones) {
       return res.status(400).json({ error: 'Para rechazar, escribí el motivo: el titular tiene que saber qué corregir' });
     }
-    const etiqueta = ETIQUETA_DOCUMENTO[tramite.tipo] ?? tramite.tipo;
+    const etiquetaPresentada = ETIQUETA_DOCUMENTO[tramite.tipo] ?? tramite.tipo;
+
+    // Lo que completa coordinación al aprobar. Lo que no manda queda como se presentó.
+    let tipo = tramite.tipo;
+    let expediente = String(tramite.expedienteTramite ?? '').trim();
+    let vencimiento = tramite.fechaVencimiento;
+    if (aprobar) {
+      if (req.body?.tipo !== undefined) {
+        if (!TDOC_POR_TIPO[req.body.tipo]) {
+          return res.status(400).json({ error: `Tipo inválido. Valores posibles: ${Object.keys(TDOC_POR_TIPO).join(', ')}` });
+        }
+        tipo = req.body.tipo;
+      }
+      const expedienteNuevo = String(req.body?.expedienteTramite ?? '').trim();
+      if (expedienteNuevo) expediente = expedienteNuevo;
+      if (!expediente) {
+        return res.status(400).json({ error: 'Para aprobar, cargá el número de expediente del trámite.' });
+      }
+      // tramite.numero_referencia es varchar(50) en la base del área.
+      if (expediente.length > 50) {
+        return res.status(400).json({ error: 'El número de expediente es demasiado largo (máximo 50 caracteres).' });
+      }
+      const cambiaTipo = tipo !== tramite.tipo;
+      if (tipo === 'CONTRATO') {
+        const fecha = req.body?.fechaVencimiento || (cambiaTipo ? '' : tramite.fechaVencimiento);
+        if (!esFechaISO(fecha) || fecha <= tramite.fechaEmision) {
+          return res.status(400).json({ error: 'Indicá el vencimiento del contrato: la fecha que declara, posterior a su emisión.' });
+        }
+        vencimiento = fecha;
+      } else if (cambiaTipo) {
+        vencimiento = vencimientoDocumento({ tipo, fechaEmision: tramite.fechaEmision }, (await parametros()).modoBisiesto);
+      }
+    }
+    const etiqueta = ETIQUETA_DOCUMENTO[tipo] ?? tipo;
 
     await ejecutarActo(req, {
       idLocal: tramite.localId,
       nombre: aprobar ? 'aprobar-presentacion' : 'rechazar-presentacion',
-      motivo: `${etiqueta} N° ${tramite.numero ?? '—'} ${aprobar ? 'aprobada' : 'rechazada'}${observaciones ? `: ${observaciones}` : ''}`,
+      // Si cambió el tipo, también se puede repetir el número (otro tipo, otra numeración).
+      controlar:
+        aprobar && tipo !== tramite.tipo
+          ? (_antes, cx) => numeroRepetido(cx, { tipo, numero: tramite.numero, idLocal: tramite.localId, excepto: tramite.id })
+          : undefined,
+      motivo: aprobar
+        ? `${etiqueta} N° ${tramite.numero ?? '—'} aprobada · expediente de trámite ${expediente}` +
+          `${tipo !== tramite.tipo ? ` (presentada como ${etiquetaPresentada})` : ''}` +
+          `${vencimiento ? `; vence el ${fmtFecha(vencimiento)}` : ''}${observaciones ? `: ${observaciones}` : ''}`
+        : `${etiquetaPresentada} N° ${tramite.numero ?? '—'} rechazada${observaciones ? `: ${observaciones}` : ''}`,
       forzarRegistro: !aprobar,
       trabajo: async (cx) => {
         if (aprobar) {
           const nota = recortarObservacion(
             `${tramite.observaciones ? `${tramite.observaciones} · ` : ''}Aprobada por ${firmante(req)}.${observaciones ? ` ${observaciones}` : ''}`,
           );
-          await cx.execute('UPDATE tramite SET id_estado = ?, fecha_cierre = NOW(), observaciones = ? WHERE id_tramite = ?', [
-            ID_ESTADO.DOC_VIGENTE,
-            nota,
+          await cx.execute(
+            `UPDATE tramite SET id_estado = ?, fecha_cierre = NOW(), observaciones = ?, numero_referencia = ?, fecha_vencimiento = ?
+              WHERE id_tramite = ?`,
+            [ID_ESTADO.DOC_VIGENTE, nota, expediente, vencimiento || null, tramite.id],
+          );
+          await cx.execute('UPDATE documentacion SET id_tdocumentacion = ?, fecha_vencimiento = ? WHERE id_tramite = ?', [
+            TDOC_POR_TIPO[tipo],
+            vencimiento || null,
             tramite.id,
           ]);
         } else {

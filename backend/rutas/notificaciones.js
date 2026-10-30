@@ -8,7 +8,7 @@
      regenerarCedula      ->  POST /notificaciones/:id/regenerar
      asignarNotificador   ->  PUT  /notificaciones/:id/notificador  { notificadorId }
      marcarImpresa        ->  POST /notificaciones/:id/impresion
-     enviarCedulaPorCorreo->  POST /notificaciones/:id/correo   (sql/12)
+     enviarCedulaPorCorreo->  POST /notificaciones/:id/correo   (sql/13)
      registrarEntrega     ->  POST /notificaciones/:id/entrega
                               { resultado, fechaEntrega, observaciones }
      corregirEntrega      ->  PUT  /notificaciones/:id/entrega
@@ -51,8 +51,7 @@ import {
   ESTADO_POR_RESULTADO,
   ID_ESTADO,
   ID_TTRAMITE,
-  datosRegistralesCompletos,
-  faltantesRegistrales,
+  faltantesParaEmitir,
   numeroDeCedula,
 } from '../mapeo.js';
 import { firmante, requiereRol } from '../middlewares/usuario.js';
@@ -60,7 +59,6 @@ import { tiene } from '../capacidades.js';
 import { ErrorActo, ejecutarActo } from '../actos.js';
 import { archivosDisponibles, existeHash, guardarImagen, leerImagen } from '../archivos.js';
 import { fmtFecha, hoyISO, vencimientoHabil } from '../../src/dominio/fechas.js';
-import { requiereDatosRegistrales } from '../../src/dominio/reglas.js';
 import { textoDeCedula } from '../../src/dominio/textoCedula.js';
 import { enviarCorreo } from '../correo.js';
 import { resultadoEntrega } from '../../src/dominio/actuaciones.js';
@@ -128,7 +126,7 @@ router.get('/', async (_req, res, next) => {
    notificación aparece una sola vez en el historial. */
 router.post('/', requiereRol('administrativo', 'coordinacion'), async (req, res, next) => {
   try {
-    /* El MEDIO (sql/12): papel es la cédula impresa de siempre; correo la
+    /* El MEDIO (sql/13): papel es la cédula impresa de siempre; correo la
        manda al correo del local; ambos hace las dos cosas. Se controla ANTES
        de emitir: si el local no tiene correo o el servidor no lo tiene
        configurado, no se emite una cédula que después no se va a poder
@@ -159,7 +157,8 @@ router.post('/', requiereRol('administrativo', 'coordinacion'), async (req, res,
    backend/tareas-programadas.js (sección 9.6). Esa pasa `automatica` con el
    texto que identifica la corrida: el acto queda en el historial como obra
    del Sistema y con ese texto, para distinguirlo de una emisión manual. Los
-   controles son los mismos: estado, bloqueo y datos registrales. */
+   controles son los mismos: estado, bloqueo y datos del local (la primera
+   pide nombre y dirección; la segunda, además, CUIT, razón social y rubro). */
 export async function emitirCedula(req, idLocal, { automatica = null } = {}) {
   const { idTramite } = await ejecutarActo(req, {
     idLocal,
@@ -167,13 +166,10 @@ export async function emitirCedula(req, idLocal, { automatica = null } = {}) {
     // El Sistema no tiene tipo de usuario: lo habilita la Dirección al
     // prender la emisión automática o el respaldo en Parámetros.
     rolHabilitadoAunque: automatica ? () => true : null,
-    // Los datos registrales se exigen para la segunda cédula, no para la
-    // primera (ver requiereDatosRegistrales en src/dominio/reglas.js).
-    controlar: async ({ local, estado }) =>
-      requiereDatosRegistrales('generar-cedula', false, estado.startsWith('NOTIF2') ? 2 : 1) &&
-      !datosRegistralesCompletos(local)
-        ? new ErrorActo(400, `No se puede emitir la segunda cédula: faltan ${faltantesRegistrales(local).join(', ')}`)
-        : null,
+    controlar: async ({ local, estado }) => {
+      const faltan = faltantesParaEmitir(local, estado.startsWith('NOTIF2') ? 2 : 1);
+      return faltan.length ? new ErrorActo(400, `No se puede emitir la cédula: faltan ${faltan.join(', ')}`) : null;
+    },
     motivo: (r) =>
       `${automatica ?? 'Emisión'} de la ${r.instancia === 1 ? 'primera' : 'segunda'} cédula N° ${r.numero}`,
     trabajo: async (cx, { local, actuaciones, estado }) => {
@@ -222,7 +218,7 @@ export async function emitirCedula(req, idLocal, { automatica = null } = {}) {
 }
 
 /* ============================================================================
-   NOTIFICACIÓN POR CORREO ELECTRÓNICO  (sql/12 + CORREO_HOST en .env)
+   NOTIFICACIÓN POR CORREO ELECTRÓNICO  (sql/13 + CORREO_HOST en .env)
    ----------------------------------------------------------------------------
    La cédula emitida se manda al correo cargado en el padrón del local, con el
    mismo texto que se imprime (textoDeCedula, la plantilla del área).
@@ -243,7 +239,7 @@ async function problemaParaMandarCorreo(local) {
   if (!tiene('correo')) {
     return new ErrorActo(
       409,
-      'El envío por correo no está habilitado en el servidor: faltan las columnas de sql/12 o la configuración CORREO_* del .env.',
+      'El envío por correo no está habilitado en el servidor: faltan las columnas de sql/13 o la configuración CORREO_* del .env.',
     );
   }
   if (!String(local.email ?? '').trim()) return new ErrorActo(400, 'El local no tiene correo electrónico cargado en el padrón.');
@@ -380,9 +376,8 @@ router.post('/:id/regenerar', requiereRol('administrativo', 'coordinacion'), asy
         if (RESULTADOS_EFECTIVOS.includes(actual.resultado)) {
           return new ErrorActo(409, 'La cédula ya se entregó y su plazo corre: no se puede reemplazar.');
         }
-        if (requiereDatosRegistrales('regenerar-cedula', false, actual.instancia) && !datosRegistralesCompletos(local)) {
-          return new ErrorActo(400, `No se puede emitir la segunda cédula: faltan ${faltantesRegistrales(local).join(', ')}`);
-        }
+        const faltan = faltantesParaEmitir(local, actual.instancia === 2 ? 2 : 1);
+        if (faltan.length) return new ErrorActo(400, `No se puede emitir la cédula: faltan ${faltan.join(', ')}`);
         return null;
       },
       motivo: (r) => `Regeneración: la cédula N° ${r.nueva} reemplaza a la N° ${r.anterior}`,

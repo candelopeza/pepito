@@ -26,6 +26,7 @@
    ============================================================================ */
 
 import { hoyISO } from '../src/dominio/fechas.js';
+import { faltantesParaCedula } from '../src/dominio/reglas.js';
 
 /* ---------------------------------------------------------------------------
    1. LAS CLAVES DE LOS CATÁLOGOS
@@ -234,7 +235,7 @@ export function aLocalFront(fila) {
     domicilioFiscal: fila.domicilioFiscal ?? '',
     email: fila.emailLocal ?? '',
     telefono: fila.telefonoLocal ?? '',
-    // Columna opcional (sql/11): sin ella llega vacío y el formulario no deja escribirlo.
+    // Columna opcional (sql/12): sin ella llega vacío y el formulario no deja escribirlo.
     titularCuil: fila.titularCuil ?? '',
     observaciones: fila.observacion ?? '',
     // Las coordenadas vienen como DECIMAL, que mysql2 entrega como string para
@@ -297,7 +298,7 @@ export function aActuacionFront(fila, documentoPorTramite = new Map()) {
         // script, quedan en null y la pantalla no muestra "Sin imprimir".
         impresaPor: fila.impresaPor ?? null,
         impresaEn: fechaHora(fila.impresaEn),
-        // Notificación por correo (sql/12). Sin las columnas, medio 'papel' y
+        // Notificación por correo (sql/13). Sin las columnas, medio 'papel' y
         // sin envío, que es lo que pasaba siempre.
         medio: fila.medioNotificacion ?? 'papel',
         correoEnviadoA: fila.correoEnviadoA ?? null,
@@ -441,10 +442,10 @@ function plazoVencido(fechaVencimiento, hoy) {
 /* CUIT, razón social y rubro. Sin los tres, la cédula no individualiza al
    sujeto obligado y la notificación es impugnable (sección 4.3).
 
-   Se exporta porque las rutas tienen que usar ESTA versión y no la de
-   src/dominio/reglas.js: en la base el rubro "vacío" no es una cadena vacía
-   sino la fila SIN INFORMAR del catálogo (id 1), y la del dominio la daría
-   por buena. */
+   Se exporta porque las rutas tienen que usar ESTA versión: en la base el
+   rubro "vacío" no es una cadena vacía sino la fila SIN INFORMAR del
+   catálogo (id 1). Desde el 26/10/2026 la de src/dominio/reglas.js también
+   lo cuenta como faltante; antes lo daba por bueno. */
 export function datosRegistralesCompletos(local) {
   return faltantesRegistrales(local).length === 0;
 }
@@ -455,6 +456,12 @@ export function faltantesRegistrales(local) {
   if (!local?.razonSocial?.trim()) faltan.push('razón social');
   if (!local?.rubro?.trim() || local.rubro.trim().toUpperCase() === 'SIN INFORMAR') faltan.push('rubro');
   return faltan;
+}
+
+/* Lo que le falta a un local para emitirle la cédula `instancia`: la primera
+   solo pide nombre y dirección, la segunda todo (src/dominio/reglas.js). */
+export function faltantesParaEmitir(local, instancia) {
+  return faltantesParaCedula(local, instancia, faltantesRegistrales(local));
 }
 
 export function estadoDeLocal(local, tramites = [], hoy = hoyISO()) {

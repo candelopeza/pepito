@@ -43,6 +43,7 @@ import Confirmar from '../components/ui/Confirmar';
 import AccionesLocal from '../components/AccionesLocal';
 import VistaCedula from '../components/VistaCedula';
 import { textoDeCedula } from '../dominio/textoCedula';
+import { FORMATO_OFICIAL, faltantesCedulaOficial } from '../dominio/cedulaOficial';
 import {
   descargarPdf,
   imprimirPdf,
@@ -59,7 +60,7 @@ import { useRol } from '../auth/rolContexto';
 const IMPRESION_EN_PDF = true;
 import { useDatos } from '../datos/datosContexto';
 import { resultadoEntrega } from '../dominio/actuaciones';
-import { faltantesRegistrales, requiereDatosRegistrales } from '../dominio/reglas';
+import { faltantesParaCedula, instanciaPorEmitir } from '../dominio/reglas';
 import { fmtFecha, fmtFechaHora, hoyISO } from '../dominio/fechas';
 import { ordenarPorProximidad } from '../dominio/geo';
 
@@ -138,12 +139,10 @@ function Notificaciones() {
   const [imprimiendo, setImprimiendo] = useState(null);
 
   const cola = localesConEstado.filter((l) => ['NOTIF1_PENDIENTE', 'NOTIF2_PENDIENTE'].includes(l.estado));
-  // Los datos registrales traban solo la SEGUNDA cédula: la primera sale con
-  // nombre y dirección del local (requiereDatosRegistrales en dominio/reglas).
-  const trabado = (l) =>
-    faltantesRegistrales(l).length > 0 && requiereDatosRegistrales('generar-cedula', false, l.estado === 'NOTIF2_PENDIENTE' ? 2 : 1);
-  const listos = cola.filter((l) => !trabado(l));
-  const trabados = cola.filter(trabado);
+  // La primera cédula pide nombre y dirección; la segunda, además, CUIT, razón social y rubro.
+  const faltanA = (l) => faltantesParaCedula(l, instanciaPorEmitir(l));
+  const listos = cola.filter((l) => faltanA(l).length === 0);
+  const trabados = cola.filter((l) => faltanA(l).length > 0);
 
   const emitidas = cedulas();
 
@@ -174,7 +173,12 @@ function Notificaciones() {
     () =>
       hojaDeRuta
         .filter((c) => !hayImpresion || !c.impresaEn)
-        .map((c) => ({ ...c, ...textoDeCedula(plantillaCedula, c, localPorId(c.localId)) })),
+        .map((c) => {
+          const texto = textoDeCedula(plantillaCedula, c, localPorId(c.localId));
+          // Con el modelo oficial, faltan los datos que imprime el modelo (dominio/cedulaOficial.js).
+          const faltantes = FORMATO_OFICIAL ? faltantesCedulaOficial(c, localPorId(c.localId)) : texto.faltantes;
+          return { ...c, ...texto, faltantes };
+        }),
     [hojaDeRuta, hayImpresion, plantillaCedula, localPorId],
   );
   const loteImprimible = loteCedulas.filter((c) => c.faltantes === 0);
@@ -341,9 +345,9 @@ function Notificaciones() {
       )}
 
       {trabados.length > 0 && (
-        <Aviso tipo="bloqueo" titulo={`${trabados.length} local(es) no se pueden emitir: faltan datos registrales`}>
-          {trabados.map((l) => `${l.nombreLocal} (falta ${faltantesRegistrales(l).join(', ')})`).join(' · ')}. La segunda cédula
-          tiene que individualizar correctamente al sujeto obligado.
+        <Aviso tipo="bloqueo" titulo={`${trabados.length} local(es) no se pueden emitir: faltan datos del local`}>
+          {trabados.map((l) => `${l.nombreLocal || 'Sin nombre'} (falta ${faltanA(l).join(', ')})`).join(' · ')}. La primera
+          cédula pide nombre y dirección; la segunda, además, CUIT, razón social y rubro.
         </Aviso>
       )}
 

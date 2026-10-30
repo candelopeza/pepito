@@ -15,9 +15,9 @@
                  `tipos_usuario`              sql/07-tablas-accesos.sql
      impresion   columnas tramite.impresa_*   sql/04-columnas-opcionales.sql
      archivos    tabla `archivo`              sql/08-tabla-archivo.sql
-     titularCuil columna local.titular_cuil   sql/11-titular-cuil.sql
+     titularCuil columna local.titular_cuil   sql/12-titular-cuil.sql
      correo      columnas tramite.medio_notificacion, correo_enviado_*
-                 (sql/12-notificacion-por-correo.sql) Y el servidor SMTP
+                 (sql/13-notificacion-por-correo.sql) Y el servidor SMTP
                  configurado en .env (CORREO_HOST, ver correo.js)
 
    >>> POR QUÉ ASÍ Y NO "QUE FALLE SI FALTA" <<<

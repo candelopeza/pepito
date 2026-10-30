@@ -9,17 +9,33 @@
    habría que tocarlas todas.
 
    LA DIRECCIÓN DE LA API sale de la variable de entorno VITE_API_URL, que se
-   define en el archivo `.env` de la raíz del proyecto (no el de backend/). Si
-   no está, asume http://localhost:3000, que es donde corre el backend en
-   desarrollo.
+   define en el archivo `.env` de la raíz del proyecto (no el de backend/).
+
+   VACÍA (lo normal en desarrollo): la API está en la MISMA máquina desde la que
+   se abrió la app, en el puerto 3000 (otro con VITE_API_PUERTO). En la PC de
+   cada uno es localhost:3000; desde un celular de la red local que abrió
+   http://IP-de-la-PC:5174, es http://IP-de-la-PC:3000. Antes había que
+   escribir la IP de una PC en el .env, y como el .env se comparte por git, la
+   app de la otra persona terminaba hablando con el backend de esa PC.
 
    VITE_API_URL=/ es "el mismo servidor que la app": cuando el backend sirve
    también la aplicación (CARPETA_FRONT en backend/.env), los pedidos van a la
    misma dirección de la página. Así una sola dirección HTTPS alcanza para
    todo, que es lo que necesitan los teléfonos.
+
+   Una dirección completa (http://servidor:3000) se usa tal cual.
    ============================================================================ */
 
-const BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
+function direccionDeLaApi() {
+  const valor = String(import.meta.env.VITE_API_URL ?? '').trim();
+  if (valor) return valor.replace(/\/+$/, '');
+  // Abierta con doble clic (file://) no hay máquina de la que tomar el nombre.
+  const maquina = typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost';
+  const protocolo = typeof location !== 'undefined' && location.protocol === 'https:' ? 'https:' : 'http:';
+  return `${protocolo}//${maquina}:${import.meta.env.VITE_API_PUERTO || 3000}`;
+}
+
+const BASE = direccionDeLaApi();
 // Para los mensajes: con BASE vacía (mismo servidor) se nombra la dirección de la página.
 const DONDE = BASE || (typeof location !== 'undefined' ? location.origin : 'este servidor');
 // La misma dirección, para armar enlaces directos (una plantilla para descargar).
@@ -208,8 +224,9 @@ export const api = {
 
   // --- documentación --------------------------------------------------------
   registrarDocumento: (datos) => post('/documentacion', datos),
-  validarPresentacion: (id, aprobar, observaciones) =>
-    post(`/documentacion/${id}/validacion`, { aprobar, observaciones }),
+  // Al aprobar, `completar` trae lo que carga coordinación: { tipo, expedienteTramite, fechaVencimiento }.
+  validarPresentacion: (id, aprobar, observaciones, completar = {}) =>
+    post(`/documentacion/${id}/validacion`, { ...completar, aprobar, observaciones }),
 
   // --- prórrogas y expedientes ---------------------------------------------
   otorgarProrroga: (localId, datos) => post(`/locales/${localId}/prorrogas`, datos),

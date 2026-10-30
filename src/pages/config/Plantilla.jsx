@@ -22,6 +22,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import Aviso from '../../components/ui/Aviso';
 import { useDatos } from '../../datos/datosContexto';
 import { fmtFecha, hoyISO } from '../../dominio/fechas';
+import { FORMATO_OFICIAL } from '../../dominio/cedulaOficial';
 
 /* Las variables disponibles. Si se agrega una, hay que agregarla también en
    components/VistaCedula.jsx, que es quien las reemplaza de verdad. */
@@ -68,6 +69,13 @@ function Plantilla() {
   return (
     <>
       <PageHeader etiqueta="CONFIGURACIÓN" titulo="PLANTILLA DE LA CÉDULA" botonVolver />
+      {/* Desde el 26/10 la cédula se imprime con el modelo oficial de la Dirección
+          (dominio/cedulaOficial.js): este texto queda guardado, pero no se usa. */}
+      {FORMATO_OFICIAL && (
+        <Aviso tipo="info" titulo="Las cédulas se imprimen con el modelo oficial de la Dirección de Ambiente">
+          Este texto queda guardado, pero hoy no se usa para imprimir.
+        </Aviso>
+      )}
       {inexistentes.length > 0 && (
         <Aviso tipo="bloqueo" titulo="Hay variables que no existen">
           {inexistentes.map((c) => `{${c}}`).join(', ')}. Van a salir así en la cédula impresa. Revisá la lista de variables

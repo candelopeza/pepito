@@ -34,6 +34,7 @@ import { useDatos } from '../datos/datosContexto';
 import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
 import { fmtFecha, hoyISO } from '../dominio/fechas';
 import { vencimientoAnual } from '../dominio/vigencias';
+import { COORDINACION_COMPLETA_PRESENTACION, TIPO_PROVISORIO_PORTAL } from '../dominio/reglas';
 import { URL_API } from '../datos/api';
 
 // El formulario en blanco de la DDJJ de reciclaje (backend/datos/plantillas/).
@@ -45,9 +46,12 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
   // (PDF o foto) y la oficina lo puede ver al validar. Sin ella, se escribe el
   // nombre del archivo como antes.
   const adjuntaArchivo = Boolean(capacidades?.archivos);
+  // Desde el portal el titular no elige el tipo ni carga el expediente: los
+  // completa coordinación al aprobar (src/dominio/reglas.js).
+  const completaCoordinacion = desdePortal && COORDINACION_COMPLETA_PRESENTACION;
 
   const [datos, setDatos] = useState({
-    tipo: 'DDJJ',
+    tipo: completaCoordinacion ? TIPO_PROVISORIO_PORTAL : 'DDJJ',
     numero: '',
     fechaEmision: hoyISO(),
     fechaVencimiento: '',
@@ -76,7 +80,7 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
     // "sin expediente registrado" es SOLO para documentos que ya existían de
     // antes, nunca para una carga nueva (sería la puerta para saltearse la
     // obligatoriedad tildando y guardando sin número).
-    if (!datos.expedienteTramite.trim()) {
+    if (!completaCoordinacion && !datos.expedienteTramite.trim()) {
       e.expedienteTramite = desdePortal
         ? 'Indicá el número de expediente de tu trámite: te lo dieron al iniciarlo.'
         : 'Es el número del trámite que inició la presentación. Toda presentación nueva lo tiene.';
@@ -154,15 +158,17 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
       )}
 
       <div className="form-grilla">
-        <CampoSelect
-          id="doc-tipo"
-          etiqueta="Tipo de documentación"
-          valor={datos.tipo}
-          onChange={(v) => cambiar('tipo', v)}
-          opciones={TIPOS_DOCUMENTO.map((t) => ({ id: t, etiqueta: ETIQUETA_DOCUMENTO[t] }))}
-          vacio={null}
-          ancho={2}
-        />
+        {!completaCoordinacion && (
+          <CampoSelect
+            id="doc-tipo"
+            etiqueta="Tipo de documentación"
+            valor={datos.tipo}
+            onChange={(v) => cambiar('tipo', v)}
+            opciones={TIPOS_DOCUMENTO.map((t) => ({ id: t, etiqueta: ETIQUETA_DOCUMENTO[t] }))}
+            vacio={null}
+            ancho={2}
+          />
+        )}
 
         {/* El número que lleva el documento mismo (el N° del Form D.A 03, el
             del contrato). Identifica a esa presentación: con él se detecta si
@@ -188,18 +194,20 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
             es un dato sin sentido). PENDIENTE con la Dirección: el pliego decía
             que lo asignaba CiDiTuc y no es así; falta confirmar quién lo asigna
             y dónde se abona el timbrado. */}
-        <Campo
-          id="doc-expediente"
-          etiqueta="N° de expediente del trámite"
-          valor={datos.expedienteTramite}
-          onChange={(v) => cambiar('expedienteTramite', v)}
-          error={errores.expedienteTramite}
-          ayuda={
-            desdePortal
-              ? 'Es el número que te dieron al iniciar el trámite de tu presentación en el municipio.'
-              : 'El número que recibió el titular al iniciar el trámite de la presentación. NO es el expediente de multa.'
-          }
-        />
+        {!completaCoordinacion && (
+          <Campo
+            id="doc-expediente"
+            etiqueta="N° de expediente del trámite"
+            valor={datos.expedienteTramite}
+            onChange={(v) => cambiar('expedienteTramite', v)}
+            error={errores.expedienteTramite}
+            ayuda={
+              desdePortal
+                ? 'Es el número que te dieron al iniciar el trámite de tu presentación en el municipio.'
+                : 'El número que recibió el titular al iniciar el trámite de la presentación. NO es el expediente de multa.'
+            }
+          />
+        )}
 
         <Campo
           id="doc-emision"
@@ -211,7 +219,8 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
           error={errores.fechaEmision}
         />
 
-        {esContrato ? (
+        {/* Sin tipo elegido no hay vencimiento que mostrar: lo fija coordinación. */}
+        {completaCoordinacion ? null : esContrato ? (
           <Campo
             id="doc-vencimiento"
             etiqueta="Vencimiento del contrato"

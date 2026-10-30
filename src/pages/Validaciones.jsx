@@ -21,9 +21,10 @@
 
    AL APROBAR, COORDINACIÓN COMPLETA EL TIPO Y EL EXPEDIENTE (28/10/2026): el
    titular ya no los carga en el portal (COORDINACION_COMPLETA_PRESENTACION,
-   src/dominio/reglas.js). Sin expediente no se aprueba. Decide solo
-   coordinación (ROLES_QUE_VALIDAN); administrativo ve la bandeja sin la
-   columna de decisión.
+   src/dominio/reglas.js). Sin expediente no se aprueba. Desde el 30/10/2026
+   también el número del documento. Decide solo coordinación
+   (ROLES_QUE_VALIDAN); administrativo ve la bandeja sin la columna de
+   decisión.
    ============================================================================ */
 
 import { useMemo, useState } from 'react';
@@ -38,7 +39,7 @@ import ConstanciaArca from '../components/ConstanciaArca';
 import { useDatos } from '../datos/datosContexto';
 import { useRol } from '../auth/rolContexto';
 import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
-import { COORDINACION_COMPLETA_PRESENTACION, ROLES_QUE_VALIDAN } from '../dominio/reglas';
+import { CONSTANCIA_ARCA_SOLO_EN_FICHA, COORDINACION_COMPLETA_PRESENTACION, ROLES_QUE_VALIDAN } from '../dominio/reglas';
 import { vencimientoDocumento } from '../dominio/vigencias';
 import { fmtFecha } from '../dominio/fechas';
 
@@ -50,8 +51,8 @@ function Validaciones() {
   // El motivo del rechazo es obligatorio: el titular tiene que saber qué
   // corregir, y queda en el historial del local.
   const [motivo, setMotivo] = useState('');
-  // Lo que completa coordinación al aprobar: { tipo, expedienteTramite, fechaVencimiento }.
-  const [completar, setCompletar] = useState({ tipo: '', expedienteTramite: '', fechaVencimiento: '' });
+  // Lo que completa coordinación al aprobar: { tipo, numero, expedienteTramite, fechaVencimiento }.
+  const [completar, setCompletar] = useState({ tipo: '', numero: '', expedienteTramite: '', fechaVencimiento: '' });
 
   const pendientes = presentacionesPendientes();
 
@@ -67,6 +68,7 @@ function Validaciones() {
         ? p.fechaVencimiento
         : vencimientoDocumento({ tipo: completar.tipo, fechaEmision: p.fechaEmision }, parametros?.modoBisiesto);
   const faltaParaAprobar =
+    !completar.numero.trim() ||
     !completar.expedienteTramite.trim() ||
     (completar.tipo === 'CONTRATO' && !(completar.fechaVencimiento > (p?.fechaEmision ?? '')));
 
@@ -92,7 +94,7 @@ function Validaciones() {
                 {local?.razonSocial}
                 {local?.cuit ? ` · CUIT ${local.cuit}` : ''}
               </small>
-              {local?.cuit && <ConstanciaArca cuit={local.cuit} />}
+              {local?.cuit && !CONSTANCIA_ARCA_SOLO_EN_FICHA && <ConstanciaArca cuit={local.cuit} />}
             </span>
           );
         },
@@ -107,7 +109,8 @@ function Validaciones() {
           <span className="celda-apilada">
             {ETIQUETA_DOCUMENTO[row.tipo]}
             <small className="celda-sub">
-              N° {row.numero}
+              {/* Lo del portal llega sin número: lo carga coordinación al aprobar. */}
+              {row.numero ? `N° ${row.numero}` : 'Sin N°'}
               {typeof row.archivo === 'string' && row.archivo ? ` · ${row.archivo}` : ''}
               {!row.archivo ? ' · sin archivo' : ''}
             </small>
@@ -174,6 +177,7 @@ function Validaciones() {
                 setMotivo('');
                 setCompletar({
                   tipo: row.tipo,
+                  numero: row.numero ?? '',
                   expedienteTramite: row.expedienteTramite ?? '',
                   fechaVencimiento: row.tipo === 'CONTRATO' ? (row.fechaVencimiento ?? '') : '',
                 });
@@ -232,6 +236,7 @@ function Validaciones() {
           const datos = decision.aprobar
             ? {
                 tipo: completar.tipo,
+                numero: completar.numero.trim(),
                 expedienteTramite: completar.expedienteTramite.trim(),
                 ...(completar.tipo === 'CONTRATO' ? { fechaVencimiento: completar.fechaVencimiento } : {}),
               }
@@ -252,6 +257,13 @@ function Validaciones() {
                 vacio={null}
               />
               <Campo
+                id="val-numero"
+                etiqueta="Número del documento"
+                valor={completar.numero}
+                onChange={(v) => setCompletar((c) => ({ ...c, numero: v }))}
+                largoMaximo={50}
+              />
+              <Campo
                 id="val-expediente"
                 etiqueta="N° de expediente del trámite"
                 valor={completar.expedienteTramite}
@@ -270,7 +282,8 @@ function Validaciones() {
               )}
             </div>
             <p>
-              La {ETIQUETA_DOCUMENTO[completar.tipo]} N° {decision.p.numero} pasa a contar como documentación vigente
+              La {ETIQUETA_DOCUMENTO[completar.tipo]}
+              {completar.numero.trim() ? ` N° ${completar.numero.trim()}` : ''} pasa a contar como documentación vigente
               {vencimientoPropuesto ? ` hasta el ${fmtFecha(vencimientoPropuesto)}` : ''}.{' '}
               <strong>{decision.local?.nombreLocal}</strong> sale del circuito sancionatorio y su notificación en curso queda sin
               efecto.

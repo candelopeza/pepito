@@ -119,7 +119,8 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
     return (
       <>
         <Dato etiqueta="Documento">
-          {ETIQUETA_DOCUMENTO[a.tipo]} N° {a.numero}
+          {ETIQUETA_DOCUMENTO[a.tipo]}
+          {a.numero ? ` N° ${a.numero}` : ''}
         </Dato>
         <Dato etiqueta="Vigencia">
           <Badge color={a.validado === false ? 'amarillo' : vigente ? 'verde' : 'gris'}>

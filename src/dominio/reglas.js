@@ -269,6 +269,19 @@ export const ACCIONES = [
     estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA', 'NOTIF1_NO_ENTREGADA', 'NOTIF2_NO_ENTREGADA'],
     roles: ['administrativo', 'coordinacion'],
   },
+  /* La cédula ya emitida se le manda al correo del local (sql/12 y
+     CORREO_HOST en el backend). Sirve cuando al generar se eligió papel y
+     después se quiere mandar también por correo, cuando el envío falló, o
+     cuando la cédula se regeneró. Solo si el local tiene correo cargado; el
+     front además la oculta si el servidor no tiene el correo configurado. */
+  {
+    id: 'enviar-cedula-correo',
+    etiqueta: 'Enviar por correo',
+    ayuda: 'Manda la cédula emitida al correo electrónico del local.',
+    estados: ['NOTIF1_GENERADA', 'NOTIF2_GENERADA', 'NOTIF1_NO_ENTREGADA', 'NOTIF2_NO_ENTREGADA'],
+    roles: ['administrativo', 'coordinacion'],
+    condicion: (local) => Boolean(String(local?.email ?? '').trim()),
+  },
   {
     id: 'asignar-notificador',
     etiqueta: 'Asignar notificador',

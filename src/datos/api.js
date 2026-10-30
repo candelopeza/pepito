@@ -194,7 +194,9 @@ export const api = {
   revisarRelevamiento: (localId, resultado) => post(`/relevamientos/${localId}/revision`, { resultado }),
 
   // --- notificaciones -------------------------------------------------------
-  generarCedula: (localId) => post('/notificaciones', { localId }),
+  // medio: 'papel' (la cédula impresa, como siempre), 'correo' o 'ambos'.
+  generarCedula: (localId, medio = 'papel') => post('/notificaciones', { localId, medio }),
+  enviarCedulaPorCorreo: (id) => post(`/notificaciones/${id}/correo`),
   regenerarCedula: (id) => post(`/notificaciones/${id}/regenerar`),
   asignarNotificador: (id, notificadorId) => put(`/notificaciones/${id}/notificador`, { notificadorId }),
   marcarImpresa: (id) => post(`/notificaciones/${id}/impresion`),

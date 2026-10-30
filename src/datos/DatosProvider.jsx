@@ -88,7 +88,7 @@ const PERMISOS_VACIOS = { modulos: {}, rolesDeshabilitados: [] };
 /* Qué funciones opcionales tiene prendidas el servidor (backend/capacidades.js).
    Arranca todo apagado: si el servidor es viejo y no sabe responder, las
    pantallas no ofrecen lo que no se puede guardar. */
-const CAPACIDADES_VACIAS = { auditoria: false, parametros: false, accesos: false, impresion: false, geocodificador: 'ninguno' };
+const CAPACIDADES_VACIAS = { auditoria: false, parametros: false, accesos: false, impresion: false, correo: false, geocodificador: 'ninguno' };
 
 /* Donde queda la última copia de los datos, para abrir la app sin señal. */
 const CLAVE_COPIA = 'copia-datos';
@@ -552,8 +552,20 @@ function DatosProvider({ children }) {
   /* ==========================================================================
      NOTIFICACIONES  (etapas 3 y 4)
      ========================================================================== */
+  /* `medio`: papel (como siempre), correo o ambos (sql/12). El aviso depende
+     de lo que contestó el servidor: la cédula puede haberse emitido y el
+     correo no haber salido. */
+  const avisoDeCorreo = (verbo) => (r) => {
+    if (!r?.correo) return { tipo: 'success', texto: verbo };
+    if (r.correo.enviado) return { tipo: 'success', texto: `${verbo} y enviada por correo a ${r.correo.para}.` };
+    return { tipo: 'warning', texto: `${verbo}, pero el correo NO salió: ${r.correo.error} Podés reintentar con "Enviar por correo".` };
+  };
   const generarCedula = useCallback(
-    (localId) => ejecutar('Cédula emitida', () => api.generarCedula(localId)),
+    (localId, medio = 'papel') => ejecutar(avisoDeCorreo('Cédula emitida'), () => api.generarCedula(localId, medio)),
+    [ejecutar],
+  );
+  const enviarCedulaPorCorreo = useCallback(
+    (actuacionId) => ejecutar(avisoDeCorreo('Cédula'), () => api.enviarCedulaPorCorreo(actuacionId)),
     [ejecutar],
   );
 
@@ -856,6 +868,7 @@ function DatosProvider({ children }) {
       editarRelevamiento,
       revisarRelevamiento,
       generarCedula,
+      enviarCedulaPorCorreo,
       regenerarCedula,
       asignarNotificador,
       marcarImpresa,
@@ -890,7 +903,7 @@ function DatosProvider({ children }) {
       base, hoy, cargando, cargarTodo, localesConEstado,
       auditorias, cargarAuditoria, versionDatos, sinConexion, pendientes, sincronizar, descartarPendiente,
       guardarLocal, eliminarLocal, bloquearLocal, desbloquearLocal, geocodificarPendientes, ubicarDireccion,
-      crearRelevamiento, editarRelevamiento, revisarRelevamiento, generarCedula, regenerarCedula, asignarNotificador,
+      crearRelevamiento, editarRelevamiento, revisarRelevamiento, generarCedula, enviarCedulaPorCorreo, regenerarCedula, asignarNotificador,
       marcarImpresa, marcarImpresas, registrarEntrega, corregirEntrega, editarObservaciones, registrarDocumento, validarPresentacion, otorgarProrroga, solicitarProrroga,
       registrarExpediente, numeroDefinitivoExpediente, solicitarExpediente, novedadExpediente, reingresarAlCircuito, volverANotificar, cerrarLocal, reabrirLocal, fusionarLocales,
       guardarEnCatalogo, eliminarDeCatalogo, guardarParametros, guardarPlantilla,

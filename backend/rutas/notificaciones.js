@@ -8,6 +8,7 @@
      regenerarCedula      ->  POST /notificaciones/:id/regenerar
      asignarNotificador   ->  PUT  /notificaciones/:id/notificador  { notificadorId }
      marcarImpresa        ->  POST /notificaciones/:id/impresion
+     enviarCedulaPorCorreo->  POST /notificaciones/:id/correo   (sql/12)
      registrarEntrega     ->  POST /notificaciones/:id/entrega
                               { resultado, fechaEntrega, observaciones }
      corregirEntrega      ->  PUT  /notificaciones/:id/entrega
@@ -39,6 +40,7 @@ import { auditoriaDisponible } from '../auditoria.js';
 import {
   feriados,
   insertarTramite,
+  localPorId,
   parametros,
   recortarObservacion,
   siguienteNumeroCedula,
@@ -59,6 +61,8 @@ import { ErrorActo, ejecutarActo } from '../actos.js';
 import { archivosDisponibles, existeHash, guardarImagen, leerImagen } from '../archivos.js';
 import { fmtFecha, hoyISO, vencimientoHabil } from '../../src/dominio/fechas.js';
 import { requiereDatosRegistrales } from '../../src/dominio/reglas.js';
+import { textoDeCedula } from '../../src/dominio/textoCedula.js';
+import { enviarCorreo } from '../correo.js';
 import { resultadoEntrega } from '../../src/dominio/actuaciones.js';
 
 const router = Router();
@@ -124,8 +128,27 @@ router.get('/', async (_req, res, next) => {
    notificación aparece una sola vez en el historial. */
 router.post('/', requiereRol('administrativo', 'coordinacion'), async (req, res, next) => {
   try {
-    const idTramite = await emitirCedula(req, Number(req.body?.localId));
-    res.status(201).json(await tramitePorId(idTramite));
+    /* El MEDIO (sql/12): papel es la cédula impresa de siempre; correo la
+       manda al correo del local; ambos hace las dos cosas. Se controla ANTES
+       de emitir: si el local no tiene correo o el servidor no lo tiene
+       configurado, no se emite una cédula que después no se va a poder
+       mandar. El envío en sí va después de guardar (ver correo.js). */
+    const medio = MEDIOS.includes(req.body?.medio ?? 'papel') ? (req.body?.medio ?? 'papel') : null;
+    if (!medio) return res.status(400).json({ error: `Medio inválido. Valores posibles: ${MEDIOS.join(', ')}` });
+    const idLocal = Number(req.body?.localId);
+    if (medio !== 'papel') {
+      const problema = await problemaParaMandarCorreo(await localPorId(idLocal));
+      if (problema) return res.status(problema.status).json({ error: problema.message });
+    }
+
+    const idTramite = await emitirCedula(req, idLocal);
+    // La cédula ya existe aunque el correo falle: se responde la cédula y, en
+    // `correo`, si salió o por qué no, para que la pantalla lo diga.
+    const correo =
+      medio === 'papel'
+        ? null
+        : await enviarCedulaPorCorreo(req, idTramite, medio).catch((e) => ({ enviado: false, error: e.message }));
+    res.status(201).json({ ...(await tramitePorId(idTramite)), correo });
   } catch (e) {
     next(e);
   }
@@ -197,6 +220,137 @@ export async function emitirCedula(req, idLocal, { automatica = null } = {}) {
   });
   return idTramite;
 }
+
+/* ============================================================================
+   NOTIFICACIÓN POR CORREO ELECTRÓNICO  (sql/12 + CORREO_HOST en .env)
+   ----------------------------------------------------------------------------
+   La cédula emitida se manda al correo cargado en el padrón del local, con el
+   mismo texto que se imprime (textoDeCedula, la plantilla del área).
+
+   TODO-DEFINICIÓN con la Dirección: cuando el medio es SOLO correo, el
+   sistema registra la entrega como efectiva el día del envío y el plazo
+   empieza a correr desde ahí. Eso presupone que la notificación electrónica
+   es válida para el local (domicilio electrónico constituido o aceptación
+   del titular). Hasta que esté confirmado, conviene usar "ambos": el correo
+   llega igual y el plazo lo fija la entrega en papel, como siempre.
+   ============================================================================ */
+
+const MEDIOS = ['papel', 'correo', 'ambos'];
+
+/* Por qué no se le puede mandar un correo a este local, o null si se puede. */
+async function problemaParaMandarCorreo(local) {
+  if (!local) return new ErrorActo(404, 'Local no encontrado');
+  if (!tiene('correo')) {
+    return new ErrorActo(
+      409,
+      'El envío por correo no está habilitado en el servidor: faltan las columnas de sql/12 o la configuración CORREO_* del .env.',
+    );
+  }
+  if (!String(local.email ?? '').trim()) return new ErrorActo(400, 'El local no tiene correo electrónico cargado en el padrón.');
+  return null;
+}
+
+/* Manda la cédula `idTramite` al correo del local y lo deja asentado en el
+   trámite y en la auditoría. Si `medio` es solo correo, además registra la
+   entrega (ver arriba). Devuelve { enviado, para }. Tira si no se pudo. */
+async function enviarCedulaPorCorreo(req, idTramite, medio) {
+  let para = null;
+  await ejecutarActo(req, {
+    idLocal: (await tramitePorId(idTramite))?.localId,
+    accion: 'enviar-cedula-correo',
+    controlar: async ({ local, actuaciones }) => {
+      const problema = await problemaParaMandarCorreo(local);
+      if (problema) return problema;
+      const actual = cedulaEnCurso(actuaciones);
+      if (!actual || actual.id !== idTramite) return new ErrorActo(409, 'Solo se manda por correo la cédula en curso del local.');
+      if (!actual.numeroCedula) return new ErrorActo(409, 'La notificación todavía no se emitió.');
+      return null;
+    },
+    motivo: (r) => `Cédula N° ${r.numero} enviada por correo electrónico a ${r.para}`,
+    trabajo: async (cx, { local, actuaciones }) => {
+      const cedula = cedulaEnCurso(actuaciones);
+      para = String(local.email).trim();
+      const { plantillaCedula } = await parametros(cx);
+      const { texto, faltantes } = textoDeCedula(plantillaCedula, cedula, local);
+      if (faltantes > 0) {
+        throw new ErrorActo(409, `La cédula tiene ${faltantes} dato(s) sin completar: corregí el local y regenerala antes de mandarla.`);
+      }
+      // El envío va adentro del acto: si el SMTP falla, no queda asentado
+      // un envío que no ocurrió.
+      await enviarCorreo({
+        para,
+        asunto: `Cédula de notificación N° ${cedula.numeroCedula} · ${local.nombreLocal}`,
+        texto,
+        responderA: (await parametros(cx)).correoSolicitudExpedientes || null,
+      });
+      await cx.execute(
+        `UPDATE tramite SET medio_notificacion = ?, correo_enviado_a = ?, correo_enviado_en = NOW() WHERE id_tramite = ?`,
+        [medio, para, idTramite],
+      );
+      return { numero: cedula.numeroCedula, para };
+    },
+  });
+
+  if (medio === 'correo') await registrarEntregaPorCorreo(req, idTramite, para);
+  return { enviado: true, para };
+}
+
+/* Solo correo: la entrega efectiva es el envío, hoy. Mismo cálculo de
+   vencimiento que la entrega en papel (POST /:id/entrega). Lo registra el
+   sistema aunque quien emite sea administrativo (no es agente de campo). */
+async function registrarEntregaPorCorreo(req, idTramite, para) {
+  const hoy = hoyISO();
+  await ejecutarActo(req, {
+    idLocal: (await tramitePorId(idTramite))?.localId,
+    accion: 'registrar-entrega',
+    rolHabilitadoAunque: () => true,
+    controlar: async ({ actuaciones }) => {
+      const actual = cedulaEnCurso(actuaciones);
+      if (!actual || actual.id !== idTramite) return new ErrorActo(409, 'La cédula ya no es la que está en curso.');
+      if (RESULTADOS_EFECTIVOS.includes(actual.resultado)) return null; // ya estaba entregada: nada que hacer
+      return null;
+    },
+    motivo: (r) => `Cédula N° ${r.numero}: notificada por correo electrónico a ${para} el ${fmtFecha(hoy)}. El plazo vence el ${fmtFecha(r.vencimiento)}`,
+    trabajo: async (cx, { actuaciones }) => {
+      const cedula = cedulaEnCurso(actuaciones);
+      if (RESULTADOS_EFECTIVOS.includes(cedula.resultado)) return { numero: cedula.numeroCedula, vencimiento: cedula.fechaVencimiento };
+      const params = await parametros(cx);
+      const calendario = await feriados(cx);
+      const plazoDias = cedula.instancia === 1 ? params.plazoNotif1 : params.plazoNotif2;
+      const vencimiento = vencimientoHabil(hoy, plazoDias, calendario, params.contarDiaEntrega);
+      await cx.execute(
+        `UPDATE tramite
+            SET id_estado = ?, fecha_entrega = ?, fecha_vencimiento = ?, plazo_dias = ?, fecha_cierre = ?, observaciones = ?
+          WHERE id_tramite = ?`,
+        [
+          ESTADO_POR_RESULTADO.ENTREGADA,
+          hoy,
+          vencimiento,
+          plazoDias,
+          hoy,
+          recortarObservacion(`Notificada por correo electrónico a ${para}`),
+          idTramite,
+        ],
+      );
+      return { numero: cedula.numeroCedula, vencimiento };
+    },
+  });
+}
+
+/* POST /notificaciones/:id/correo  ->  manda (o vuelve a mandar) por correo
+   una cédula ya emitida. Si se había emitido solo en papel, pasa a "ambos":
+   el papel sigue su curso y el plazo lo fija esa entrega. */
+router.post('/:id/correo', requiereRol('administrativo', 'coordinacion'), async (req, res, next) => {
+  try {
+    const tramite = await notificacionDe(req, res);
+    if (!tramite) return;
+    const medio = tramite.medio === 'correo' ? 'correo' : 'ambos';
+    const correo = await enviarCedulaPorCorreo(req, tramite.id, medio);
+    res.json({ ...(await tramitePorId(tramite.id)), correo });
+  } catch (e) {
+    next(e);
+  }
+});
 
 /* POST /notificaciones/:id/regenerar
 

@@ -7,33 +7,42 @@
    >>> POR QUÉ LEAFLET Y NO GOOGLE MAPS <<<
    Porque Google Maps Platform exige una cuenta con tarjeta de crédito asociada
    al proyecto, y conseguir eso en un municipio suele llevar más que el
-   desarrollo entero. Leaflet con OpenStreetMap no pide cuenta, no pide clave y
-   no tiene costo.
+   desarrollo entero. Leaflet con baldosas libres no pide cuenta, no pide clave
+   y no tiene costo.
 
    Además es lo que ya usa el municipio: el visor mapa.smt.gob.ar está hecho con
    Leaflet. Si mañana la Dirección de Innovación Tecnológica expone sus propias
-   capas (calles, manzanas, barrios), se enchufan acá cambiando la URL del
-   TileLayer, sin tocar nada más.
+   capas (calles, manzanas, barrios), se enchufan acá cambiando la URL de la
+   capa, sin tocar nada más.
+
+   >>> SE VE COMO EL MAPA DEL SISTEMA VIEJO, A PROPÓSITO <<<
+   El área venía usando un mapa de Google: fondo claro con calles y nombres,
+   botón Mapa / Satélite arriba a la izquierda, pantalla completa arriba a la
+   derecha y un pin (la gota) por local con un color por situación. Acá se
+   reproduce eso con capas libres, sin clave:
+     Mapa      OpenStreetMap, el fondo de siempre: blanco, con calles y nombres.
+     Satélite  World Imagery de Esri (ArcGIS Online), con las calles y los
+               nombres de Esri encima, como la vista híbrida de Google.
+   Se probaron otros dos fondos para "Mapa" y se descartaron: CARTO Voyager
+   (el más parecido a Google) desde 2025 pide clave y sale con la marca
+   "API KEY REQUIRED"; Esri World Street Map anda, pero tiene un fondo
+   amarillento que el área no quiso.
 
    >>> ESTE MAPA NECESITA INTERNET <<<
-   Las baldosas vienen de los servidores de OpenStreetMap. Sin conexión el mapa
-   queda gris y los puntos igual se dibujan, pero sin calles debajo.
+   Las baldosas vienen de servidores externos. Sin conexión el mapa queda gris
+   y los pines igual se dibujan, pero sin calles debajo.
 
-   Antes esta pantalla era un SVG dibujado a mano justamente para no depender de
-   internet, porque el build se arma en un solo archivo para abrirlo desde el
-   disco (ver vite.config.js). Eso dejó de tener sentido cuando el front pasó a
-   consumir la API: la aplicación ya necesita un servidor corriendo igual.
-
-   >>> LOS PUNTOS SON LA COORDENADA DEL PADRÓN <<<
+   >>> LOS PINES SON LA COORDENADA DEL PADRÓN <<<
    La geocodificada desde la dirección. NUNCA la del relevamiento (sección 9.2).
    Los locales sin coordenada no se dibujan y se listan aparte: no se les pone
    un punto aproximado, porque un punto aproximado en un mapa se lee como un
    dato.
    ============================================================================ */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, Tooltip } from 'react-leaflet';
+import L from 'leaflet';
+import { MapContainer, Marker, Polygon, Popup, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import PageHeader from '../components/ui/PageHeader';
@@ -44,28 +53,139 @@ import { CampoSelect } from '../components/ui/Campo';
 import SeccionGeocodificacion from '../components/SeccionGeocodificacion';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
-import { LISTA_ESTADOS, colorEstado, etiquetaEstado } from '../dominio/estados';
+import { LISTA_ESTADOS, colorEstado, etiquetaEstado, grupoEstado } from '../dominio/estados';
 
-/* Los colores de los badges, para que el punto del mapa y la pastilla de la
-   grilla sean del mismo color. Si divergen, el mapa deja de ser legible. */
+/* ---------------------------------------------------------------- las capas
+   Cada capa base trae sus baldosas y su atribución. La satelital lleva una
+   segunda capa encima solo con los nombres de calles, para que se pueda leer
+   dónde está cada pin. */
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
+const CAPAS = {
+  mapa: {
+    etiqueta: 'Mapa',
+    baldosas: [
+      {
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '&copy; colaboradores de <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      },
+    ],
+  },
+  satelite: {
+    etiqueta: 'Satélite',
+    baldosas: [
+      {
+        url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
+        attribution: 'Imágenes &copy; Esri, Maxar, Earthstar Geographics y la comunidad de usuarios de GIS',
+        maxZoom: 19,
+      },
+      // Calles y nombres encima de la foto, como la vista híbrida de Google.
+      { url: `${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`, attribution: '', maxZoom: 19 },
+      { url: `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`, attribution: '', maxZoom: 19 },
+    ],
+  },
+};
+
+/* ---------------------------------------------------------------- los pines
+   El color sale del estado, igual que la pastilla de la grilla: si el mapa y
+   el padrón usaran colores distintos para lo mismo, el mapa dejaría de ser
+   legible. Son los mismos tonos de los badges (App.css). */
 const COLOR_HEX = {
   verde: '#2e7d32',
   naranja: '#ef6c00',
   azul: '#1565c0',
   amarillo: '#f9a825',
   rojo: '#c62828',
-  gris: '#90a4ae',
+  gris: '#78909c',
 };
 
-/* El centro del ejido y el acercamiento inicial. 13 muestra la ciudad entera
-   sin que los puntos se pisen. */
+/* La letra adentro del pin dice de qué se trata sin abrir la ficha: lo que
+   en el mapa viejo eran los iconitos. Primero por estado puntual, después por
+   grupo. */
+const GLIFO_ESTADO = {
+  EXENTO_CONFIRMADO: '✓',
+  INACTIVO_CERRADO: '×',
+  COMPLETAR_DATOS: '!',
+  NOTIF1_NO_ENTREGADA: '!',
+  NOTIF2_NO_ENTREGADA: '!',
+  PRORROGA_VIGENTE: 'P',
+  GENERAR_EXPEDIENTE: 'E',
+};
+const GLIFO_GRUPO = {
+  documental: 'D',
+  sancionatorio: 'E',
+  cola_emision: 'N',
+  en_tramite: 'N',
+  entrega: 'N',
+  cola_admin: 'R',
+  bloqueo: '!',
+  terminal: '•',
+  transitorio: '…',
+};
+
+function glifoDe(codigo) {
+  return GLIFO_ESTADO[codigo] ?? GLIFO_GRUPO[grupoEstado(codigo)] ?? '•';
+}
+
+function colorDe(codigo) {
+  return COLOR_HEX[colorEstado(codigo)] ?? COLOR_HEX.gris;
+}
+
+/* Tamaño del pin en píxeles. Con casi dos mil locales, uno grande tapa el
+   mapa; con este se ve la distribución y todavía se lee la letra. */
+const ANCHO_PIN = 20;
+const ALTO_PIN = Math.round((ANCHO_PIN * 38) / 28);
+
+/* La gota, en SVG. Se usa en el mapa (como icono del marcador) y en la
+   leyenda (achicada), así las dos son exactamente la misma figura. */
+function svgPin(color, glifo, ancho = ANCHO_PIN) {
+  const alto = Math.round((ancho * 38) / 28);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 38" width="${ancho}" height="${alto}" aria-hidden="true">
+    <path d="M14 1C6.8 1 1 6.8 1 14c0 9.8 13 23 13 23s13-13.2 13-23C27 6.8 21.2 1 14 1z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+    <circle cx="14" cy="14" r="8.5" fill="#fff"/>
+    <text x="14" y="18.2" text-anchor="middle" font-size="11.5" font-weight="700" fill="${color}" font-family="system-ui, Segoe UI, Roboto, sans-serif">${glifo}</text>
+  </svg>`;
+}
+
+/* Un icono de Leaflet por combinación color+glifo, no uno por local: con dos
+   mil pines, crear dos mil iconos iguales es tirar memoria. */
+const iconos = new Map();
+function iconoDe(codigo) {
+  const color = colorDe(codigo);
+  const glifo = glifoDe(codigo);
+  const clave = `${color}|${glifo}`;
+  if (!iconos.has(clave)) {
+    iconos.set(
+      clave,
+      L.divIcon({
+        className: 'mapa-pin',
+        html: svgPin(color, glifo),
+        iconSize: [ANCHO_PIN, ALTO_PIN],
+        iconAnchor: [ANCHO_PIN / 2, ALTO_PIN - 1], // la punta de la gota es la coordenada
+        popupAnchor: [0, -(ALTO_PIN - 3)],
+        tooltipAnchor: [0, -(ALTO_PIN - 6)],
+      }),
+    );
+  }
+  return iconos.get(clave);
+}
+
+/* El centro del ejido y el acercamiento inicial. 13 muestra la ciudad entera. */
 const CENTRO = [-26.8285, -65.2125];
 const ZOOM = 13;
 
-/* Radio del punto en píxeles. Chico a propósito: con casi dos mil locales, un
-   marcador con forma de gota tapa el mapa entero y no se ve la distribución,
-   que es justamente para lo que se usa esta pantalla. */
-const RADIO = 5;
+/* Leaflet mide su caja una sola vez, al montarse. Al entrar o salir de
+   pantalla completa la caja cambia de tamaño y hay que avisarle, si no deja
+   medio mapa gris. */
+function AjustarAlTamano() {
+  const mapa = useMap();
+  useEffect(() => {
+    const ajustar = () => setTimeout(() => mapa.invalidateSize(), 50);
+    document.addEventListener('fullscreenchange', ajustar);
+    return () => document.removeEventListener('fullscreenchange', ajustar);
+  }, [mapa]);
+  return null;
+}
 
 /* Los locales que no entraron al mapa. Van en la misma tabla que el resto del
    sistema: con 253 registros, una lista suelta no se puede ni buscar ni
@@ -100,13 +220,27 @@ const COLUMNAS_SIN_UBICACION = [
 ];
 
 function Mapa() {
-  const { localesConEstado, rubros, limiteMunicipal, limiteOficial } = useDatos();
+  const { localesConEstado, rubros, limiteMunicipal } = useDatos();
   const { rol } = useRol();
   // La corrección de ubicaciones es de la oficina: para el resto, el mapa es
   // solo de consulta y la sección no aparece.
   const puedeCorregir = ['administrativo', 'coordinacion', 'administrador'].includes(rol);
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroRubro, setFiltroRubro] = useState('');
+  const [capa, setCapa] = useState('mapa');
+  const [pantallaCompleta, setPantallaCompleta] = useState(false);
+  const contenedor = useRef(null);
+
+  useEffect(() => {
+    const alCambiar = () => setPantallaCompleta(document.fullscreenElement === contenedor.current);
+    document.addEventListener('fullscreenchange', alCambiar);
+    return () => document.removeEventListener('fullscreenchange', alCambiar);
+  }, []);
+
+  function alternarPantallaCompleta() {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else contenedor.current?.requestFullscreen?.();
+  }
 
   const filtrados = useMemo(
     () =>
@@ -155,16 +289,46 @@ function Mapa() {
       </div>
 
       {/* ---------- El mapa ----------
-          `preferCanvas` dibuja los puntos en un canvas en vez de crear dos mil
-          elementos SVG. Con este volumen es la diferencia entre un mapa que se
-          mueve y uno que se traba al arrastrar. */}
-      <div className="mapa-contenedor">
-        <MapContainer center={CENTRO} zoom={ZOOM} className="mapa-leaflet" preferCanvas scrollWheelZoom>
-          <TileLayer
-            attribution='&copy; colaboradores de <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            maxZoom={19}
-          />
+          Los botones Mapa / Satélite y el de pantalla completa van por fuera
+          del MapContainer, encima: son de esta pantalla, no de Leaflet. El
+          zoom se corre abajo a la derecha para no pisarlos. */}
+      <div className={`mapa-contenedor${pantallaCompleta ? ' mapa-contenedor-completa' : ''}`} ref={contenedor}>
+        <div className="mapa-capas" role="group" aria-label="Tipo de mapa">
+          {Object.entries(CAPAS).map(([id, c]) => (
+            <button
+              key={id}
+              type="button"
+              className={id === capa ? 'activa' : ''}
+              aria-pressed={id === capa}
+              onClick={() => setCapa(id)}
+            >
+              {c.etiqueta}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="mapa-pantalla-completa"
+          onClick={alternarPantallaCompleta}
+          title={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
+          aria-label={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#444" aria-hidden="true">
+            {pantallaCompleta ? (
+              <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+            ) : (
+              <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+            )}
+          </svg>
+        </button>
+
+        <MapContainer center={CENTRO} zoom={ZOOM} className="mapa-leaflet" zoomControl={false} scrollWheelZoom>
+          <ZoomControl position="bottomright" />
+          <AjustarAlTamano />
+
+          {CAPAS[capa].baldosas.map((b) => (
+            <TileLayer key={`${capa}-${b.url}`} {...b} />
+          ))}
 
           {/* El ejido municipal. Viene del backend, que es el mismo polígono
               contra el que se valida cada coordenada: si el front dibujara su
@@ -177,60 +341,52 @@ function Mapa() {
             />
           )}
 
-          {conUbicacion.map((local) => {
-            const color = COLOR_HEX[colorEstado(local.estado)] ?? COLOR_HEX.gris;
-            return (
-              <CircleMarker
-                key={local.id}
-                center={[local.latitud, local.longitud]}
-                radius={RADIO}
-                pathOptions={{ color: '#fff', weight: 1, fillColor: color, fillOpacity: 0.9 }}
-              >
-                {/* El tooltip aparece al pasar por encima: permite barrer el
-                    mapa sin tener que hacer clic en cada punto. */}
-                <Tooltip direction="top" offset={[0, -4]}>
-                  <strong>{local.nombreLocal}</strong>
-                  <br />
-                  {etiquetaEstado(local.estado)}
-                </Tooltip>
+          {conUbicacion.map((local) => (
+            <Marker key={local.id} position={[local.latitud, local.longitud]} icon={iconoDe(local.estado)}>
+              {/* El tooltip aparece al pasar por encima: permite barrer el
+                  mapa sin tener que hacer clic en cada pin. */}
+              <Tooltip direction="top">
+                <strong>{local.nombreLocal}</strong>
+                <br />
+                {etiquetaEstado(local.estado)}
+              </Tooltip>
 
-                <Popup>
-                  <div className="mapa-popup">
-                    <strong>{local.nombreLocal}</strong>
-                    <span>{local.razonSocial || 'Sin razón social'}</span>
-                    <span>{local.direccion}</span>
-                    <BadgeEstado codigo={local.estado} />
-                    {local.plazo && (
-                      <span className={local.plazo.vencido ? 'texto-vencido' : ''}>
-                        {local.plazo.vencido ? 'Plazo vencido' : `Vence en ${local.diasRestantes} día(s)`}
-                      </span>
-                    )}
-                    <Link to={`/locales/${local.id}`} className="link-local">
-                      Abrir la ficha del local →
-                    </Link>
-                  </div>
-                </Popup>
-              </CircleMarker>
-            );
-          })}
+              <Popup>
+                <div className="mapa-popup">
+                  <strong>{local.nombreLocal}</strong>
+                  <span>{local.razonSocial || 'Sin razón social'}</span>
+                  <span>{local.direccion}</span>
+                  <BadgeEstado codigo={local.estado} />
+                  {local.plazo && (
+                    <span className={local.plazo.vencido ? 'texto-vencido' : ''}>
+                      {local.plazo.vencido ? 'Plazo vencido' : `Vence en ${local.diasRestantes} día(s)`}
+                    </span>
+                  )}
+                  <Link to={`/locales/${local.id}`} className="link-local">
+                    Abrir la ficha del local →
+                  </Link>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
         </MapContainer>
       </div>
 
-      {/* ---------- Leyenda ---------- */}
+      {/* ---------- Leyenda: el mismo pin que en el mapa, achicado ---------- */}
       {estadosPresentes.length > 0 && (
         <div className="leyenda">
           {estadosPresentes.map((codigo) => (
             <span key={codigo}>
               <i
-                className="mapa-punto-leyenda"
-                style={{ background: COLOR_HEX[colorEstado(codigo)] ?? COLOR_HEX.gris }}
+                className="mapa-pin-leyenda"
+                // El SVG lo arma este archivo con el color y la letra del estado: no entra texto de afuera.
+                dangerouslySetInnerHTML={{ __html: svgPin(colorDe(codigo), glifoDe(codigo), 14) }}
               />
               {etiquetaEstado(codigo)}
             </span>
           ))}
         </div>
       )}
-
 
       {/* ---------- Los que no se pudieron ubicar ---------- */}
       {sinUbicacion.length > 0 && (

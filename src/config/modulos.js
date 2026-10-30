@@ -323,6 +323,8 @@ export const ACCIONES_RAPIDAS = [
     descripcion: 'Relevar un local en territorio. Funciona sin conexión.',
     ruta: '/campo/relevar',
     roles: ['relevador', 'coordinacion'],
+    // Es parte de la función Relevamientos: apagada esa, se va la tarjeta.
+    modulos: ['relevamientos'],
   },
   {
     id: 'registrar-entrega',
@@ -330,6 +332,9 @@ export const ACCIONES_RAPIDAS = [
     descripcion: 'Cédulas asignadas y resultado de la entrega',
     ruta: '/campo/entregas',
     roles: ['notificador', 'coordinacion'],
+    // Las entregas son parte de Notificaciones, pero el notificador no tiene
+    // esa pantalla de oficina: para él manda solo Entregas (la ruta).
+    modulos: [],
   },
   {
     id: 'emitir-cedulas',
@@ -481,20 +486,34 @@ export function puedeEditar(rol, idModulo, permisos) {
 
 export function puedeVerRuta(rol, ruta, permisos) {
   if (ruta === '/') return true;
-  const modulo = MODULOS.find((m) => m.ruta === ruta);
-  // Ruta sin módulo declarado (por ejemplo la ficha de un local, que se abre
-  // desde el padrón): la controla el módulo del que depende, no esta tabla.
+  // La ruta exacta, o una que cuelga de un módulo: /locales/123 es del
+  // padrón y /accesos/usuarios es de Accesos. Sin esto, una tarjeta del
+  // Inicio que apunte a una subruta se seguiría viendo con el módulo apagado.
+  const modulo = MODULOS.find((m) => m.ruta === ruta || ruta.startsWith(`${m.ruta}/`));
+  // Ruta sin ningún módulo detrás: la controla la pantalla que la abre, no
+  // esta tabla.
   if (!modulo) return true;
   return nivelAcceso(modulo, rol, permisos) !== 'no';
 }
 
 /* Una acción rápida se ofrece solo si el rol la tiene declarada Y todavía
    puede ver la pantalla de destino: si desde Accesos le quitaron el módulo, la
-   tarjeta del Inicio desaparece con él. */
+   tarjeta del Inicio desaparece con él.
+
+   Una acción puede depender además de OTROS módulos (`modulos`): "Nuevo
+   relevamiento" lleva a la pantalla de campo (módulo Relevar), pero es parte
+   de la función Relevamientos. Si el administrador apaga Relevamientos, la
+   tarjeta tiene que irse también, aunque Relevar siga prendido: para quien
+   apaga, "Relevamientos" es toda la función, no una pestaña. */
 export function accionesRapidasPara(rol, permisos) {
   // El administrador ve las mismas acciones que los demás (ver el comentario
   // de ACCIONES_RAPIDAS), menos la del portal, que es del titular. Antes no
   // aparecía en ningún `roles` y entraba a un Inicio sin acciones.
   const seLeOfrece = (a) => (rol === ROL_ADMINISTRADOR ? a.id !== 'mis-locales' : a.roles.includes(rol));
-  return ACCIONES_RAPIDAS.filter((a) => seLeOfrece(a) && puedeVerRuta(rol, a.ruta.split('?')[0], permisos));
+  const modulosPrendidos = (a) =>
+    (a.modulos ?? []).every((id) => {
+      const modulo = MODULOS.find((m) => m.id === id);
+      return !modulo || nivelAcceso(modulo, rol, permisos) !== 'no';
+    });
+  return ACCIONES_RAPIDAS.filter((a) => seLeOfrece(a) && puedeVerRuta(rol, a.ruta.split('?')[0], permisos) && modulosPrendidos(a));
 }

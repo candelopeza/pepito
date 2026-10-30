@@ -1596,6 +1596,61 @@
   z-index: 0; /* por debajo del menú lateral y de los modales */
 }
 
+/* ========== 14.9b ELEGIR EL MEDIO DE LA CÉDULA ==========
+   components/AccionesLocal.jsx, al generar: papel, correo o ambos. Una opción
+   por renglón, con el detalle debajo del título; la elegida se marca con el
+   borde azul para que se vea sin buscar el circulito. */
+.opciones-medio { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 6px; }
+.opcion-medio {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 14px; border: 1px solid #dfe5ea; border-radius: 8px;
+  cursor: pointer; background: white; transition: 0.15s;
+}
+.opcion-medio:hover { border-color: #90a4ae; }
+.opcion-medio-activa { border-color: #1976d2; background: #f3f8fd; box-shadow: inset 0 0 0 1px #1976d2; }
+.opcion-medio input { margin-top: 3px; accent-color: #1976d2; }
+.opcion-medio strong { display: block; font-size: 14px; color: #263238; }
+.opcion-medio small { display: block; font-size: 12.5px; color: #607d8b; line-height: 1.4; margin-top: 2px; }
+
+/* ---------- Los controles propios: Mapa / Satélite y pantalla completa ----------
+   Van encima del mapa, en las esquinas, como en el mapa de Google que usaba el
+   área. El contenedor tiene 12px de relleno: por eso quedan a 22px del borde.
+   .mapa-leaflet tiene z-index 0, así que con 1 ya quedan por encima. */
+.mapa-capas {
+  position: absolute; top: 22px; left: 22px; z-index: 1;
+  display: flex; background: white; border-radius: 3px; overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.mapa-capas button {
+  border: none; background: white; padding: 0 17px; height: 40px;
+  font-family: inherit; font-size: 17px; color: #565656; cursor: pointer;
+}
+.mapa-capas button:hover { color: #000; }
+.mapa-capas button.activa { color: #000; font-weight: 600; }
+
+.mapa-pantalla-completa {
+  position: absolute; top: 22px; right: 22px; z-index: 1;
+  width: 40px; height: 40px; background: white; border: none; border-radius: 3px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.mapa-pantalla-completa:hover svg { fill: #000; }
+
+/* En pantalla completa el mapa ocupa todo: sin marco ni relleno. */
+.mapa-contenedor-completa { padding: 0; border: none; border-radius: 0; background: #000; }
+.mapa-contenedor-completa .mapa-leaflet { height: 100vh; border-radius: 0; }
+.mapa-contenedor-completa .mapa-capas,
+.mapa-contenedor-completa .mapa-pantalla-completa { top: 10px; }
+.mapa-contenedor-completa .mapa-capas { left: 10px; }
+.mapa-contenedor-completa .mapa-pantalla-completa { right: 10px; }
+
+/* El pin. `className` propio para que Leaflet no le ponga el cuadrado blanco
+   con borde de su .leaflet-div-icon. La sombra lo despega del fondo. */
+.mapa-pin { background: none; border: none; }
+.mapa-pin svg { display: block; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.4)); }
+.mapa-pin-leyenda { display: inline-flex; vertical-align: middle; }
+.mapa-pin-leyenda svg { display: block; }
+
 /* El contenido de la ventanita que se abre al hacer clic en un local. */
 .mapa-popup { display: flex; flex-direction: column; gap: 6px; min-width: 190px; font-size: 13px; }
 .mapa-popup strong { font-size: 14px; color: #1a1a1a; }

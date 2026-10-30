@@ -231,7 +231,7 @@ function Tablero() {
         <Aviso
           tipo="alerta"
           titulo={`${pendientesValidar.length} presentación(es) del portal esperando validación`}
-          accion={<Link to="/validaciones">Ir a validar</Link>}
+          accion={<Link to="/documentacion">Ir a validar</Link>}
         />
       )}
 

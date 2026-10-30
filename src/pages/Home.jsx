@@ -120,8 +120,14 @@ function Home() {
      siempre en el mismo lugar). */
   // Solo lo que ESTE usuario puede resolver: al administrativo no se le cuentan
   // las exenciones que confirma coordinación, y al notificador solo sus cédulas.
+  /* Y solo las bandejas cuya pantalla este rol todavía puede abrir: si el
+     administrador le apagó Notificaciones desde Accesos, la tarjeta "Cola de
+     emisión" desaparece con el módulo, igual que el ítem del menú. Antes
+     quedaba la tarjeta con el número y sin link, que confundía. */
   const bandejasDelRol = habilitado
-    ? bandejasPara(rol, 'prioridad', { soloTrabajo: true, idUsuario: yo?.id ?? null })
+    ? bandejasPara(rol, 'prioridad', { soloTrabajo: true, idUsuario: yo?.id ?? null }).filter((b) =>
+        destinoDeBandeja(b, rol, permisos),
+      )
     : [];
   const bandejas = bandejasDelRol.filter((b) => b.locales.length > 0);
 
@@ -132,7 +138,10 @@ function Home() {
 
      Importa que esté a la vista: mientras una presentación está sin validar el
      plazo del local SIGUE CORRIENDO (sección 6.3 del pliego). */
-  const puedeValidar = puedeVerRuta(rol, '/validaciones', permisos);
+  // Validar vive dentro de Documentación (la pestaña Validaciones se fusionó
+  // ahí): el permiso que manda es el de ese módulo. Con '/validaciones', que
+  // ya no es módulo, la tarjeta se veía aunque Documentación estuviera apagada.
+  const puedeValidar = puedeVerRuta(rol, '/documentacion', permisos);
   const aValidar = puedeValidar ? presentacionesPendientes() : [];
 
   const totalPendientes = bandejas.reduce((n, b) => n + b.locales.length, 0) + aValidar.length;
@@ -306,7 +315,7 @@ function Home() {
                 descripcion="Presentaciones del portal que esperan aprobación de la oficina."
                 valor={aValidar.length}
                 color="amarillo"
-                to="/validaciones"
+                to="/documentacion"
                 pie="Mientras no se aprueben, el plazo del local sigue corriendo."
               />
             )}

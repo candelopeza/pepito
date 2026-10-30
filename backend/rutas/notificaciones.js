@@ -49,8 +49,7 @@ import {
   ESTADO_POR_RESULTADO,
   ID_ESTADO,
   ID_TTRAMITE,
-  datosRegistralesCompletos,
-  faltantesRegistrales,
+  faltantesParaEmitir,
   numeroDeCedula,
 } from '../mapeo.js';
 import { firmante, requiereRol } from '../middlewares/usuario.js';
@@ -58,7 +57,6 @@ import { tiene } from '../capacidades.js';
 import { ErrorActo, ejecutarActo } from '../actos.js';
 import { archivosDisponibles, existeHash, guardarImagen, leerImagen } from '../archivos.js';
 import { fmtFecha, hoyISO, vencimientoHabil } from '../../src/dominio/fechas.js';
-import { requiereDatosRegistrales } from '../../src/dominio/reglas.js';
 import { resultadoEntrega } from '../../src/dominio/actuaciones.js';
 
 const router = Router();
@@ -136,7 +134,8 @@ router.post('/', requiereRol('administrativo', 'coordinacion'), async (req, res,
    backend/tareas-programadas.js (sección 9.6). Esa pasa `automatica` con el
    texto que identifica la corrida: el acto queda en el historial como obra
    del Sistema y con ese texto, para distinguirlo de una emisión manual. Los
-   controles son los mismos: estado, bloqueo y datos registrales. */
+   controles son los mismos: estado, bloqueo y datos del local (la primera
+   pide nombre y dirección; la segunda, además, CUIT, razón social y rubro). */
 export async function emitirCedula(req, idLocal, { automatica = null } = {}) {
   const { idTramite } = await ejecutarActo(req, {
     idLocal,
@@ -144,13 +143,10 @@ export async function emitirCedula(req, idLocal, { automatica = null } = {}) {
     // El Sistema no tiene tipo de usuario: lo habilita la Dirección al
     // prender la emisión automática o el respaldo en Parámetros.
     rolHabilitadoAunque: automatica ? () => true : null,
-    // Los datos registrales se exigen para la segunda cédula, no para la
-    // primera (ver requiereDatosRegistrales en src/dominio/reglas.js).
-    controlar: async ({ local, estado }) =>
-      requiereDatosRegistrales('generar-cedula', false, estado.startsWith('NOTIF2') ? 2 : 1) &&
-      !datosRegistralesCompletos(local)
-        ? new ErrorActo(400, `No se puede emitir la segunda cédula: faltan ${faltantesRegistrales(local).join(', ')}`)
-        : null,
+    controlar: async ({ local, estado }) => {
+      const faltan = faltantesParaEmitir(local, estado.startsWith('NOTIF2') ? 2 : 1);
+      return faltan.length ? new ErrorActo(400, `No se puede emitir la cédula: faltan ${faltan.join(', ')}`) : null;
+    },
     motivo: (r) =>
       `${automatica ?? 'Emisión'} de la ${r.instancia === 1 ? 'primera' : 'segunda'} cédula N° ${r.numero}`,
     trabajo: async (cx, { local, actuaciones, estado }) => {
@@ -226,9 +222,8 @@ router.post('/:id/regenerar', requiereRol('administrativo', 'coordinacion'), asy
         if (RESULTADOS_EFECTIVOS.includes(actual.resultado)) {
           return new ErrorActo(409, 'La cédula ya se entregó y su plazo corre: no se puede reemplazar.');
         }
-        if (requiereDatosRegistrales('regenerar-cedula', false, actual.instancia) && !datosRegistralesCompletos(local)) {
-          return new ErrorActo(400, `No se puede emitir la segunda cédula: faltan ${faltantesRegistrales(local).join(', ')}`);
-        }
+        const faltan = faltantesParaEmitir(local, actual.instancia === 2 ? 2 : 1);
+        if (faltan.length) return new ErrorActo(400, `No se puede emitir la cédula: faltan ${faltan.join(', ')}`);
         return null;
       },
       motivo: (r) => `Regeneración: la cédula N° ${r.nueva} reemplaza a la N° ${r.anterior}`,

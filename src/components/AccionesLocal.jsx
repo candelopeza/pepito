@@ -44,7 +44,7 @@ import FormEntrega from './FormEntrega';
 import VistaCedula from './VistaCedula';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
-import { accionesDisponibles, faltantesRegistrales, requiereDatosRegistrales } from '../dominio/reglas';
+import { accionesDisponibles, faltantesParaCedula, faltantesRegistrales, instanciaPorEmitir } from '../dominio/reglas';
 import { Link } from 'react-router-dom';
 import { puedeEditar, puedeVerRuta } from '../config/modulos';
 
@@ -110,9 +110,9 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
   const [anclaMenu, setAnclaMenu] = useState(null);
 
   const faltan = faltantesRegistrales(local);
-  // La cédula se traba por datos faltantes solo cuando es la segunda.
-  const bloqueaCedula =
-    faltan.length > 0 && requiereDatosRegistrales('generar-cedula', false, local.estado?.startsWith('NOTIF2') ? 2 : 1);
+  // Para emitir: la primera cédula pide nombre y dirección; la segunda, todo.
+  const faltanParaPrimera = faltantesParaCedula(local, 1);
+  const faltanParaCedula = faltantesParaCedula(local, instanciaPorEmitir(local));
 
   /* La cédula sobre la que operan asignar / entrega / regenerar: la ÚLTIMA
      emitida (con número), si todavía no tiene una entrega efectiva. Incluye
@@ -317,11 +317,17 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
         <p>
           <strong>{local.nombreLocal}</strong> entra en la cola de emisión de la primera cédula.
         </p>
-        {faltan.length > 0 && (
-          <Aviso tipo="info" titulo="Faltan datos registrales">
-            Falta {faltan.join(', ')}. La primera cédula se puede emitir igual; esos datos van a hacer falta recién para
-            la segunda.
+        {faltanParaPrimera.length > 0 ? (
+          <Aviso tipo="alerta" titulo="Faltan datos del local">
+            Falta {faltanParaPrimera.join(', ')}. Podés habilitarlo, pero no vas a poder emitir la cédula hasta cargarlos.
           </Aviso>
+        ) : (
+          faltan.length > 0 && (
+            <Aviso tipo="info" titulo="Faltan datos registrales">
+              Falta {faltan.join(', ')}. La primera cédula se puede emitir igual; esos datos van a hacer falta recién
+              para la segunda.
+            </Aviso>
+          )
         )}
       </Confirmar>
 
@@ -349,19 +355,22 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
       <Confirmar
         abierto={abierta === 'generar-cedula'}
         titulo="Generar la cédula de notificación"
-        textoConfirmar={bloqueaCedula ? 'No se puede generar' : 'Generar cédula'}
-        deshabilitado={bloqueaCedula}
+        textoConfirmar={faltanParaCedula.length > 0 ? 'No se puede generar' : 'Generar cédula'}
+        deshabilitado={faltanParaCedula.length > 0}
         onCancelar={cerrar}
         onConfirmar={() => {
-          if (bloqueaCedula) return;
+          if (faltanParaCedula.length > 0) return;
           generarCedula(local.id);
           terminar();
         }}
       >
-        {bloqueaCedula ? (
-          <Aviso tipo="bloqueo" titulo="Faltan datos registrales">
-            Falta {faltan.join(', ')}. La segunda cédula tiene que individualizar correctamente al sujeto obligado: sin
-            esos datos la notificación es impugnable. Completá el padrón y volvé.
+        {faltanParaCedula.length > 0 ? (
+          <Aviso tipo="bloqueo" titulo="Faltan datos del local">
+            Falta {faltanParaCedula.join(', ')}.{' '}
+            {instanciaPorEmitir(local) === 2
+              ? 'La segunda cédula tiene que individualizar correctamente al sujeto obligado: sin esos datos la notificación es impugnable.'
+              : 'Sin eso la cédula no puede llegar.'}{' '}
+            Completá el padrón y volvé.
           </Aviso>
         ) : (
           <>

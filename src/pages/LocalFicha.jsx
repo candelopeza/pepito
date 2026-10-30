@@ -34,6 +34,7 @@ import HistorialActuaciones from '../components/HistorialActuaciones';
 import HistorialEstados from '../components/HistorialEstados';
 import Modal from '../components/ui/Modal';
 import FormLocal from '../components/FormLocal';
+import ConstanciaArca from '../components/ConstanciaArca';
 import { useDatos } from '../datos/datosContexto';
 import { useRol } from '../auth/rolContexto';
 import { puedeEditar, puedeVerRuta } from '../config/modulos';
@@ -213,7 +214,11 @@ function LocalFicha() {
       </div>
       <div className="ficha-datos">
         <Dato etiqueta="Razón social">{local.razonSocial}</Dato>
-        <Dato etiqueta="CUIT">{local.cuit}</Dato>
+        <Dato etiqueta="CUIT">
+          {/* El botón solo lo ve coordinación (ConstanciaArca). */}
+          {local.cuit}
+          {local.cuit && <> <ConstanciaArca cuit={local.cuit} /></>}
+        </Dato>
         <Dato etiqueta="Rubro">{local.rubro}</Dato>
         <Dato etiqueta="Dirección del local">{local.direccion}</Dato>
         <Dato etiqueta="Domicilio fiscal">{local.domicilioFiscal}</Dato>

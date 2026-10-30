@@ -679,7 +679,8 @@ este cambio hay que correr `npm install` en la carpeta del proyecto.
   y lugar para resultado y firma; el encabezado se repite en cada hoja.
 - **Pie de cada hoja:** abajo a la izquierda, "Generado el dd/mm/aaaa a las
   hh:mm por …", con el usuario de la barra de arriba (con "Firmar como", su
-  legajo; con CiDiTuc, el de su inicio de sesión).
+  legajo; con CiDiTuc, el de su inicio de sesión). Desde el 27/10/2026 las
+  cédulas ya no lo llevan (sección 20); la hoja de ruta y los listados, sí.
 - **Dónde:** en Notificaciones ("Imprimir hoja de ruta", "Hoja de ruta en
   PDF", "Imprimir N cédula(s)", "Cédulas en PDF") y en la vista de cada cédula
   ("Imprimir" y "Descargar PDF"). Imprimir abre el PDF en otra pestaña con el
@@ -912,13 +913,13 @@ los formularios, también el de la entrega.
 **El CUIL del titular habilitado no se guardaba.** La tabla `local` de la base
 del área no tiene la columna: se escribía, se mandaba y se perdía; al volver a
 abrir aparecía vacío. Ahora:
-- `backend/sql/11-titular-cuil.sql` (OPCIONAL, aditivo) agrega la columna.
+- `backend/sql/12-titular-cuil.sql` (OPCIONAL, aditivo) agrega la columna.
   **Hay que correrlo en HeidiSQL en la base del área.**
 - Sin el script, el campo aparece bloqueado y dice que falta correrlo.
 - Con el script, se guarda, aparece al volver a abrir y el cambio queda en el
   historial del local ("CUIL del titular habilitado: decía…, ahora…").
 - `capacidades.js` lo detecta solo (bandera `titularCuil`) y
-  `npm run verificar` informa si están corridos sql/10 y sql/11.
+  `npm run verificar` informa si están corridos sql/10 y sql/12.
 
 **La dirección corregida no aparecía en el mapa.** El backend sí vuelve a
 buscar la coordenada al cambiar la dirección, pero no avisaba si no la
@@ -1021,3 +1022,143 @@ una dependencia nueva).
 
 `npm audit` avisa de una vulnerabilidad moderada en `uuid`, que ya estaba (no
 la trae `compression`).
+
+## 19. Arreglos después de mezclar las dos ramas (22 de octubre de 2026)
+
+Revisado todo lo mezclado (las pruebas del circuito, las de cande, las del
+repositorio y un recorrido de todas las pantallas por rol en 5 tamaños). Lo que
+había que arreglar:
+
+- **La app se colgaba si el tipo de usuario titular estaba deshabilitado.** La
+  app arranca como titular (rol por defecto), y el Inicio tenía DOS
+  redirecciones al portal: una controlaba que el titular pudiera entrar, la
+  otra (agregada al arreglar la mezcla) no. Con el titular deshabilitado en
+  Accesos, el Inicio mandaba al portal y el portal devolvía al Inicio, sin fin:
+  el navegador se trababa. Queda solo la redirección con el control
+  (`src/pages/Home.jsx`); deshabilitado, el Inicio muestra el aviso.
+- **La dirección de la API ya no es la IP de una PC.** El `.env` compartido
+  tenía `VITE_API_URL=http://172.16.11.98:3000` (la PC de cande), y la app de
+  la otra PC le pedía los datos a esa. Ahora `VITE_API_URL` va vacía y la app
+  busca la API en la misma máquina desde la que se abrió, puerto 3000:
+  `localhost:3000` en cada PC, `IP-de-la-PC:3000` desde un celular de la red
+  (`src/datos/api.js`). `/` y una dirección completa siguen andando igual.
+- **El backend rechazaba a la app en el puerto nuevo.** Vite pasó al 5174 y el
+  `backend/.env` de cada uno tenía `ORIGEN_FRONT=http://localhost:5173`: en
+  desarrollo va VACÍO (acepta la PC y los celulares de la red). Hay que
+  cambiarlo en el `backend/.env` de cada PC (no se sube a git).
+- **Dos scripts con el número 11.** El del CUIL del titular pasó a ser
+  `backend/sql/12-titular-cuil.sql` (el 11 es la corrección de fechas de
+  cande). Si ya se había corrido con el nombre viejo, no hace falta nada: no
+  repite la columna.
+- Textos que mandaban a "Herramientas → Geocodificación pendiente", que ahora
+  está dentro del Mapa.
+- Expedientes: la tabla no se rearmaba al cambiar de rol (faltaba una
+  dependencia del useMemo): el botón de cargar el número podía quedar mal.
+
+## 20. La cédula con el modelo oficial de la Dirección (26 de octubre de 2026)
+
+La Dirección de Ambiente pasó el modelo de la PRIMERA y la SEGUNDA
+NOTIFICACION y la cédula se imprime así (decidido con DITEC):
+
+- **Formato oficial fijo:** título y número arriba (`N°: 0001 - 000675`: la
+  serie y el número de seis cifras), los dos logos, Fecha / Hora / Sr./a para
+  completar a mano, los datos del local (razón social, comercio, CUIT,
+  domicilio comercial, rubro), el texto con el plazo en número y letras
+  (`5 (CINCO)` en la primera, `3 (tres)` en la segunda; sale del plazo de la
+  cédula), las cuatro ordenanzas con su casillero **vacío** (se tildan a mano
+  según el rubro), las firmas y las observaciones. La primera lleva las tres
+  firmas en una fila; la segunda, la del Director arriba y las de recepción y
+  notificador abajo, como en el modelo.
+- **Tres copias iguales** de cada cédula, una por hoja: para el local, para la
+  Dirección de Ambiente y para el expediente. Vale para "Imprimir" / "Descargar
+  PDF" de cada cédula y para "Cédulas en PDF" (el lote) de Notificaciones.
+- **"Ver cédula" muestra lo mismo que se imprime:** el texto sale de un solo
+  lugar, `src/dominio/cedulaOficial.js`, que usan la pantalla y el PDF.
+- Las cédulas **no** llevan el "Generado el ... por ..." de abajo a la
+  izquierda (lo pidió la Dirección el 27/10/2026); la hoja de ruta y los
+  listados en PDF sí. Quién imprimió y cuándo queda igual en la constancia de
+  impresión. `PIE_GENERADO_EN_CEDULAS = true` en `src/dominio/cedulaOficial.js`
+  lo vuelve a poner.
+- La plantilla editable de Configuración → Plantilla de cédula queda guardada
+  pero no se usa: la pantalla lo avisa. `FORMATO_OFICIAL = false` en
+  `src/dominio/cedulaOficial.js` vuelve al formato anterior.
+
+**LOS LOGOS:** `src/assets/cedula/logo-municipio.png` (Municipio San Miguel
+de Tucumán) y `src/assets/cedula/logo-ambiente.png` (Secretaría de Ambiente y
+Desarrollo Sustentable · Dirección de Ambiente), recortados de la imagen del
+encabezado que pasó la Dirección. Van **dentro de la app** (Vite los incrusta
+en el `index.html`): salen también sin señal y abriendo el archivo con doble
+clic. No se deforman: cada uno se ajusta a su lugar, y el de Ambiente queda un
+poco más de la mitad de alto que el del Municipio, como en el modelo. Para
+cambiarlos, reemplazar esos dos archivos (mismo nombre, PNG) y compilar de
+nuevo. Si una imagen no carga, en su lugar va el nombre en texto y la cédula
+se imprime igual.
+
+## 21. Qué pide cada cédula (26 de octubre de 2026)
+
+**La primera cédula solo pide el nombre del local y la dirección** (lo decidió
+la Dirección): lo primero es asegurarse de que le llegue, y muchos locales no
+tienen el resto de los datos o no los dan. La **segunda** ya pide todo:
+además, CUIT, razón social y rubro. Antes las dos pedían CUIT, razón social y
+rubro.
+
+- La regla está en un solo lugar, `faltantesParaCedula` de
+  `src/dominio/reglas.js`, y la usan las pantallas (generar cédula, habilitar
+  la notificación, la cola de Notificaciones, la impresión) y el servidor (la
+  emisión manual, la automática y la regeneración, con
+  `faltantesParaEmitir` de `backend/mapeo.js`).
+- `PRIMERA_SOLO_NOMBRE_Y_DIRECCION = false` en `src/dominio/reglas.js` vuelve
+  a pedir todo en las dos.
+- Cande hizo el mismo cambio en paralelo (`requiereDatosRegistrales` con la
+  instancia, PR #20). Al mezclar (27/10/2026) quedó una sola regla:
+  `faltantesParaCedula` pide nombre y dirección, y para CUIT, razón social y
+  rubro le pregunta a `requiereDatosRegistrales`. De cande quedaron además el
+  botón "Generar cédula" deshabilitado cuando faltan datos y sus textos.
+- En esa mezcla `src/App.css` chocaba entero: un salto de línea mal formado
+  (`\r\r\n`) hizo que Git dejara de tratarlo como texto y el commit lo subió
+  con saltos de Windows. Se dejó con saltos normales (`\n`), como en `main`.
+- En la primera cédula impresa, lo que falta sale como **renglón de puntos**
+  para completarlo a mano si el titular lo da en la entrega.
+- Pasar a la segunda sigue igual: si al vencer la primera faltan CUIT, razón
+  social o rubro, el local queda en "Completar datos".
+- El rubro "SIN INFORMAR" (así guarda la base un rubro vacío) ahora cuenta
+  como faltante también en las pantallas, igual que en el servidor.
+
+## 22. La documentación del portal la completa coordinación (28 de octubre de 2026)
+
+**El titular ya no carga el tipo de documentación ni el número de
+expediente.** Presenta el documento (número, fecha de emisión, el PDF o la
+foto y observaciones) y coordinación, al aprobarlo, elige el tipo y carga el
+expediente: ese número existe recién cuando coordinación inicia el trámite.
+
+- Mientras espera, la presentación entra como "DDJJ de reciclaje"
+  (`TIPO_PROVISORIO_PORTAL`): es el Form D.A 03, lo que presenta casi todo el
+  mundo, y así la plantilla de cande sigue apareciendo en el portal. No cuenta
+  para nada hasta que se aprueba.
+- **Sin expediente no se aprueba.** En el diálogo de Aprobar de la bandeja
+  (Documentación) están el tipo, el N° de expediente y, si es un contrato, su
+  vencimiento. Si el tipo cambia, el vencimiento se calcula con el tipo nuevo
+  y se vuelve a controlar que el número no esté repetido. El historial dice
+  qué expediente cargó y con qué tipo se había presentado.
+- **Aprueba o rechaza solo coordinación** (`ROLES_QUE_VALIDAN`), también en
+  el servidor. Administrativo sigue viendo la bandeja, sin la columna de
+  decisión. El administrador pasa siempre.
+- La carga desde la oficina (Documentación y ficha del local) sigue igual:
+  pide tipo y expediente.
+- `COORDINACION_COMPLETA_PRESENTACION = false` en `src/dominio/reglas.js`
+  vuelve a pedirle las dos cosas al titular.
+
+**Botón "Constancia ARCA"** (`src/components/ConstanciaArca.jsx`, nuevo).
+Al lado del CUIT, en la bandeja de validación y en la ficha del local. Abre la
+consulta de constancias de inscripción de ARCA en otra pestaña y copia el
+CUIT: esa página pide el CUIT y un captcha, así que no se puede abrir con el
+CUIT ya puesto; se pega con Ctrl+V. Lo ve solo coordinación
+(`ROLES_CONSTANCIA_ARCA`) y el administrador.
+
+**Inicio de coordinación (30 de octubre de 2026).** En las acciones rápidas,
+coordinación ya no tiene "Nuevo relevamiento" (no releva: se le sacó la
+tarjeta, el módulo de campo sigue en su menú) y tiene una tarjeta
+**"Constancia de Inscripción ARCA"** que abre la página de ARCA en otra
+pestaña. Las tarjetas que llevan a una página de afuera usan `externa` y
+`logo` en `ACCIONES_RAPIDAS` (`src/config/modulos.js`); quién la ve sale de
+`ROLES_CONSTANCIA_ARCA`.

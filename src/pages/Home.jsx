@@ -161,7 +161,17 @@ function Home() {
   const ind = verIndicadores ? indicadores() : null;
 
   /* El titular entra directo a su portal: es lo único que tiene para hacer,
-     y el Inicio de oficina no le dice nada (sección 6.3). */
+     y el Inicio de oficina no le dice nada (sección 6.3). Quien entre sin ser
+     personal del área (el público, vía CiDiTuc) cae acá con rol titular y va
+     directo a lo suyo. Va después de todos los hooks: React exige que se
+     llamen en el mismo orden en cada render.
+
+     SOLO SI PUEDE ENTRAR AL PORTAL. Si el administrador deshabilitó el tipo de
+     usuario titular (Accesos), el portal lo devuelve al Inicio con
+     RutaProtegida; si el Inicio lo mandara al portal igual, la app quedaba
+     rebotando entre las dos sin fin y el navegador se colgaba (pasó al mezclar
+     las dos ramas el 22/10: había una segunda redirección sin esta condición).
+     Deshabilitado, se queda acá y ve el aviso de tipo de usuario deshabilitado. */
   if (rol === 'titular' && habilitado && puedeVerRuta(rol, '/portal', permisos)) {
     return <Navigate to="/portal" replace />;
   }
@@ -172,12 +182,6 @@ function Home() {
     month: 'long',
     day: 'numeric',
   });
-
-  /* El titular no tiene un "inicio" de oficina: su pantalla es el portal.
-     Quien entre sin ser personal del área (el público, vía CiDiTuc) cae acá
-     con rol titular y va directo a lo suyo. Va después de todos los hooks:
-     React exige que se llamen en el mismo orden en cada render. */
-  if (rol === 'titular') return <Navigate to="/portal" replace />;
 
   return (
     <>
@@ -242,17 +246,35 @@ function Home() {
               no tienen número (no cuentan nada, arrancan algo) y llevan el "+"
               adelante. Ver App.css sección 7.b. */}
           <div className="grid-acciones">
-            {acciones.map((a) => (
-              <Link key={a.id} to={a.ruta} className="card-accion">
-                <span className="card-accion-signo" aria-hidden="true">
-                  +
-                </span>
-                <span className="card-accion-texto">
-                  <strong>{a.titulo}</strong>
-                  <small>{a.descripcion}</small>
-                </span>
-              </Link>
-            ))}
+            {acciones.map((a) => {
+              const contenido = (
+                <>
+                  {/* Una página de afuera (ARCA) lleva su nombre en un cuadrado en vez del "+". */}
+                  {a.logo ? (
+                    <span className="card-accion-logo" aria-hidden="true">
+                      {a.logo}
+                    </span>
+                  ) : (
+                    <span className="card-accion-signo" aria-hidden="true">
+                      +
+                    </span>
+                  )}
+                  <span className="card-accion-texto">
+                    <strong>{a.titulo}</strong>
+                    <small>{a.descripcion}</small>
+                  </span>
+                </>
+              );
+              return a.externa ? (
+                <a key={a.id} href={a.externa} target="_blank" rel="noreferrer" className="card-accion">
+                  {contenido}
+                </a>
+              ) : (
+                <Link key={a.id} to={a.ruta} className="card-accion">
+                  {contenido}
+                </Link>
+              );
+            })}
           </div>
         </>
       )}

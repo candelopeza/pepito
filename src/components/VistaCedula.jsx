@@ -20,17 +20,113 @@
    plantilla, así lo que se ve acá y lo que sale impreso no pueden diferir.
    ============================================================================ */
 
+import { useState } from 'react';
 import Modal from './ui/Modal';
 import { useDatos } from '../datos/datosContexto';
 import { useRol } from '../auth/rolContexto';
 import { fmtFechaHora } from '../dominio/fechas';
 import { textoDeCedula } from '../dominio/textoCedula';
+import { COPIAS_OFICIALES, FORMATO_OFICIAL, LOGOS, contenidoCedulaOficial, faltantesCedulaOficial } from '../dominio/cedulaOficial';
 import { descargarPdf, imprimirPdf, nombreCedula, pdfCedulas, quienGenera } from './pdfCedulas';
+import logoMunicipio from '../assets/cedula/logo-municipio.png';
+import logoAmbiente from '../assets/cedula/logo-ambiente.png';
 
 /* La cédula sale en PDF (components/pdfCedulas.js): igual en cualquier
    navegador y con la constancia de notificación. En false vuelve a imprimirse
    desde el navegador, como antes. */
 const IMPRESION_EN_PDF = true;
+
+/* Un logo del modelo oficial. Si la imagen no carga, el nombre en texto, igual
+   que en el PDF. */
+function LogoCedula({ logo, imagen, derecha = false }) {
+  const [fallo, setFallo] = useState(false);
+  if (fallo) {
+    return (
+      <div className={`cedula-oficial-logo-texto ${derecha ? 'derecha' : ''}`}>
+        {logo.texto.map((t) => (
+          <span key={t}>{t}</span>
+        ))}
+      </div>
+    );
+  }
+  return <img className={`cedula-oficial-logo ${derecha ? 'derecha' : ''}`} src={imagen} alt={logo.texto.join(' ')} onError={() => setFallo(true)} />;
+}
+
+const Partes = ({ partes }) =>
+  partes.map((p, i) =>
+    p.e === 'bold' ? <strong key={i}>{p.t}</strong> : p.e === 'bolditalic' ? <strong key={i}><em>{p.t}</em></strong> : <span key={i}>{p.t}</span>,
+  );
+
+/* La cédula en pantalla con el modelo oficial: el mismo contenido que sale
+   impreso (dominio/cedulaOficial.js), para revisarla antes de imprimir. */
+function CedulaOficial({ cedula, local }) {
+  const c = contenidoCedulaOficial(cedula, local);
+  return (
+    <div className="cedula-oficial">
+      <div className="cedula-oficial-titulo">
+        <strong>{c.titulo}</strong>
+        <strong>N°: {c.numero}</strong>
+      </div>
+      <div className="cedula-oficial-logos">
+        <LogoCedula logo={LOGOS.municipio} imagen={logoMunicipio} />
+        <LogoCedula logo={LOGOS.ambiente} imagen={logoAmbiente} derecha />
+      </div>
+      <p className="cedula-oficial-fecha">
+        <strong>Fecha:</strong> ………/………/……… <strong>Hora:</strong> ………………
+      </p>
+      <p className="cedula-oficial-renglon">
+        <strong>Sr./a:</strong>
+        <span className="cedula-oficial-puntos" />
+      </p>
+      {c.datos.map((renglon, i) => (
+        <p key={i}>
+          {renglon.map((d) => (
+            <span key={d.etiqueta}>
+              <strong>{d.etiqueta}:</strong> {d.valor}{' '}
+            </span>
+          ))}
+        </p>
+      ))}
+      {c.parrafos.map((p, i) => (
+        <p key={i} className="justificado">
+          <Partes partes={p} />
+        </p>
+      ))}
+      {c.ordenanzas.map((o) => (
+        <p key={o.titulo} className="justificado">
+          ☐ <strong>{o.titulo}</strong>
+          {o.texto}
+        </p>
+      ))}
+      {c.cierre.map((p, i) => (
+        <p key={i} className="justificado">
+          <Partes partes={p} />
+        </p>
+      ))}
+      {c.instancia === 1 ? (
+        <div className="cedula-oficial-firmas tres">
+          <strong>Firma Recepción</strong>
+          <strong>Firma Notificador</strong>
+          <strong>Firma Director/ Sub director</strong>
+        </div>
+      ) : (
+        <>
+          <div className="cedula-oficial-firmas director">
+            <strong>Firma Director/ Sub director</strong>
+          </div>
+          <div className="cedula-oficial-firmas dos">
+            <strong>Firma Recepción</strong>
+            <strong>Firma Notificador</strong>
+          </div>
+        </>
+      )}
+      <p className="cedula-oficial-renglon">
+        <strong>OBSERVACIONES:</strong>
+        <span className="cedula-oficial-puntos" />
+      </p>
+    </div>
+  );
+}
 
 /* soloLectura: se puede ver pero no imprimir (el titular, desde su portal:
    imprimirla marcaría como impresa una cédula que la oficina todavía no
@@ -50,7 +146,9 @@ function VistaCedula({ abierto, cedula, local, onCerrar, soloLectura = false }) 
     (['administrativo', 'coordinacion', 'administrador', 'notificador'].includes(rol) ||
       (rol === 'relevador' && Boolean(usuario?.id) && cedula.notificadorId === usuario.id));
 
-  const { texto, faltantes } = textoDeCedula(plantillaCedula, cedula, local);
+  const { texto, faltantes: faltantesPlantilla } = textoDeCedula(plantillaCedula, cedula, local);
+  // Con el modelo oficial, lo que falta son los datos que imprime el modelo.
+  const faltantes = FORMATO_OFICIAL ? faltantesCedulaOficial(cedula, local) : faltantesPlantilla;
 
   function imprimir() {
     if (registraImpresion) marcarImpresa(cedula.id);
@@ -107,7 +205,16 @@ function VistaCedula({ abierto, cedula, local, onCerrar, soloLectura = false }) 
 
       {/* El bloque imprimible. La clase .solo-impresion de App.css hace que al
           imprimir salga solo esto y no la app entera. */}
-      <pre className="cedula-papel solo-impresion">{texto}</pre>
+      {FORMATO_OFICIAL ? (
+        <CedulaOficial cedula={cedula} local={local} />
+      ) : (
+        <pre className="cedula-papel solo-impresion">{texto}</pre>
+      )}
+      {FORMATO_OFICIAL && IMPRESION_EN_PDF && (
+        <p className="texto-chico">
+          Se imprimen {COPIAS_OFICIALES} copias iguales: para el local, para la Dirección de Ambiente y para el expediente.
+        </p>
+      )}
 
       {registraImpresion && (
         <div className="bloque-info">

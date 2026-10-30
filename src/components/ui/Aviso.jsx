@@ -29,7 +29,7 @@
 
 function Aviso({ tipo = 'info', titulo, children, icono, accion }) {
   return (
-    <div className={`aviso aviso-${tipo}`}>
+    <div className={`aviso aviso-${tipo}${accion ? ' aviso-con-accion' : ''}`}>
       {icono && <span className="aviso-icono">{icono}</span>}
       <div className="aviso-cuerpo">
         {titulo && <strong className="aviso-titulo">{titulo}</strong>}

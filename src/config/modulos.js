@@ -87,6 +87,8 @@
        documentación y expedientes" entre las tareas del administrativo (7.2).
    ============================================================================ */
 
+import { ROLES_CONSTANCIA_ARCA, URL_CONSTANCIA_ARCA } from '../dominio/reglas.js';
+
 export const MODULOS = [
   /* ===================== OPERATIVO ===================== */
   {
@@ -301,6 +303,9 @@ export const MODULOS = [
      titulo       texto de la tarjeta
      descripcion  la bajada, una línea
      ruta         a dónde va. Puede llevar query string (ver `?nuevo=1`).
+     externa      (en vez de ruta) una página de afuera: se abre en otra
+                  pestaña y no pasa por los permisos de MODULOS.
+     logo         (opcional) texto del cuadrado que reemplaza al "+"
      roles        a qué roles se les ofrece
 
    >>> POR QUÉ 'Nuevo local' APUNTA A /locales?nuevo=1 <<<
@@ -322,7 +327,8 @@ export const ACCIONES_RAPIDAS = [
     titulo: 'Nuevo relevamiento',
     descripcion: 'Relevar un local en territorio. Funciona sin conexión.',
     ruta: '/campo/relevar',
-    roles: ['relevador', 'coordinacion'],
+    // Coordinación no releva (30/10/2026): se le sacó la tarjeta, no el módulo.
+    roles: ['relevador'],
   },
   {
     id: 'registrar-entrega',
@@ -344,6 +350,16 @@ export const ACCIONES_RAPIDAS = [
     descripcion: 'Cargar una DDJJ, una DDJJ de reciclaje o un contrato',
     ruta: '/documentacion',
     roles: ['administrativo', 'coordinacion'],
+  },
+  {
+    // Para controlar la inscripción del titular al revisar la documentación
+    // (30/10/2026). En la bandeja y en la ficha el botón además copia el CUIT.
+    id: 'constancia-arca',
+    titulo: 'Constancia de Inscripción ARCA',
+    descripcion: 'Link a la página de ARCA',
+    externa: URL_CONSTANCIA_ARCA,
+    logo: 'ARCA',
+    roles: ROLES_CONSTANCIA_ARCA,
   },
   {
     id: 'mis-relevamientos',
@@ -496,5 +512,5 @@ export function accionesRapidasPara(rol, permisos) {
   // de ACCIONES_RAPIDAS), menos la del portal, que es del titular. Antes no
   // aparecía en ningún `roles` y entraba a un Inicio sin acciones.
   const seLeOfrece = (a) => (rol === ROL_ADMINISTRADOR ? a.id !== 'mis-locales' : a.roles.includes(rol));
-  return ACCIONES_RAPIDAS.filter((a) => seLeOfrece(a) && puedeVerRuta(rol, a.ruta.split('?')[0], permisos));
+  return ACCIONES_RAPIDAS.filter((a) => seLeOfrece(a) && (a.externa || puedeVerRuta(rol, a.ruta.split('?')[0], permisos)));
 }

@@ -19,7 +19,7 @@
    local se obtiene SIEMPRE geocodificando la dirección declarada (sección 9.2).
    Si cambiás la dirección y guardás, la coordenada se recalcula sola. Si la
    dirección no se puede geocodificar, el local queda sin ubicación y aparece
-   en Herramientas → Geocodificación pendiente: no se le pone un valor
+   en el Mapa (Geocodificación pendiente): no se le pone un valor
    aproximado ni se copia la del relevamiento.
 
    >>> EL CAMPO "CASA CENTRAL / SUCURSAL" NO ESTÁ <<<
@@ -55,7 +55,7 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
   // El resultado de "Ubicar en el mapa": { ok, latitud, longitud } o { ok: false, motivo }.
   const [ubicacion, setUbicacion] = useState(null);
   const [buscando, setBuscando] = useState(false);
-  // Sin la columna (sql/11) el CUIL del titular no tiene dónde guardarse.
+  // Sin la columna (sql/12) el CUIL del titular no tiene dónde guardarse.
   const guardaCuilTitular = Boolean(capacidades?.titularCuil);
 
   function cambiar(campo, valor) {
@@ -245,7 +245,7 @@ function FormLocal({ local, soloLectura = false, esNuevo = false, onGuardar, onC
           ayuda={
             guardaCuilTitular || soloLectura
               ? undefined
-              : 'Esta base todavía no lo guarda: falta correr backend/sql/11-titular-cuil.sql en HeidiSQL.'
+              : 'Esta base todavía no lo guarda: falta correr backend/sql/12-titular-cuil.sql en HeidiSQL.'
           }
           teclado="numeric"
         />

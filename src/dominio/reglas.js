@@ -40,16 +40,42 @@ import { LISTA_ESTADOS } from './estados.js';
    CUIT, razón social y rubro, la notificación es impugnable.
    ============================================================================ */
 export function datosRegistralesCompletos(local) {
-  return Boolean(local?.cuit?.trim() && local?.razonSocial?.trim() && local?.rubro?.trim());
+  return faltantesRegistrales(local).length === 0;
 }
+
+/* El rubro "SIN INFORMAR" es como viene de la base un rubro vacío (la fila 1
+   del catálogo): cuenta como faltante, igual que en backend/mapeo.js. */
+export const rubroSinInformar = (rubro) => !String(rubro ?? '').trim() || String(rubro).trim().toUpperCase() === 'SIN INFORMAR';
 
 export function faltantesRegistrales(local) {
   const faltan = [];
   if (!local?.cuit?.trim()) faltan.push('CUIT');
   if (!local?.razonSocial?.trim()) faltan.push('razón social');
-  if (!local?.rubro?.trim()) faltan.push('rubro');
+  if (rubroSinInformar(local?.rubro)) faltan.push('rubro');
   return faltan;
 }
+
+/* QUÉ PIDE CADA CÉDULA (lo decidió la Dirección, 26/10/2026)
+   La primera solo necesita el nombre del local y la dirección: lo primero es
+   asegurarse de que le llegue, y muchos no tienen el resto o no lo dan. La
+   segunda ya pide todo: además, CUIT, razón social y rubro. Si se piden o no
+   los datos registrales lo decide requiereDatosRegistrales (más abajo), que
+   es la misma regla. En false, las dos piden todo, como antes.
+   `registrales`: el backend pasa los suyos (allá el rubro SIN INFORMAR cuenta
+   como faltante, ver backend/mapeo.js). */
+export const PRIMERA_SOLO_NOMBRE_Y_DIRECCION = true;
+
+export function faltantesParaCedula(local, instancia, registrales = faltantesRegistrales(local)) {
+  const faltan = [];
+  if (!String(local?.nombreLocal ?? '').trim()) faltan.push('nombre del local');
+  if (!String(local?.direccion ?? '').trim()) faltan.push('dirección');
+  const pideRegistrales = !PRIMERA_SOLO_NOMBRE_Y_DIRECCION || requiereDatosRegistrales('generar-cedula', false, instancia);
+  return pideRegistrales ? [...faltan, ...registrales] : faltan;
+}
+
+/* Qué cédula le toca a un local en la cola de emisión: la segunda si está
+   en NOTIF2_PENDIENTE, si no la primera. */
+export const instanciaPorEmitir = (local) => (String(local?.estado ?? '').startsWith('NOTIF2') ? 2 : 1);
 
 /* ============================================================================
    DOCUMENTACIÓN VIGENTE
@@ -219,6 +245,26 @@ export const ESTADOS_CON_DOCUMENTACION = [
   'CONTRATO_9DJ',
   'PRESENTACION_EN_REVISION',
 ];
+
+/* LO QUE PRESENTA EL TITULAR LO COMPLETA COORDINACIÓN (pedido del 28/10/2026).
+   El titular sube el documento sin decir de qué tipo es ni el número de
+   expediente: ese número existe recién cuando coordinación inicia el trámite.
+   Al aprobar, coordinación elige el tipo y carga el expediente, y sin
+   expediente no se aprueba. En false, el portal vuelve a pedirle las dos
+   cosas al titular, como antes. */
+export const COORDINACION_COMPLETA_PRESENTACION = true;
+/* El tipo con el que entra la presentación mientras espera: el Form D.A 03,
+   que es lo que presenta casi todo el mundo. No cuenta para nada hasta que
+   coordinación lo confirma o lo cambia al aprobar. */
+export const TIPO_PROVISORIO_PORTAL = 'DDJJ_RECICLAJE';
+/* Quién aprueba o rechaza lo que entra por el portal (hasta el 28/10/2026
+   también administrativo, que ahora ve la bandeja sin decidir). El
+   administrador pasa siempre. */
+export const ROLES_QUE_VALIDAN = ['coordinacion'];
+/* Quién ve el botón de la constancia de inscripción de ARCA (en la bandeja,
+   la ficha del local y las acciones rápidas del Inicio), y a dónde lleva. */
+export const ROLES_CONSTANCIA_ARCA = ['coordinacion'];
+export const URL_CONSTANCIA_ARCA = 'https://seti.afip.gob.ar/padron-puc-constancia-internet/ConsultaConstanciaAction.do';
 
 export const ACCIONES = [
   {

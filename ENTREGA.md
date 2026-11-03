@@ -6,11 +6,12 @@ a CiDiTuc como un portal más.
 
 ## 1. Los usuarios reales (lo hace Dirección, una sola vez)
 
-Hoy la base tiene solo dos usuarios (los legajos de administración). Hay que
-cargar a cada agente del área:
+Hoy la base tiene los usuarios cargados para las pruebas. Hay que cargar a
+cada agente del área:
 
 1. Entrar al sistema → **Accesos → Usuarios**.
-2. Crear un usuario por persona, con su **legajo** y su tipo (relevador,
+2. Crear un usuario por persona, con su **número de persona** (id_persona,
+   el identificador del padrón municipal) y su tipo (relevador,
    notificador, administrativo, coordinación, dirección).
 3. Verificar en **Accesos** que cada rol tenga habilitados los módulos que le
    corresponden (ya vienen con el reparto del pliego; solo revisar).
@@ -26,14 +27,14 @@ ACEPTAR_ROL_DECLARADO=no
 y reiniciar el backend. Con eso:
 
 - El servidor deja de aceptar roles declarados por el navegador: **solo
-  reconoce a los usuarios cargados en la base**, por su legajo.
+  reconoce a los usuarios cargados en la base**, por su número de persona.
 - La barra del sistema cambia sola: desaparecen el selector de rol de prueba y
   los nombres supuestos (Jorge Medina, Ana Gómez, etc.) y queda un único
   desplegable **"Elegí tu usuario…"** con los agentes reales.
 - El buscador de prueba del portal del titular ("ver como el CUIT…") también
   se oculta.
 
-Esta identificación por legajo es provisoria **hasta CiDiTuc**: cuando el
+Esta identificación por número de persona es provisoria **hasta CiDiTuc**: cuando el
 sistema se sume al login único, la identidad la provee CiDiTuc y se reemplaza
 un solo archivo del backend (`middlewares/usuario.js`) y el selector de la
 barra. Las rutas no se tocan.
@@ -48,8 +49,10 @@ barra. Las rutas no se tocan.
 
 ## 4. La base de datos
 
-- Las tablas del sistema ya están creadas (scripts `backend/sql/03` a `10`,
-  todos idempotentes: correrlos de nuevo no rompe nada).
+- Las tablas del sistema ya están creadas (scripts `backend/sql/03` a `13`,
+  todos idempotentes: correrlos de nuevo no rompe nada). El `13` (cédula por
+  correo) además necesita el servidor SMTP en `backend/.env` (`CORREO_*`);
+  sin eso la opción no aparece y todo sigue en papel.
 - Los datos de prueba (locales "cande", cargas de ensayo del informe 9DJ,
   trámites de ensayo) quedaron dados de baja lógica el 2026-10-15: no se ven
   en el sistema, pero están en la base con `habilita = 0` por si hace falta
@@ -99,4 +102,4 @@ servidor que asigne DITEC, para que arranque solo.
 | ¿Portal muestra números de expediente? | Dirección |
 
 Ninguno bloquea la operación diaria: el sistema funciona completo con la
-identificación por legajo y la carga manual.
+identificación por número de persona y la carga manual.

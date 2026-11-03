@@ -73,6 +73,23 @@ const ESTILO_ITEM = {
   '&:hover': { backgroundColor: '#e3f2fd', color: '#1565c0' },
 };
 
+/* Por qué vía sale la cédula (ver NOTIFICACIÓN POR CORREO en
+   backend/rutas/notificaciones.js). */
+const MEDIOS_CEDULA = [
+  { id: 'papel', titulo: 'Cédula en papel', detalle: 'La lleva el notificador. El plazo arranca con la entrega.' },
+  {
+    id: 'correo',
+    titulo: 'Solo por correo electrónico',
+    detalle: (l) => `Se manda a ${l.email}. Se registra como entregada hoy y el plazo empieza a correr.`,
+  },
+  {
+    id: 'ambos',
+    titulo: 'Ambos: papel y correo',
+    detalle: (l) => `Sale en papel con el notificador y además se manda hoy a ${l.email} como copia.`,
+  },
+];
+const TEXTO_GENERAR = { papel: 'Generar cédula', correo: 'Generar y enviar por correo', ambos: 'Generar y enviar copia' };
+
 function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false }) {
   const { rol, usuario } = useRol();
   const datos = useDatos();
@@ -84,7 +101,9 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
     guardarLocal,
     revisarRelevamiento,
     generarCedula,
+    enviarCedulaPorCorreo,
     regenerarCedula,
+    capacidades,
     asignarNotificador,
     registrarEntrega,
     registrarDocumento,
@@ -113,6 +132,10 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
   // Para emitir: la primera cédula pide nombre y dirección; la segunda, todo.
   const faltanParaPrimera = faltantesParaCedula(local, 1);
   const faltanParaCedula = faltantesParaCedula(local, instanciaPorEmitir(local));
+  // El medio elegido en el modal de generar (sql/13). Correo solo si el local
+  // tiene uno y el servidor lo tiene configurado.
+  const puedeMandarCorreo = Boolean(capacidades?.correo) && Boolean(String(local.email ?? '').trim());
+  const medioCedula = puedeMandarCorreo ? (form.medio ?? 'papel') : 'papel';
 
   /* La cédula sobre la que operan asignar / entrega / regenerar: la ÚLTIMA
      emitida (con número), si todavía no tiene una entrega efectiva. Incluye
@@ -131,8 +154,11 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
     ['notificador', 'relevador'].includes(rol) &&
     Boolean(cedulaPendiente?.notificadorId) &&
     cedulaPendiente.notificadorId !== usuario?.id;
+  // "Enviar por correo" solo si el servidor tiene el correo configurado
+  // (capacidad `correo`: sql/13 + CORREO_HOST). Que el local tenga correo ya
+  // lo mira la regla (condicion en ACCIONES).
   const disponibles = accionesDisponibles(local.estado, rol, local).filter(
-    (a) => !(a.id === 'registrar-entrega' && deOtroAgente),
+    (a) => !(a.id === 'registrar-entrega' && deOtroAgente) && !(a.id === 'enviar-cedula-correo' && !capacidades?.correo),
   );
 
   // `activo` lo manda el backend desde que la lista trae también las bajas.
@@ -355,12 +381,12 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
       <Confirmar
         abierto={abierta === 'generar-cedula'}
         titulo="Generar la cédula de notificación"
-        textoConfirmar={faltanParaCedula.length > 0 ? 'No se puede generar' : 'Generar cédula'}
+        textoConfirmar={faltanParaCedula.length > 0 ? 'No se puede generar' : TEXTO_GENERAR[medioCedula]}
         deshabilitado={faltanParaCedula.length > 0}
         onCancelar={cerrar}
         onConfirmar={() => {
           if (faltanParaCedula.length > 0) return;
-          generarCedula(local.id);
+          generarCedula(local.id, medioCedula);
           terminar();
         }}
       >
@@ -378,11 +404,75 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
               Se va a emitir la <strong>{local.estado.startsWith('NOTIF2') ? 'segunda' : 'primera'} cédula</strong> de{' '}
               <strong>{local.nombreLocal}</strong>, con número correlativo.
             </p>
-            <Aviso tipo="info" titulo="La emisión no hace correr ningún plazo">
-              El cómputo arranca en la entrega efectiva. Después de generar hay que asignar notificador y registrar el
-              resultado de la entrega.
-            </Aviso>
+
+            {/* POR QUÉ MEDIO. Correo solo si el local tiene uno cargado y el
+                servidor lo tiene configurado (sql/13 + CORREO_HOST): si no,
+                la opción directamente no se ofrece y queda papel, como siempre. */}
+            {puedeMandarCorreo ? (
+              <div className="opciones-medio" role="radiogroup" aria-label="Medio de notificación">
+                {MEDIOS_CEDULA.map((m) => (
+                  <label key={m.id} className={`opcion-medio${medioCedula === m.id ? ' opcion-medio-activa' : ''}`}>
+                    <input
+                      type="radio"
+                      name="medio-cedula"
+                      value={m.id}
+                      checked={medioCedula === m.id}
+                      onChange={() => setForm((f) => ({ ...f, medio: m.id }))}
+                    />
+                    <span>
+                      <strong>{m.titulo}</strong>
+                      <small>{typeof m.detalle === 'function' ? m.detalle(local) : m.detalle}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="texto-chico">
+                Sale en papel.{' '}
+                {capacidades?.correo
+                  ? 'El local no tiene correo electrónico cargado: para mandarla también por correo, cargalo en el padrón.'
+                  : 'El envío por correo no está habilitado en el servidor.'}
+              </p>
+            )}
+
+            {medioCedula === 'correo' ? (
+              <Aviso tipo="alerta" titulo="Solo por correo: el plazo empieza a correr hoy">
+                El envío se registra como entrega efectiva en la fecha de hoy y no pasa por el notificador. Usalo solo
+                si la Dirección validó la notificación electrónica para este local; si hay dudas, elegí "Ambos".
+              </Aviso>
+            ) : (
+              <Aviso tipo="info" titulo="La emisión no hace correr ningún plazo">
+                El cómputo arranca en la entrega efectiva. Después de generar hay que asignar notificador y registrar el
+                resultado de la entrega{medioCedula === 'ambos' ? '; el correo sale ahora, como copia' : ''}.
+              </Aviso>
+            )}
           </>
+        )}
+      </Confirmar>
+
+      {/* Mandar por correo una cédula ya emitida: si salió solo en papel,
+          pasa a "ambos" (el papel sigue y fija el plazo). También reintenta
+          un envío que falló. */}
+      <Confirmar
+        abierto={abierta === 'enviar-cedula-correo'}
+        titulo="Enviar la cédula por correo electrónico"
+        textoConfirmar="Enviar por correo"
+        onCancelar={cerrar}
+        onConfirmar={() => {
+          if (cedulaPendiente) enviarCedulaPorCorreo(cedulaPendiente.id);
+          terminar();
+        }}
+      >
+        <p>
+          Se manda la cédula <strong>{cedulaPendiente?.numeroCedula}</strong> a <strong>{local.email}</strong>, con el
+          mismo texto que se imprime.
+        </p>
+        {cedulaPendiente?.correoEnviadoEn ? (
+          <p className="texto-chico">Ya se había enviado a {cedulaPendiente.correoEnviadoA}. Este es un reenvío.</p>
+        ) : (
+          <p className="texto-chico">
+            La cédula en papel sigue su curso normal: el plazo lo fija la entrega del notificador, no este correo.
+          </p>
         )}
       </Confirmar>
 

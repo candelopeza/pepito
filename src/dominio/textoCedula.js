@@ -24,14 +24,21 @@ function completar(plantilla, valores) {
    esta vista y la impresión por lote (pages/Notificaciones.jsx): las dos
    tienen que imprimir exactamente lo mismo. */
 export function textoDeCedula(plantilla, cedula, local) {
+  /* La PRIMERA cédula se emite con lo relevado en la calle: puede no tener
+     todavía CUIT, razón social ni rubro (ver requiereDatosRegistrales en
+     reglas.js). En esa instancia los huecos no la invalidan: van como "no
+     informado" y se imprime igual. En la SEGUNDA sí son faltantes, porque esa
+     cédula tiene que individualizar al sujeto obligado. */
+  const primera = cedula.instancia === 1;
+  const oNoInformado = (v) => (primera && (v === undefined || v === null || v === '') ? 'No informado' : v);
   const texto = completar(plantilla, {
     numeroCedula: cedula.numeroCedula,
-    instanciaTexto: cedula.instancia === 1 ? 'PRIMERA INTIMACIÓN' : 'SEGUNDA INTIMACIÓN',
+    instanciaTexto: primera ? 'PRIMERA INTIMACIÓN' : 'SEGUNDA INTIMACIÓN',
     nombreLocal: local?.nombreLocal,
-    razonSocial: local?.razonSocial,
-    cuit: local?.cuit,
+    razonSocial: oNoInformado(local?.razonSocial),
+    cuit: oNoInformado(local?.cuit),
     direccion: local?.direccion,
-    rubro: local?.rubro,
+    rubro: oNoInformado(local?.rubro),
     plazoDias: cedula.plazoDias,
     fechaEmision: fmtFecha(cedula.fecha),
   });

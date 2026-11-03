@@ -75,6 +75,13 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
             {a.impresaEn ? `Impresa por ${a.impresaPor}` : <span className="hist-pendiente">Sin imprimir</span>}
           </Dato>
         )}
+        {/* Notificación por correo (sql/13): a quién y cuándo se mandó. */}
+        {a.correoEnviadoEn && (
+          <Dato etiqueta="Correo electrónico">
+            Enviada a {a.correoEnviadoA} el {fmtFechaHora(a.correoEnviadoEn)}
+            {a.medio === 'correo' ? ' (único medio)' : ''}
+          </Dato>
+        )}
         <Dato etiqueta="Resultado de entrega">
           {a.resultado ? (
             <Badge color={res?.color ?? 'gris'}>{res?.etiqueta ?? a.resultado}</Badge>

@@ -1,19 +1,20 @@
 /* ============================================================================
    backend/parametros-sistema.js  —  LOS PLAZOS Y REGLAS CONFIGURABLES
    ----------------------------------------------------------------------------
-   Sección 4.1 del pliego. Estos valores estaban pensados para vivir en una
-   tabla `parametro`, para que el área los cambiara sin programador. Se decidió
-   NO agregar esa tabla: por ahora viven acá.
+   Sección 4.1 del pliego. Lo que está acá son los VALORES POR DEFECTO. El
+   área los cambia sin programador desde Configuración → Parámetros: lo que
+   guarda va a la tabla `parametro` (sql/06, una fila por clave) y
+   parametros() en consultas.js lo lee encima de estos defaults. Si una clave
+   no tiene fila en la tabla, vale lo de acá.
 
    >>> QUÉ SIGNIFICA ESO EN LA PRÁCTICA <<<
-   Cambiar un plazo es cambiar este archivo y reiniciar el backend. La pantalla
-   Configuración > Parámetros del front puede MOSTRARLOS pero no guardarlos: el
-   endpoint PUT /configuracion/parametros responde 405 y explica esto mismo.
+   Para cambiar un plazo NO hay que tocar este archivo ni reiniciar nada: se
+   hace desde la pantalla. Este archivo se toca solo para AGREGAR un parámetro
+   nuevo (acá el default, en rutas/configuracion.js su validación y en
+   pages/config/Parametros.jsx el campo).
 
-   Si en algún momento el área necesita cambiarlos por su cuenta, la solución es
-   una tabla `parametro` de una sola fila con estas mismas claves, y cambiar
-   parametros() en consultas.js para que la lea. El resto del backend no se
-   entera: ya consume estos valores a través de esa función.
+   (Hasta octubre de 2026 la tabla no existía y estos valores eran fijos; por
+   eso algún comentario viejo puede decir que la pantalla "no guarda".)
 
    LOS DOS QUE ESTÁN PENDIENTES DEL ÁREA LEGAL (Anexo B.2 del pliego):
      contarDiaEntrega  si el día de la entrega es el día uno del plazo

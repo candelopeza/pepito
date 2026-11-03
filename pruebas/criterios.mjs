@@ -15,6 +15,8 @@
 import { vencimientoHabil, plazoVencido } from '../src/dominio/fechas.js';
 import { vencimientoAnual, estaVigente } from '../src/dominio/vigencias.js';
 import { requiereDatosRegistrales, resolverEstado } from '../src/dominio/reglas.js';
+import { accionesRapidasPara, puedeVerRuta } from '../src/config/modulos.js';
+import { textoDeCedula } from '../src/dominio/textoCedula.js';
 import { armarNumeroCedula, completarNumeroCedula, mismoNumeroCedula, numeroCedula } from '../src/dominio/actuaciones.js';
 
 let ok = 0;
@@ -162,6 +164,52 @@ chequear('la segunda cédula sí exige datos registrales', requiereDatosRegistra
 chequear('regenerar la segunda cédula exige lo mismo que emitirla', requiereDatosRegistrales('regenerar-cedula', false, 2), true);
 chequear('el expediente exige datos solo si el parámetro lo pide', requiereDatosRegistrales('registrar-expediente', false), false);
 chequear('con el parámetro prendido, el expediente exige datos', requiereDatosRegistrales('registrar-expediente', true), true);
+
+// Accesos: lo que el administrador apaga desde Tipos de usuario también apaga
+// las subrutas del módulo (la ficha de un local cuelga del padrón). De esto
+// depende que la tarjeta del Inicio desaparezca junto con el módulo.
+const sinPadron = { modulos: { locales: { administrativo: 'no' } }, rolesDeshabilitados: [] };
+chequear('el Inicio siempre se puede ver', puedeVerRuta('administrativo', '/', sinPadron), true);
+chequear('con el padrón apagado no se ve /locales', puedeVerRuta('administrativo', '/locales', sinPadron), false);
+chequear('ni la ficha de un local, que cuelga del padrón', puedeVerRuta('administrativo', '/locales/123', sinPadron), false);
+chequear('los demás módulos no se ven afectados', puedeVerRuta('administrativo', '/documentacion', sinPadron), true);
+chequear('un rol apagado entero no ve nada', puedeVerRuta('administrativo', '/documentacion', { modulos: {}, rolesDeshabilitados: ['administrativo'] }), false);
+
+// La primera cédula sale aunque falten CUIT, razón social o rubro (van como
+// "No informado"); la segunda los exige, porque individualiza al obligado.
+const PLANTILLA = 'Cédula {numeroCedula} - {instanciaTexto} - {nombreLocal} - CUIT {cuit} - {razonSocial} - {rubro} - {direccion}';
+const localSinDatos = { nombreLocal: 'Kiosco', direccion: 'Mendoza 100', cuit: '', razonSocial: '', rubro: '' };
+chequear(
+  'la primera cédula no tiene faltantes aunque el local no tenga CUIT',
+  textoDeCedula(PLANTILLA, { numeroCedula: '0001-1', instancia: 1, fecha: '2026-10-01' }, localSinDatos).faltantes,
+  0,
+);
+chequear(
+  'la segunda cédula sin CUIT, razón social ni rubro tiene 3 faltantes',
+  textoDeCedula(PLANTILLA, { numeroCedula: '0001-2', instancia: 2, fecha: '2026-10-01' }, localSinDatos).faltantes,
+  3,
+);
+
+// Una acción rápida se va del Inicio cuando se apaga el módulo del que
+// depende, aunque su pantalla de destino sea otra (Nuevo relevamiento lleva
+// a Campo → Relevar, pero es parte de Relevamientos).
+const sinRelevamientos = { modulos: { relevamientos: { coordinacion: 'no' } }, rolesDeshabilitados: [] };
+chequear(
+  'con Relevamientos apagado, coordinación no ve "Nuevo relevamiento"',
+  accionesRapidasPara('coordinacion', sinRelevamientos).some((a) => a.id === 'nuevo-relevamiento'),
+  false,
+);
+// Coordinación no releva (decisión del 30/10/2026): la tarjeta es del relevador.
+chequear(
+  'con todo prendido, el relevador sí la ve',
+  accionesRapidasPara('relevador', { modulos: {}, rolesDeshabilitados: [] }).some((a) => a.id === 'nuevo-relevamiento'),
+  true,
+);
+chequear(
+  'y con Relevamientos apagado para el relevador, tampoco la ve',
+  accionesRapidasPara('relevador', { modulos: { relevamientos: { relevador: 'no' } }, rolesDeshabilitados: [] }).some((a) => a.id === 'nuevo-relevamiento'),
+  false,
+);
 
 console.log(`\n${ok} criterio(s) cumplidos · ${mal} falla(s)`);
 if (mal) process.exit(1);

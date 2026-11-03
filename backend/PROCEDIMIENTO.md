@@ -1162,3 +1162,22 @@ tarjeta, el módulo de campo sigue en su menú) y tiene una tarjeta
 pestaña. Las tarjetas que llevan a una página de afuera usan `externa` y
 `logo` en `ACCIONES_RAPIDAS` (`src/config/modulos.js`); quién la ve sale de
 `ROLES_CONSTANCIA_ARCA`.
+
+**Más tarde el mismo 30 de octubre.** Dos cambios más, a pedido de coordinación:
+
+- **ARCA, solo en la ficha.** La tarjeta "Constancia de Inscripción ARCA" salió
+  del Inicio y de la bandeja de validación. Ahora está en la ficha de cada local,
+  debajo de las acciones, con el mismo aspecto que tenía en el Inicio. Al
+  tocarla, además de abrir ARCA, copia el CUIT del local. El botón chico que
+  estaba al lado del CUIT también se sacó, para que no haya dos en la ficha.
+  Con `CONSTANCIA_ARCA_SOLO_EN_FICHA = false` (`src/dominio/reglas.js`) la
+  tarjeta vuelve al Inicio y el botón chico a la bandeja.
+- **El titular tampoco carga el número del documento.** El portal ya no muestra
+  el campo "Número del documento": lo carga coordinación al aprobar, en el mismo
+  cuadro donde elige el tipo y carga el expediente. Sin número no se puede
+  aprobar. Al aprobar se controla que el número no esté ya cargado (en otro
+  local si es una DDJJ, o en el mismo local si es un contrato). En la base, la
+  presentación queda con `documentacion.numero` en NULL hasta que se aprueba;
+  la columna ya acepta NULL, así que no hace falta ningún script. Esto lo maneja
+  la misma opción que el tipo y el expediente: `COORDINACION_COMPLETA_PRESENTACION`.
+  La carga desde la oficina sigue pidiendo el número, como siempre.

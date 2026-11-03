@@ -231,8 +231,10 @@ function Portal() {
 
               {enValidacion.length > 0 && (
                 <Aviso tipo="info" titulo="Tu presentación está en revisión">
-                  {enValidacion.map((d) => `${ETIQUETA_DOCUMENTO[d.tipo]} N° ${d.numero}`).join(' · ')}. Si la presentaste dentro
-                  del plazo, tu local no avanza en el circuito mientras la oficina la revisa.
+                  {enValidacion
+                    .map((d) => `${ETIQUETA_DOCUMENTO[d.tipo]}${d.numero ? ` N° ${d.numero}` : ''}`)
+                    .join(' · ')}
+                  . Si la presentaste dentro del plazo, tu local no avanza en el circuito mientras la oficina la revisa.
                 </Aviso>
               )}
 
@@ -274,7 +276,8 @@ function Portal() {
                       ))}
                       {documentos.map((d) => (
                         <li key={d.id}>
-                          {ETIQUETA_DOCUMENTO[d.tipo]} N° {d.numero} — expediente{' '}
+                          {ETIQUETA_DOCUMENTO[d.tipo]}
+                          {d.numero ? ` N° ${d.numero}` : ''} — expediente{' '}
                           <strong>
                             {parametros?.portalMuestraNumerosExpediente
                               ? (d.expedienteTramite ?? 'no registrado')

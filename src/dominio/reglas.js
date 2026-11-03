@@ -250,8 +250,9 @@ export const ESTADOS_CON_DOCUMENTACION = [
    El titular sube el documento sin decir de qué tipo es ni el número de
    expediente: ese número existe recién cuando coordinación inicia el trámite.
    Al aprobar, coordinación elige el tipo y carga el expediente, y sin
-   expediente no se aprueba. En false, el portal vuelve a pedirle las dos
-   cosas al titular, como antes. */
+   expediente no se aprueba. Desde el 30/10/2026 tampoco pide el número del
+   documento: lo carga coordinación al aprobar, y sin él tampoco se aprueba.
+   En false, el portal vuelve a pedirle las tres cosas al titular, como antes. */
 export const COORDINACION_COMPLETA_PRESENTACION = true;
 /* El tipo con el que entra la presentación mientras espera: el Form D.A 03,
    que es lo que presenta casi todo el mundo. No cuenta para nada hasta que
@@ -261,10 +262,13 @@ export const TIPO_PROVISORIO_PORTAL = 'DDJJ_RECICLAJE';
    también administrativo, que ahora ve la bandeja sin decidir). El
    administrador pasa siempre. */
 export const ROLES_QUE_VALIDAN = ['coordinacion'];
-/* Quién ve el botón de la constancia de inscripción de ARCA (en la bandeja,
-   la ficha del local y las acciones rápidas del Inicio), y a dónde lleva. */
+/* Quién ve el botón de la constancia de inscripción de ARCA, y a dónde lleva.
+   Desde el 30/10/2026 está solo en la ficha de cada local, para completar la
+   documentación. En false vuelve también a la bandeja de validación y a las
+   acciones rápidas del Inicio, donde estuvo antes. */
 export const ROLES_CONSTANCIA_ARCA = ['coordinacion'];
 export const URL_CONSTANCIA_ARCA = 'https://seti.afip.gob.ar/padron-puc-constancia-internet/ConsultaConstanciaAction.do';
+export const CONSTANCIA_ARCA_SOLO_EN_FICHA = true;
 
 export const ACCIONES = [
   {

@@ -35,6 +35,7 @@ import Campo from '../components/ui/Campo';
 import { useDatos } from '../datos/datosContexto';
 import { PERIODOS_REPORTE, rangoDePeriodo } from '../datos/vistas';
 import { fmtFecha, hoyISO } from '../dominio/fechas';
+import { textoFrecuencia } from '../dominio/actuaciones';
 
 /* Una tarjeta con un número. Se repite tanto que vale un componente local. */
 function Metrica({ valor, etiqueta, color = 'azul', ayuda }) {
@@ -45,6 +46,44 @@ function Metrica({ valor, etiqueta, color = 'azul', ayuda }) {
     </div>
   );
 }
+
+/* Un gráfico de barras horizontales, sin librería: una fila por categoría con
+   la etiqueta, la barra y el valor escrito al lado. Una sola serie, un solo
+   color (el azul del sistema): el largo de la barra es el dato, el número al
+   lado lo confirma, así no hay que adivinar nada por el color. `title` en
+   cada fila hace de tooltip al pasar el mouse. */
+function Barras({ filas, etiqueta, valor, detalle, vacio }) {
+  const maximo = Math.max(0, ...filas.map(valor));
+  if (!filas.length || maximo === 0) return <Vacio titulo={vacio} />;
+  return (
+    <div className="grafico-barras" role="img" aria-label={filas.map((f) => `${etiqueta(f)}: ${valor(f)}`).join(' · ')}>
+      {filas.map((f) => (
+        <div key={etiqueta(f)} className="grafico-fila" title={detalle ? detalle(f) : `${etiqueta(f)}: ${valor(f)}`}>
+          <span className="grafico-etiqueta">{etiqueta(f)}</span>
+          <span className="grafico-pista">
+            <span className="grafico-barra" style={{ width: `${(valor(f) / maximo) * 100}%` }} />
+          </span>
+          <span className="grafico-valor">{valor(f)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Retiros semanales por rubro: la tabla que acompaña al gráfico. */
+const COLUMNAS_RUBROS = [
+  { field: 'rubro', headerName: 'Rubro', flex: 1, minWidth: 200 },
+  { field: 'locales', headerName: 'Locales con contrato', width: 170, type: 'number' },
+  { field: 'conFrecuencia', headerName: 'Con frecuencia cargada', width: 190, type: 'number' },
+  { field: 'retirosSemanales', headerName: 'Retiros por semana', width: 160, type: 'number' },
+  {
+    field: 'promedio',
+    headerName: 'Promedio por local',
+    width: 160,
+    type: 'number',
+    renderCell: ({ row }) => (row.promedio === null ? '—' : `${row.promedio} / semana`),
+  },
+];
 
 /* El rendimiento por agente. Las filas NO tienen `id` (la clave es el nombre
    del agente), así que la grilla lo recibe por `idFila`. */
@@ -208,6 +247,67 @@ function Reportes() {
         <Metrica valor={p.prorrogas} etiqueta="Prórrogas otorgadas en el período" color="amarillo" />
         <Metrica valor={i.prorrogasVigentes} etiqueta="Prórrogas vigentes (hoy)" color="amarillo" />
       </div>
+
+      {/* ================= VOLUMEN DE GENERACIÓN ================= */}
+      {/* Pedido de coordinación (4/11/2026): dimensionar a grandes rasgos el
+          volumen de residuos. Sale de la frecuencia de recolección de los
+          contratos vigentes (datos/vistas.js, volumenDeGeneracion). */}
+      <div className="accesos-header">
+        <span>Volumen de generación (hoy, según los contratos vigentes)</span>
+      </div>
+      <p className="texto-chico reporte-nota">
+        La medida es la cantidad de retiros por semana: un local cuya prestataria pasa 3 veces por semana suma 3. Sale de la
+        frecuencia de recolección que coordinación carga en Herramientas → Informe 9 de Julio. No se conoce cuánto se retira en
+        cada pasada, así que es una aproximación; mientras falten frecuencias por cargar, el total queda corto.
+      </p>
+      <div className="grid-stats">
+        <Metrica valor={i.volumen.conContrato} etiqueta="Locales con contrato vigente" color="verde" />
+        <Metrica
+          valor={i.volumen.conFrecuencia}
+          etiqueta="Con frecuencia cargada"
+          color={i.volumen.sinFrecuencia ? 'amarillo' : 'verde'}
+          ayuda={i.volumen.sinFrecuencia ? `Faltan ${i.volumen.sinFrecuencia}: se cargan en Herramientas → Informe 9 de Julio` : 'Todas cargadas'}
+        />
+        <Metrica valor={i.volumen.retirosSemanales} etiqueta="Retiros por semana" ayuda="Suma de las frecuencias cargadas" />
+        <Metrica valor={i.volumen.retirosMensuales} etiqueta="Retiros por mes (estimado)" ayuda="Retiros por semana × 52 / 12" />
+        <Metrica
+          valor={i.volumen.promedio === null ? '—' : i.volumen.promedio}
+          etiqueta="Pasadas semanales por local (promedio)"
+          ayuda="Sobre los locales con frecuencia cargada"
+        />
+      </div>
+      <div className="grafico-par">
+        <div className="grafico-bloque">
+          <h3 className="grafico-titulo">Locales por frecuencia de recolección</h3>
+          <Barras
+            filas={i.volumen.porFrecuencia}
+            etiqueta={(f) => textoFrecuencia(f.frecuencia)}
+            valor={(f) => f.locales}
+            detalle={(f) => `${f.locales} local(es) con ${textoFrecuencia(f.frecuencia).toLowerCase()}`}
+            vacio="Todavía no hay frecuencias cargadas"
+          />
+        </div>
+        <div className="grafico-bloque">
+          <h3 className="grafico-titulo">Retiros por semana según rubro</h3>
+          <Barras
+            filas={i.volumen.porRubro.filter((r) => r.retirosSemanales > 0).slice(0, 12)}
+            etiqueta={(r) => r.rubro}
+            valor={(r) => r.retirosSemanales}
+            detalle={(r) => `${r.rubro}: ${r.retirosSemanales} retiros por semana en ${r.conFrecuencia} de ${r.locales} local(es) con contrato`}
+            vacio="Todavía no hay frecuencias cargadas"
+          />
+        </div>
+      </div>
+      {i.volumen.porRubro.length > 0 && (
+        <Grilla
+          filas={i.volumen.porRubro}
+          columnas={COLUMNAS_RUBROS}
+          idFila={(fila) => fila.rubro}
+          nombreArchivo="volumen-por-rubro"
+          vacio="Ningún local tiene contrato vigente."
+          alto="auto"
+        />
+      )}
 
       {/* ================= PRODUCCIÓN POR AGENTE ================= */}
       <div className="accesos-header">

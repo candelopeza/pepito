@@ -16,6 +16,7 @@ import { vencimientoHabil, plazoVencido } from '../src/dominio/fechas.js';
 import { vencimientoAnual, vencimientoMensual, estaVigente } from '../src/dominio/vigencias.js';
 import { documentoVigente, requiereDatosRegistrales, resolverEstado } from '../src/dominio/reglas.js';
 import { accionesRapidasPara, puedeVerRuta } from '../src/config/modulos.js';
+import { volumenDeGeneracion } from '../src/datos/vistas.js';
 import { textoDeCedula } from '../src/dominio/textoCedula.js';
 import { armarNumeroCedula, completarNumeroCedula, mismoNumeroCedula, numeroCedula } from '../src/dominio/actuaciones.js';
 
@@ -230,6 +231,25 @@ chequear('contrato del informe sin fecha, retirado por el informe siguiente: no 
 chequear('y el local con ese contrato está en Contrato vigente - 9 de Julio', est(localCompleto, [contrato9dj({ idEstado: 18 })]), 'CONTRATO_9DJ');
 chequear('un contrato de la oficina sin fecha no cuenta', documentoVigente({ tipo: 'CONTRATO', origen: 'CARGADO_OFICINA', fechaVencimiento: null, idEstado: 18 }, HOY), false);
 chequear('un contrato del titular vencido no cuenta aunque el trámite diga vigente', documentoVigente({ tipo: 'CONTRATO', origen: 'PRESENTADO_TITULAR', fechaVencimiento: '2026-09-01', idEstado: 18 }, HOY), false);
+
+// Volumen de generación (Reportes): retiros por semana a partir de la
+// frecuencia de recolección de los contratos vigentes.
+const contratoV = { tipo: 'CONTRATO' };
+const padronVolumen = [
+  { id: 1, rubro: 'GASTRONOMIA', vigente: { contrato: contratoV }, frecuenciaSemanal: 3 },
+  { id: 2, rubro: 'GASTRONOMIA', vigente: { contrato: contratoV }, frecuenciaSemanal: 7 },
+  { id: 3, rubro: 'CARNICERIA', vigente: { contrato: contratoV }, frecuenciaSemanal: null },
+  { id: 4, rubro: 'OTROS', vigente: { contrato: null }, frecuenciaSemanal: null },
+];
+const vol = volumenDeGeneracion(padronVolumen);
+chequear('cuenta solo los locales con contrato vigente', vol.conContrato, 3);
+chequear('de ellos, los que tienen frecuencia cargada', vol.conFrecuencia, 2);
+chequear('retiros por semana = suma de frecuencias', vol.retirosSemanales, 10);
+chequear('retiros por mes = semanales × 52 / 12, redondeado', vol.retirosMensuales, 43);
+chequear('promedio de pasadas por local con frecuencia', vol.promedio, 5);
+chequear('el rubro con más retiros va primero', vol.porRubro[0].rubro, 'GASTRONOMIA');
+chequear('un rubro con contrato pero sin frecuencia figura con 0 retiros', vol.porRubro[1].retirosSemanales, 0);
+chequear('la distribución por frecuencia cuenta los locales de cada valor', vol.porFrecuencia.find((f) => f.frecuencia === 7).locales, 1);
 
 console.log(`\n${ok} criterio(s) cumplidos · ${mal} falla(s)`);
 if (mal) process.exit(1);

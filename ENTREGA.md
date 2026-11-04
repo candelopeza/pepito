@@ -49,7 +49,7 @@ barra. Las rutas no se tocan.
 
 ## 4. La base de datos
 
-- Las tablas del sistema ya están creadas (scripts `backend/sql/03` a `12`,
+- Las tablas del sistema ya están creadas (scripts `backend/sql/03` a `13`,
   todos idempotentes: correrlos de nuevo no rompe nada).
 - Los datos de prueba (locales "cande", cargas de ensayo del informe 9DJ,
   trámites de ensayo) quedaron dados de baja lógica el 2026-10-15: no se ven

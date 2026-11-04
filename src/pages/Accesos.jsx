@@ -8,14 +8,20 @@
    (TiposUsuario.jsx).
 
    LA PESTAÑA ACTIVA VIVE EN LA DIRECCIÓN, no en un estado interno. Así:
-     - la llave de la grilla de Usuarios puede llevar directo a los permisos
-       de ese tipo (/accesos/tipos-usuario?rol=notificador) y la ventana se
-       abre sola (TiposUsuario lee ?rol=);
+     - la llave de la grilla de Usuarios lleva directo a los permisos de ese
+       tipo (/accesos/tipos-usuario?rol=notificador) y la ventana se abre
+       sola (TiposUsuario lee ?rol=);
      - el botón Atrás del navegador vuelve a la pestaña anterior;
      - un marcador a /accesos/tipos-usuario abre esa pestaña.
    /accesos a secas es Usuarios.
+
+   La llave de Usuarios la recibe como `abrirPermisos` solo quien ve la
+   pestaña Tipos de usuario: a los demás no se les ofrece un ícono que no
+   hace nada. (Resuelto el 04/11/2026 juntando las dos correcciones del mismo
+   problema: la de la pestaña en la dirección y la de `abrirPermisos`.)
    ============================================================================ */
 
+import { useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PageHeader from '../components/ui/PageHeader';
 import Usuarios from './accesos/Usuarios';
@@ -40,8 +46,19 @@ function Accesos() {
   const navegar = useNavigate();
 
   const visibles = SECCIONES.filter((s) => !s.roles || s.roles.includes(rol));
+<<<<<<< HEAD
   // La que pide la dirección; si no existe o este rol no la ve, la primera.
   const seccion = visibles.find((s) => pathname.startsWith(s.ruta)) ?? visibles[0];
+=======
+  const veTipos = visibles.some((s) => s.id === 'tipos');
+  // La que pide la dirección; si no existe o este rol no la ve, la primera.
+  const seccion = visibles.find((s) => pathname.startsWith(s.ruta)) ?? visibles[0];
+
+  /* La llave de Usuarios: pasa a la pestaña Tipos de usuario con los permisos
+     del tipo de esa persona abiertos. */
+  const abrir = useCallback((idRol) => navegar(`/accesos/tipos-usuario?rol=${idRol}`), [navegar]);
+  const abrirPermisos = veTipos ? abrir : undefined;
+>>>>>>> a67b528eb7d5714b49e36fd89da7133b1a431078
 
   return (
     <>

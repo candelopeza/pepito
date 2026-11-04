@@ -13,7 +13,13 @@
    LA PANTALLA es la misma grilla que el padrón (ui/Grilla.jsx): buscador a la
    izquierda, botones a la derecha (agregar, imprimir, descargar), barra de
    columnas / filtros / densidad / exportar, y por fila el lápiz de editar y
+<<<<<<< HEAD
    la llave que abre los permisos del tipo de usuario de esa persona.
+=======
+   la llave que abre los permisos del tipo de usuario de esa persona (en la
+   pestaña Tipos de usuario de Accesos.jsx: por eso la llave aparece solo si
+   Accesos manda `abrirPermisos`, que es cuando este rol ve esa pestaña).
+>>>>>>> a67b528eb7d5714b49e36fd89da7133b1a431078
 
    >>> LA IDENTIDAD TIENE QUE SER INSTITUCIONAL (sección 7.3) <<<
    El correo tiene que ser @smt.gob.ar (salvo el titular, que entra con su
@@ -52,13 +58,20 @@ import Interruptor from '../../components/ui/hab/des';
 import { useRol } from '../../auth/rolContexto';
 import { LISTA_ROLES, ROLES } from '../../auth/roles';
 import { useDatos } from '../../datos/datosContexto';
+<<<<<<< HEAD
 import { ROL_ADMINISTRADOR, puedeEditar, puedeVerRuta, rolHabilitado } from '../../config/modulos';
+=======
+import { ROL_ADMINISTRADOR, puedeEditar, rolHabilitado } from '../../config/modulos';
+>>>>>>> a67b528eb7d5714b49e36fd89da7133b1a431078
 
 const USUARIO_VACIO = { nombre: '', email: '', rol: '', activo: true };
 
 function Usuarios() {
   const { rol, usuario } = useRol();
+<<<<<<< HEAD
   const navegar = useNavigate();
+=======
+>>>>>>> a67b528eb7d5714b49e36fd89da7133b1a431078
   const { usuarios: todos, permisos, guardarEnCatalogo } = useDatos();
 
   /* A LOS ADMINISTRADORES LOS VE SOLO OTRO ADMINISTRADOR (03/11/2026). Desde
@@ -71,12 +84,15 @@ function Usuarios() {
   );
 
   const soloLectura = !puedeEditar(rol, 'accesos', permisos);
+<<<<<<< HEAD
   // La llave de cada fila abre los permisos de ese tipo de usuario, que es
   // una pestaña del administrador y del administrativo (este, para consulta;
   // pages/Accesos.jsx): a los demás no se les ofrece, para que no toquen un
   // ícono que no hace nada.
   const veTipos =
     [ROL_ADMINISTRADOR, 'administrativo'].includes(rol) && puedeVerRuta(rol, '/accesos/tipos-usuario', permisos);
+=======
+>>>>>>> a67b528eb7d5714b49e36fd89da7133b1a431078
 
   const [buscar, setBuscar] = useState('');
   // El usuario que se está creando o editando en el modal. null = cerrado.
@@ -179,7 +195,11 @@ function Usuarios() {
               />,
             );
           }
+<<<<<<< HEAD
           if (veTipos && !esSistema) {
+=======
+          if (abrirPermisos && !esSistema) {
+>>>>>>> a67b528eb7d5714b49e36fd89da7133b1a431078
             lista.push(
               <GridActionsCellItem
                 key="permisos"

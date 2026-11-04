@@ -46,6 +46,7 @@ import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
 import { LISTA_ESTADOS, etiquetaEstado } from '../dominio/estados';
+import { textoFrecuencia } from '../dominio/actuaciones';
 import { fmtFecha } from '../dominio/fechas';
 
 /* Las situaciones que el estado no dice solo. Cada una es una pregunta sobre
@@ -206,12 +207,36 @@ function Local() {
             row.vigente?.contrato?.fechaVencimiento ??
             row.vigente?.reciclaje?.fechaVencimiento ??
             row.vigente?.ddjj?.fechaVencimiento;
-          return vigencia ? (
-            <span title="Hasta cuándo está vigente su documentación">{fmtFecha(vigencia)}</span>
+          if (vigencia) return <span title="Hasta cuándo está vigente su documentación">{fmtFecha(vigencia)}</span>;
+          // Contrato del informe 9DJ sin fecha: lo sostiene la última foto, no una fecha.
+          if (row.vigente?.contrato?.origen === 'INFORME_9DJ') {
+            return (
+              <span className="texto-gris" title="Contrato informado por 9 de Julio sin fecha: vale mientras el último informe lo sostenga">
+                según informe
+              </span>
+            );
+          }
+          return <span className="texto-gris">—</span>;
+        },
+      },
+      {
+        field: 'frecuenciaSemanal',
+        headerName: 'Recolección',
+        width: 150,
+        type: 'number',
+        // Solo tiene sentido con contrato vigente: sin contrato, vacío; con
+        // contrato pero sin dato, "sin cargar" (se carga en Informe 9 de Julio).
+        valueGetter: (_v, row) => row.frecuenciaSemanal ?? '',
+        renderCell: ({ row }) =>
+          row.frecuenciaSemanal ? (
+            <span title="Veces por semana que pasa la prestataria, según el contrato vigente">{textoFrecuencia(row.frecuenciaSemanal)}</span>
+          ) : row.vigente?.contrato ? (
+            <span className="texto-gris" title="Contrato vigente sin frecuencia cargada: se carga en Herramientas → Informe 9 de Julio">
+              sin cargar
+            </span>
           ) : (
             <span className="texto-gris">—</span>
-          );
-        },
+          ),
       },
       {
         field: 'cantidadActuaciones',

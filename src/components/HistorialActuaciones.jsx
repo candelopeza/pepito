@@ -30,13 +30,14 @@ import { useDatos } from '../datos/datosContexto';
 import { useRol } from '../auth/rolContexto';
 import ArchivoGuardado from './ArchivoGuardado';
 import VistaCedula from './VistaCedula';
-import { ETIQUETA_DOCUMENTO, TIPOS_ACTUACION, resultadoEntrega } from '../dominio/actuaciones';
+import { ETIQUETA_DOCUMENTO, TIPOS_ACTUACION, resultadoEntrega, textoFrecuencia } from '../dominio/actuaciones';
 import { fmtFecha, fmtFechaHora, plazoVencido } from '../dominio/fechas';
 
 /* Quiénes corrigen observaciones: lo mismo que exige el servidor
    (PUT /actuaciones/:id/observaciones). */
 const ROLES_EDITAN_OBSERVACIONES = ['coordinacion', 'administrador'];
 import { estaVigente } from '../dominio/vigencias';
+import { documentoVigente } from '../dominio/reglas';
 
 /* El detalle propio de cada tipo. Es un switch a propósito: son seis actos
    administrativos distintos y cada uno tiene que mostrar lo suyo.
@@ -115,7 +116,10 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
   }
 
   if (['DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO'].includes(a.tipo)) {
-    const vigente = estaVigente(a.fechaVencimiento);
+    // Misma regla que el estado del local (dominio/reglas.js): el contrato del
+    // informe 9DJ lo sostiene la última foto, no una fecha.
+    const vigente = documentoVigente(a);
+    const delInforme = a.origen === 'INFORME_9DJ';
     return (
       <>
         <Dato etiqueta="Documento">
@@ -124,15 +128,37 @@ function Detalle({ a, usuarios, conImpresion, onVerCedula }) {
         </Dato>
         <Dato etiqueta="Vigencia">
           <Badge color={a.validado === false ? 'amarillo' : vigente ? 'verde' : 'gris'}>
-            {a.validado === false ? 'Pendiente de validación' : vigente ? 'Vigente' : 'Vencida'}
+            {a.validado === false
+              ? 'Pendiente de validación'
+              : vigente
+                ? 'Vigente'
+                : delInforme && !a.fechaVencimiento
+                  ? 'Retirada por el informe'
+                  : 'Vencida'}
           </Badge>
         </Dato>
         <Dato etiqueta="Fecha de emisión">{fmtFecha(a.fechaEmision)}</Dato>
-        <Dato etiqueta="Fecha de vencimiento">{fmtFecha(a.fechaVencimiento)}</Dato>
+        <Dato etiqueta="Fecha de vencimiento">
+          {a.fechaVencimiento ? (
+            fmtFecha(a.fechaVencimiento)
+          ) : delInforme ? (
+            <span className="texto-gris">
+              {vigente ? 'Sin fecha informada: la sostiene el último informe de 9 de Julio' : 'Sin fecha informada'}
+            </span>
+          ) : (
+            '—'
+          )}
+        </Dato>
         {/* El dato que el sistema viejo no guardaba (sección 4.5). */}
         <Dato etiqueta="Expediente de trámite">
           <ExpedienteDeTramite a={a} />
         </Dato>
+        {/* Lo carga coordinación en Herramientas → Informe 9 de Julio (sql/13). */}
+        {a.tipo === 'CONTRATO' && a.frecuenciaSemanal && (
+          <Dato etiqueta="Frecuencia de recolección">
+            {textoFrecuencia(a.frecuenciaSemanal)}
+          </Dato>
+        )}
         {a.origen === 'INFORME_9DJ' && (
           <Dato etiqueta="Origen">
             <Badge color="azul">Informado por 9 de Julio</Badge>

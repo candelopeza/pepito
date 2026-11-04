@@ -314,6 +314,9 @@ export function aActuacionFront(fila, documentoPorTramite = new Map()) {
         fechaEmision: soloFecha(doc?.fechaEmision ?? fila.fechaInicio),
         fechaVencimiento: soloFecha(doc?.fechaVencimiento ?? fila.fechaVencimiento),
         origen: doc?.origen ?? 'PRESENTADO_TITULAR',
+        // Veces por semana que pasa la prestataria (sql/13). Solo tiene
+        // sentido en el contrato; null hasta que coordinación lo cargue.
+        frecuenciaSemanal: doc?.frecuenciaSemanal ?? null,
         expedienteTramite: fila.numeroReferencia ?? null,
         archivo: null,
         // Sin validar hasta que un agente la apruebe: una carga del portal no

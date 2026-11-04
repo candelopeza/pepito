@@ -38,7 +38,9 @@ import Confirmar from '../../components/ui/Confirmar';
 import FormLocal from '../../components/FormLocal';
 import { api } from '../../datos/api';
 import { useDatos } from '../../datos/datosContexto';
+import { useRol } from '../../auth/rolContexto';
 import { fmtFecha, hoyISO } from '../../dominio/fechas';
+import { FRECUENCIAS_SEMANALES, textoFrecuencia } from '../../dominio/actuaciones';
 
 /* Cómo se muestra cada decisión. El color repite el lenguaje del resto del
    sistema: verde confirma, rojo rechaza, gris espera. */
@@ -50,6 +52,34 @@ const DECISION = {
   ALTA: { etiqueta: 'Alta nueva', color: 'azul' },
   PENDIENTE: { etiqueta: 'Pendiente', color: 'amarillo' },
 };
+
+/* De dónde salió cada contrato vigente (columna Origen de la tabla de frecuencias). */
+const ORIGEN_CONTRATO = {
+  INFORME_9DJ: { etiqueta: 'Informe 9 de Julio', color: 'azul' },
+  PRESENTADO_TITULAR: { etiqueta: 'Presentado por el titular', color: 'verde' },
+  CARGADO_OFICINA: { etiqueta: 'Cargado por la oficina', color: 'gris' },
+};
+
+/* El desplegable de la columna Frecuencia: se guarda al elegir, sin botón.
+   Vacío se marca en amarillo para que se vea de un vistazo qué falta cargar. */
+function SelectorFrecuencia({ valor, deshabilitado, onChange }) {
+  return (
+    <select
+      className={`selector-frecuencia${valor ? '' : ' selector-frecuencia-vacio'}`}
+      value={valor ?? ''}
+      disabled={deshabilitado}
+      onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+      aria-label="Frecuencia de recolección contratada"
+    >
+      <option value="">Sin cargar</option>
+      {FRECUENCIAS_SEMANALES.map((n) => (
+        <option key={n} value={n}>
+          {textoFrecuencia(n)}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 const ESTADO_CARGA = {
   EN_REVISION: { etiqueta: 'En revisión', color: 'amarillo' },
@@ -78,7 +108,10 @@ function archivoABase64(archivo) {
 }
 
 function Informe9DJ() {
-  const { localesConEstado, recargar } = useDatos();
+  const { localesConEstado, recargar, capacidades } = useDatos();
+  const { rol } = useRol();
+  // La frecuencia la carga coordinación (o la Dirección); el resto la ve.
+  const cargaFrecuencia = ['coordinacion', 'direccion', 'administrador'].includes(rol);
 
   const [historial, setHistorial] = useState(null);
   const [carga, setCarga] = useState(null); // el detalle de la carga EN_REVISION
@@ -99,6 +132,10 @@ function Informe9DJ() {
   const [dandoAlta, setDandoAlta] = useState(null); // la fila del modal de alta
   const [anulando, setAnulando] = useState(null); // la carga del modal de anulación
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
+  // Los contratos vigentes del último informe aplicado, con su frecuencia de
+  // recolección: { informe, contratos } o null mientras carga.
+  const [contratos, setContratos] = useState(null);
+  const [buscarContrato, setBuscarContrato] = useState('');
 
   const porId = useMemo(() => new Map(localesConEstado.map((l) => [l.id, l])), [localesConEstado]);
 
@@ -112,6 +149,7 @@ function Informe9DJ() {
       setCarga(abierta ? await api.informe9djCarga(abierta.id) : null);
       setBajasElegidas(new Set());
       setConfirmoIncompleto(false);
+      setContratos(await api.informe9djContratos());
     } catch (e) {
       setError(e.message);
     }
@@ -120,6 +158,19 @@ function Informe9DJ() {
   useEffect(() => {
     cargarTodo();
   }, [cargarTodo]);
+
+  /* ---------- la frecuencia de recolección de un contrato ---------- */
+  const cambiarFrecuencia = useCallback(async (idTramite, frecuencia) => {
+    setError(null);
+    try {
+      const r = await api.informe9djFrecuencia(idTramite, frecuencia);
+      setContratos((p) =>
+        p ? { ...p, contratos: p.contratos.map((c) => (c.id === idTramite ? { ...c, frecuenciaSemanal: r.frecuenciaSemanal } : c)) } : p,
+      );
+    } catch (e) {
+      setError(e.message);
+    }
+  }, []);
 
   /* ---------- subir el archivo ---------- */
   const subir = useCallback(
@@ -530,6 +581,65 @@ function Informe9DJ() {
     [],
   );
 
+  /* ---------- la tabla de frecuencias ---------- */
+  const columnasContratos = useMemo(
+    () => [
+      {
+        field: 'nombreLocal',
+        headerName: 'Local',
+        flex: 1,
+        minWidth: 200,
+        renderCell: ({ row }) => (
+          <span className="celda-estado">
+            <Link to={`/locales/${row.localId}`}>{row.nombreLocal || 'Sin nombre'}</Link>
+            {row.razonSocial && <small className="celda-sub">{row.razonSocial}</small>}
+          </span>
+        ),
+      },
+      { field: 'cuit', headerName: 'CUIT', width: 130 },
+      { field: 'direccion', headerName: 'Dirección', flex: 1, minWidth: 180 },
+      { field: 'numeroContrato', headerName: 'Contrato N°', width: 130, renderCell: ({ row }) => row.numeroContrato || 'Sin N°' },
+      {
+        field: 'origen',
+        headerName: 'Origen',
+        width: 200,
+        valueGetter: (_v, row) => (row.origen === 'INFORME_9DJ' && row.idInforme ? `Informe N° ${row.idInforme}` : ORIGEN_CONTRATO[row.origen]?.etiqueta ?? row.origen),
+        renderCell: ({ row }) => {
+          const o = ORIGEN_CONTRATO[row.origen] ?? { etiqueta: row.origen, color: 'gris' };
+          return <Badge color={o.color}>{row.origen === 'INFORME_9DJ' && row.idInforme ? `Informe N° ${row.idInforme}` : o.etiqueta}</Badge>;
+        },
+      },
+      {
+        field: 'vencimiento',
+        headerName: 'Vence',
+        width: 110,
+        renderCell: ({ row }) => (row.vencimiento ? fmtFecha(row.vencimiento) : 'Sin fecha'),
+      },
+      {
+        field: 'frecuenciaSemanal',
+        headerName: 'Frecuencia',
+        width: 190,
+        // Para el CSV y el orden: el número; en pantalla, el desplegable.
+        valueGetter: (_v, row) => row.frecuenciaSemanal ?? '',
+        renderCell: ({ row }) => (
+          <SelectorFrecuencia
+            valor={row.frecuenciaSemanal}
+            deshabilitado={!cargaFrecuencia || !capacidades?.frecuencia}
+            onChange={(v) => cambiarFrecuencia(row.id, v)}
+          />
+        ),
+      },
+    ],
+    [cargaFrecuencia, capacidades?.frecuencia, cambiarFrecuencia],
+  );
+  const textoContrato = normalizarTexto(buscarContrato).trim();
+  const contratosFiltrados = (contratos?.contratos ?? []).filter(
+    (c) =>
+      !textoContrato ||
+      [c.nombreLocal, c.razonSocial, c.cuit, c.direccion, c.numeroContrato].some((t) => normalizarTexto(t ?? '').includes(textoContrato)),
+  );
+  const sinFrecuencia = (contratos?.contratos ?? []).filter((c) => !c.frecuenciaSemanal).length;
+
   /* ---------- lo que se deriva de la carga abierta ---------- */
   const filas = carga?.filas ?? [];
   const sinRevisar = filas.filter((f) => f.decision === 'SIN_REVISAR').length;
@@ -708,6 +818,51 @@ function Informe9DJ() {
           vacio="No hay informes cargados."
           alto="auto"
         />
+      )}
+
+      {/* ================= FRECUENCIA DE RECOLECCIÓN ================= */}
+      {/* Pedido de coordinación (4/11/2026): el informe no trae con qué
+          frecuencia pasa la prestataria; se carga acá, sobre los contratos
+          vigentes de la última foto aplicada. Sirve para dimensionar el
+          volumen de generación de los locales. */}
+      <div className="accesos-header">
+        <span>Frecuencia de recolección contratada</span>
+      </div>
+      {!capacidades?.frecuencia && (
+        <Aviso tipo="info" titulo="La base todavía no guarda la frecuencia">
+          Correr <code>backend/sql/13-frecuencia-recoleccion.sql</code> desde HeidiSQL y reiniciar el backend. Mientras tanto la
+          tabla se ve, pero los desplegables quedan quietos.
+        </Aviso>
+      )}
+      {contratos === null ? (
+        <Vacio titulo="Cargando…">Buscando los locales con contrato vigente.</Vacio>
+      ) : contratos.contratos.length === 0 ? (
+        <Vacio titulo="Ningún local tiene contrato vigente hoy">
+          Acá van a aparecer los contratos del informe de 9 de Julio cuando se aplique, y los que presenten los titulares y
+          coordinación apruebe.
+        </Vacio>
+      ) : (
+        <>
+          <p className="texto-chico">
+            Todos los locales con contrato vigente hoy: {contratos.contratos.length} local(es),{' '}
+            {sinFrecuencia === 0 ? 'todos con frecuencia cargada' : `${sinFrecuencia} sin frecuencia`}. Son los del último
+            informe aplicado
+            {contratos.informe
+              ? ` (N° ${contratos.informe.id}${contratos.informe.periodo ? `, ${contratos.informe.periodo}` : ''}, aplicado el ${fmtFecha(String(contratos.informe.fechaAplicacion ?? '').slice(0, 10))})`
+              : ' (todavía ninguno)'}
+            , más los contratos presentados por los titulares y aprobados, y los cargados por la oficina. La frecuencia es la
+            cantidad de veces por semana que pasa la prestataria; se guarda al elegirla.
+            {!cargaFrecuencia && ' La carga coordinación o la Dirección.'}
+          </p>
+          <Grilla
+            filas={contratosFiltrados}
+            columnas={columnasContratos}
+            nombreArchivo="frecuencia-recoleccion"
+            vacio="Ningún contrato coincide con la búsqueda."
+            buscadores={[{ placeholder: 'Buscar por local, CUIT o dirección', valor: buscarContrato, onChange: setBuscarContrato }]}
+            alto="auto"
+          />
+        </>
       )}
 
       {/* ================= MODALES ================= */}

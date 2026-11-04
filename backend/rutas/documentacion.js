@@ -53,7 +53,7 @@ import { ErrorActo, ejecutarActo } from '../actos.js';
 import { archivosDisponibles, guardarImagen, leerDocumento } from '../archivos.js';
 import { fmtFecha, hoyISO } from '../../src/dominio/fechas.js';
 import { ETIQUETA_DOCUMENTO } from '../../src/dominio/actuaciones.js';
-import { vencimientoDocumento } from '../../src/dominio/vigencias.js';
+import { vencimientoDocumento, vencimientoMensual } from '../../src/dominio/vigencias.js';
 import {
   COORDINACION_COMPLETA_PRESENTACION,
   ESTADOS_CON_DOCUMENTACION,
@@ -141,9 +141,9 @@ router.post('/', async (req, res, next) => {
     if (!req.usuario) return res.status(401).json({ error: 'Falta identificar al usuario' });
 
     const esTitular = req.usuario.rol === 'titular';
-    // El titular ya no indica tipo, número ni expediente: los completa
-    // coordinación al aprobar (COORDINACION_COMPLETA_PRESENTACION,
-    // src/dominio/reglas.js). Si los manda igual, se guardan.
+    // El titular indica el tipo pero no el número ni el expediente: los
+    // completa coordinación al aprobar (COORDINACION_COMPLETA_PRESENTACION,
+    // src/dominio/reglas.js). Si no manda tipo, entra con el provisorio.
     const completaCoordinacion = esTitular && COORDINACION_COMPLETA_PRESENTACION;
     const datos = { ...(req.body ?? {}) };
     if (completaCoordinacion && !datos.tipo) datos.tipo = TIPO_PROVISORIO_PORTAL;
@@ -162,7 +162,12 @@ router.post('/', async (req, res, next) => {
     }
     if (!esFechaISO(datos.fechaEmision)) return res.status(400).json({ error: 'Falta la fecha de emisión del documento, o no es válida' });
     if (datos.fechaEmision > hoy) return res.status(400).json({ error: 'La fecha de emisión no puede ser futura' });
-    if (datos.tipo === 'CONTRATO') {
+    /* El contrato que presenta el TITULAR no trae vencimiento: vale un mes
+       desde la aprobación (dominio/vigencias.js). Acá queda provisorio un mes
+       desde hoy, para que la bandeja de validación muestre hasta cuándo
+       quedaría; al aprobar se vuelve a contar desde ese día. */
+    const contratoDelTitular = esTitular && datos.tipo === 'CONTRATO';
+    if (datos.tipo === 'CONTRATO' && !contratoDelTitular) {
       if (!esFechaISO(datos.fechaVencimiento)) {
         return res.status(400).json({ error: 'El contrato tiene que traer su fecha de vencimiento' });
       }
@@ -230,7 +235,7 @@ router.post('/', async (req, res, next) => {
     // El titular sube por el portal: queda pendiente. Un agente lo carga: vale.
     const validado = datos.validado !== false && !esTitular;
     const params = await parametros();
-    const vencimiento = vencimientoDocumento(datos, params.modoBisiesto);
+    const vencimiento = contratoDelTitular ? vencimientoMensual(hoy) : vencimientoDocumento(datos, params.modoBisiesto);
     const etiqueta = ETIQUETA_DOCUMENTO[datos.tipo] ?? datos.tipo;
 
     const { idTramite } = await ejecutarActo(req, {
@@ -307,12 +312,13 @@ router.post('/', async (req, res, next) => {
    parte del expediente. Una presentación ya validada no se vuelve a validar.
 
    AL APROBAR, COORDINACIÓN COMPLETA LO QUE EL TITULAR YA NO CARGA
-   (COORDINACION_COMPLETA_PRESENTACION): { tipo, numero, expedienteTramite,
-   fechaVencimiento }. El expediente es obligatorio para aprobar: es el
-   respaldo de la acreditación; el número del documento también (desde el
-   30/10/2026 el titular no lo carga). El tipo, si no se manda, queda el
-   presentado; si cambia, el vencimiento se calcula con el tipo nuevo (el
-   contrato trae el suyo). Si cambia el tipo o el número, se vuelve a
+   (COORDINACION_COMPLETA_PRESENTACION): { tipo, numero, expedienteTramite }.
+   El expediente es obligatorio para aprobar: es el respaldo de la
+   acreditación; el número del documento también (desde el 30/10/2026 el
+   titular no lo carga). El tipo, si no se manda, queda el presentado; si
+   cambia, el vencimiento se calcula con el tipo nuevo. Un CONTRATO aprobado
+   acá vale un mes desde hoy (vencimientoMensual): después lo confirma el
+   informe de la prestataria. Si cambia el tipo o el número, se vuelve a
    controlar que el número no esté repetido.
 
    Solo valida coordinación (ROLES_QUE_VALIDAN); hasta el 28/10/2026 también
@@ -382,11 +388,11 @@ router.post('/:id/validacion', requiereRol(...ROLES_QUE_VALIDAN), async (req, re
       }
       const cambiaTipo = tipo !== tramite.tipo;
       if (tipo === 'CONTRATO') {
-        const fecha = req.body?.fechaVencimiento || (cambiaTipo ? '' : tramite.fechaVencimiento);
-        if (!esFechaISO(fecha) || fecha <= tramite.fechaEmision) {
-          return res.status(400).json({ error: 'Indicá el vencimiento del contrato: la fecha que declara, posterior a su emisión.' });
-        }
-        vencimiento = fecha;
+        /* Lo que se valida acá es siempre una presentación del portal: el
+           contrato del titular vale UN MES desde hoy, que es cuando pasa a
+           vigente. Después lo confirma, o no, el informe mensual de 9 de
+           Julio (dominio/vigencias.js). La fecha que diga el papel no manda. */
+        vencimiento = vencimientoMensual(hoyISO());
       } else if (cambiaTipo) {
         vencimiento = vencimientoDocumento({ tipo, fechaEmision: tramite.fechaEmision }, (await parametros()).modoBisiesto);
       }

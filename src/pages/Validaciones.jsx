@@ -40,8 +40,8 @@ import { useDatos } from '../datos/datosContexto';
 import { useRol } from '../auth/rolContexto';
 import { ETIQUETA_DOCUMENTO, TIPOS_DOCUMENTO } from '../dominio/actuaciones';
 import { CONSTANCIA_ARCA_SOLO_EN_FICHA, COORDINACION_COMPLETA_PRESENTACION, ROLES_QUE_VALIDAN } from '../dominio/reglas';
-import { vencimientoDocumento } from '../dominio/vigencias';
-import { fmtFecha } from '../dominio/fechas';
+import { vencimientoDocumento, vencimientoMensual } from '../dominio/vigencias';
+import { fmtFecha, hoyISO } from '../dominio/fechas';
 
 function Validaciones() {
   const { presentacionesPendientes, localPorId, validarPresentacion, capacidades, parametros } = useDatos();
@@ -57,20 +57,18 @@ function Validaciones() {
   const pendientes = presentacionesPendientes();
 
   /* El vencimiento que va a quedar, con la misma cuenta que hace el servidor:
-     el contrato trae el suyo; si el tipo no cambió queda el presentado; si
-     cambió, se calcula con el tipo nuevo. */
+     el contrato del titular vale un mes desde hoy (dominio/vigencias.js); si
+     el tipo no cambió queda el presentado; si cambió, se calcula con el tipo
+     nuevo. */
   const p = decision?.p;
   const vencimientoPropuesto = !p
     ? ''
     : completar.tipo === 'CONTRATO'
-      ? completar.fechaVencimiento
+      ? vencimientoMensual(hoyISO())
       : completar.tipo === p.tipo
         ? p.fechaVencimiento
         : vencimientoDocumento({ tipo: completar.tipo, fechaEmision: p.fechaEmision }, parametros?.modoBisiesto);
-  const faltaParaAprobar =
-    !completar.numero.trim() ||
-    !completar.expedienteTramite.trim() ||
-    (completar.tipo === 'CONTRATO' && !(completar.fechaVencimiento > (p?.fechaEmision ?? '')));
+  const faltaParaAprobar = !completar.numero.trim() || !completar.expedienteTramite.trim();
 
   /* Las columnas necesitan localPorId y setDecision, así que se arman adentro.
      Cada fila es una PRESENTACIÓN, no un local: por eso casi todas las columnas
@@ -238,7 +236,6 @@ function Validaciones() {
                 tipo: completar.tipo,
                 numero: completar.numero.trim(),
                 expedienteTramite: completar.expedienteTramite.trim(),
-                ...(completar.tipo === 'CONTRATO' ? { fechaVencimiento: completar.fechaVencimiento } : {}),
               }
             : {};
           // Se cierra solo si se guardó.
@@ -270,17 +267,14 @@ function Validaciones() {
                 onChange={(v) => setCompletar((c) => ({ ...c, expedienteTramite: v }))}
                 largoMaximo={50}
               />
-              {completar.tipo === 'CONTRATO' && (
-                <Campo
-                  id="val-vencimiento"
-                  etiqueta="Vencimiento del contrato"
-                  tipo="date"
-                  valor={completar.fechaVencimiento}
-                  onChange={(v) => setCompletar((c) => ({ ...c, fechaVencimiento: v }))}
-                  min={decision.p.fechaEmision}
-                />
-              )}
             </div>
+            {completar.tipo === 'CONTRATO' && (
+              <p className="texto-chico">
+                El contrato presentado por el titular queda vigente <strong>un mes desde hoy</strong>. Después, cada informe mensual
+                de 9 de Julio confirma si el local sigue con contrato. Al aprobarlo, el local pasa a la tabla de frecuencia de
+                recolección de Herramientas → Informe 9 de Julio.
+              </p>
+            )}
             <p>
               La {ETIQUETA_DOCUMENTO[completar.tipo]}
               {completar.numero.trim() ? ` N° ${completar.numero.trim()}` : ''} pasa a contar como documentación vigente

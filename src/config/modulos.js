@@ -199,8 +199,13 @@ export const MODULOS = [
     descripcion: 'Usuarios (por id_persona) y qué puede hacer cada tipo',
     ruta: '/accesos',
     grupo: 'accesos',
-    roles: ['administrador', 'direccion'],
-    rolesEdicion: ['administrador', 'direccion'],
+    /* Administrativo desde el 03/11/2026, como pide el área: da de alta y de
+       baja a la gente y ve qué puede hacer cada tipo de usuario. Los
+       administradores no se le muestran y no los puede tocar (el backend lo
+       rechaza: rutas/configuracion.js, controlarUsuario). Los permisos de los
+       tipos de usuario los cambia solo el administrador. */
+    roles: ['administrador', 'direccion', 'administrativo'],
+    rolesEdicion: ['administrador', 'direccion', 'administrativo'],
   },
 
   /* ===================== HERRAMIENTAS ===================== */

@@ -196,8 +196,16 @@ function TiposUsuario() {
   const sinTablas = capacidades?.accesos === false;
   const [params, setParams] = useSearchParams();
 
-  // Quien llegue acá con acceso de consulta ve las llaves pero no las mueve.
-  const soloLectura = !puedeEditar(rolActivo, 'accesos', permisos) || sinTablas;
+  /* Las llaves las mueve solo el administrador (el backend acepta los cambios
+     de permisos solo de él). El administrativo ve esta pestaña desde el
+     03/11/2026 para consulta: ve las llaves pero no las mueve, y no ve el tipo
+     administrador, así no tiene cómo darse acceso para sacarlo. */
+  const esAdministrador = rolActivo === ROL_ADMINISTRADOR;
+  const soloLectura = !esAdministrador || !puedeEditar(rolActivo, 'accesos', permisos) || sinTablas;
+  const roles = useMemo(
+    () => (esAdministrador ? LISTA_ROLES : LISTA_ROLES.filter((r) => r.id !== ROL_ADMINISTRADOR)),
+    [esAdministrador],
+  );
 
   const [buscar, setBuscar] = useState('');
 
@@ -205,13 +213,13 @@ function TiposUsuario() {
      de la grilla de Usuarios puede traer directo a los permisos de ese rol, y
      el botón Atrás del navegador la cierra. */
   const idAbierto = params.get('rol');
-  const rolAbierto = idAbierto && ROLES[idAbierto] ? ROLES[idAbierto] : null;
+  const rolAbierto = idAbierto && roles.some((r) => r.id === idAbierto) ? ROLES[idAbierto] : null;
   const cerrar = () => setParams({});
 
   /* ---------- Las filas ---------- */
   const filas = useMemo(() => {
     const q = buscar.trim().toLowerCase();
-    return LISTA_ROLES.filter((r) => !q || r.etiqueta.toLowerCase().includes(q) || r.descripcion.toLowerCase().includes(q)).map(
+    return roles.filter((r) => !q || r.etiqueta.toLowerCase().includes(q) || r.descripcion.toLowerCase().includes(q)).map(
       (r) => ({
         id: r.id,
         nombre: r.etiqueta,
@@ -222,7 +230,7 @@ function TiposUsuario() {
         habilitado: rolHabilitado(r.id, permisos),
       }),
     );
-  }, [buscar, usuarios, permisos]);
+  }, [buscar, usuarios, permisos, roles]);
 
   /* ---------- Las columnas ---------- */
   const columnas = useMemo(
@@ -285,13 +293,13 @@ function TiposUsuario() {
     [soloLectura, rolActivo, habilitarRol, setParams],
   );
 
-  const prendidos = LISTA_ROLES.filter((r) => rolHabilitado(r.id, permisos)).length;
+  const prendidos = roles.filter((r) => rolHabilitado(r.id, permisos)).length;
 
   return (
     <>
       <div className="accesos-header">
         <span>
-          Tipos de usuario: {LISTA_ROLES.length} · {prendidos} habilitado(s)
+          Tipos de usuario: {roles.length} · {prendidos} habilitado(s)
         </span>
       </div>
 

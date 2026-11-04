@@ -48,7 +48,13 @@
    El `margin-left: auto` de .navbar-derecha es lo que empuja ese bloque al
    extremo (aprovecha que .navbar ya es flex). Si el nombre aparece pegado al
    logo, es esa línea. */
+/* QUEDA PEGADA ARRIBA AL BAJAR (sticky, 03/11/2026). Antes se iba con la
+   página, y el menú lateral (fixed, top: 64px) quedaba con un hueco arriba
+   por donde se veía pasar el contenido. El z-index 100 la deja sobre el
+   contenido y el menú, y debajo de los modales (200). */
 .navbar {
+  position: sticky;
+  top: 0;
   background-color: #1976d2;
   height: 64px;
   display: flex;
@@ -83,6 +89,9 @@
   gap: 10px;
   text-decoration: none;
 }
+
+/* El símbolo de Ciudad SMT, sin fondo: se ve el azul de la barra detrás. */
+.logo-icon img { display: block; }
 
 .logo-text { display: flex; flex-direction: column; line-height: 1.1; }
 
@@ -181,7 +190,16 @@
   border-right: 1px solid #e0e0e0;
   padding: 8px 0;
   overflow-y: auto;
+  /* Al llegar al final del menú, el dedo no sigue arrastrando la página de atrás. */
+  overscroll-behavior: contain;
   box-shadow: 2px 0 12px rgba(0,0,0,0.18);
+}
+
+/* Con el menú abierto en el teléfono, la página de atrás no se mueve: se
+   desliza solo el menú. En la PC no se toca, para que no salte el ancho al
+   desaparecer la barra de desplazamiento. */
+@media (pointer: coarse) {
+  html:has(.sidebar-fondo) { overflow: hidden; }
 }
 
 /* El gris de atrás. Hace dos cosas: deja claro que lo de atrás pasó a segundo

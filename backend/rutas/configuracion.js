@@ -330,7 +330,10 @@ const CATALOGOS = {
     pk: 'id_usuario',
     orden: 'id_persona',
     incluyeBajas: true,
-    roles: ['direccion'],
+    // Administrativo desde el 03/11/2026, a pedido del área. A un
+    // administrador no lo toca nadie más que otro administrador
+    // (controlarUsuario y la baja, más abajo).
+    roles: ['direccion', 'administrativo'],
     aFront: (f) => ({
       id: f.idUsuario,
       nombre: String(f.idPersona ?? ''),

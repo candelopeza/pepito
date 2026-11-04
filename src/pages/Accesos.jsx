@@ -46,6 +46,10 @@ function Accesos() {
   const navegar = useNavigate();
 
   const visibles = SECCIONES.filter((s) => !s.roles || s.roles.includes(rol));
+<<<<<<< HEAD
+  // La que pide la dirección; si no existe o este rol no la ve, la primera.
+  const seccion = visibles.find((s) => pathname.startsWith(s.ruta)) ?? visibles[0];
+=======
   const veTipos = visibles.some((s) => s.id === 'tipos');
   // La que pide la dirección; si no existe o este rol no la ve, la primera.
   const seccion = visibles.find((s) => pathname.startsWith(s.ruta)) ?? visibles[0];
@@ -54,6 +58,7 @@ function Accesos() {
      del tipo de esa persona abiertos. */
   const abrir = useCallback((idRol) => navegar(`/accesos/tipos-usuario?rol=${idRol}`), [navegar]);
   const abrirPermisos = veTipos ? abrir : undefined;
+>>>>>>> a67b528eb7d5714b49e36fd89da7133b1a431078
 
   return (
     <>
@@ -72,7 +77,7 @@ function Accesos() {
         ))}
       </div>
 
-      {seccion && <seccion.Componente abrirPermisos={abrirPermisos} />}
+      {seccion && <seccion.Componente />}
     </>
   );
 }

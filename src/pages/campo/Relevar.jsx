@@ -35,12 +35,13 @@
    ============================================================================ */
 
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
 import Campo, { CampoSelect, CampoTexto } from '../../components/ui/Campo';
 import Aviso from '../../components/ui/Aviso';
 import Badge from '../../components/ui/Badge';
 import Grilla from '../../components/ui/Grilla';
+import { EnlaceFicha } from '../../components/RutaProtegida';
 import { useDatos } from '../../datos/datosContexto';
 import { useRol } from '../../auth/rolContexto';
 import { CLASIFICACIONES } from '../../config/catalogos';
@@ -61,11 +62,7 @@ const COLUMNAS_MIS_RELEVAMIENTOS = [
     headerName: 'Local',
     flex: 1,
     minWidth: 180,
-    renderCell: ({ row }) => (
-      <Link to={`/locales/${row.localId}`} className="link-local">
-        {row.nombreLocal}
-      </Link>
-    ),
+    renderCell: ({ row }) => <EnlaceFicha id={row.localId}>{row.nombreLocal}</EnlaceFicha>,
   },
   { field: 'direccionRelevada', headerName: 'Dirección relevada', flex: 1, minWidth: 180 },
   { field: 'clasificacion', headerName: 'Clasificación', width: 150 },

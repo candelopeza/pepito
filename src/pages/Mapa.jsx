@@ -40,7 +40,6 @@
    ============================================================================ */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import L from 'leaflet';
 import { MapContainer, Marker, Polygon, Popup, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -51,6 +50,7 @@ import Grilla from '../components/ui/Grilla';
 import Aviso from '../components/ui/Aviso';
 import { CampoSelect } from '../components/ui/Campo';
 import SeccionGeocodificacion from '../components/SeccionGeocodificacion';
+import { EnlaceFicha } from '../components/RutaProtegida';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { LISTA_ESTADOS, colorEstado, etiquetaEstado, grupoEstado } from '../dominio/estados';
@@ -197,11 +197,8 @@ const COLUMNAS_SIN_UBICACION = [
     headerName: 'Local',
     flex: 1,
     minWidth: 200,
-    renderCell: ({ row }) => (
-      <Link to={`/locales/${row.id}`} className="link-local">
-        {row.nombreLocal}
-      </Link>
-    ),
+    // Sin permiso para la ficha, el nombre queda sin enlace (RutaProtegida.jsx).
+    renderCell: ({ row }) => <EnlaceFicha id={row.id}>{row.nombreLocal}</EnlaceFicha>,
   },
   { field: 'direccion', headerName: 'Dirección declarada', flex: 1.2, minWidth: 220 },
   {
@@ -362,9 +359,10 @@ function Mapa() {
                       {local.plazo.vencido ? 'Plazo vencido' : `Vence en ${local.diasRestantes} día(s)`}
                     </span>
                   )}
-                  <Link to={`/locales/${local.id}`} className="link-local">
+                  {/* Solo si este rol puede abrir la ficha: si no, lo rebotaría al Inicio. */}
+                  <EnlaceFicha id={local.id} sinAcceso={null}>
                     Abrir la ficha del local →
-                  </Link>
+                  </EnlaceFicha>
                 </div>
               </Popup>
             </Marker>

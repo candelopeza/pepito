@@ -42,6 +42,7 @@ import Aviso, { Vacio } from '../../components/ui/Aviso';
 import Modal from '../../components/ui/Modal';
 import FormEntrega from '../../components/FormEntrega';
 import VistaCedula from '../../components/VistaCedula';
+import { EnlaceFicha } from '../../components/RutaProtegida';
 import { useRol } from '../../auth/rolContexto';
 import { useDatos } from '../../datos/datosContexto';
 import { ordenarPorProximidad } from '../../dominio/geo';
@@ -220,9 +221,9 @@ function Entregas() {
                   Ver cédula
                 </button>
                 {c.local && (
-                  <Link to={`/locales/${c.local.id}`} className="btn-tabla">
+                  <EnlaceFicha id={c.local.id} className="btn-tabla" sinAcceso={null}>
                     Ficha
-                  </Link>
+                  </EnlaceFicha>
                 )}
               </div>
             </li>

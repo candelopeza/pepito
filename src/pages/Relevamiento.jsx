@@ -44,6 +44,7 @@ import Grilla from '../components/ui/Grilla';
 import Badge, { BadgeEstado } from '../components/ui/Badge';
 import { Vacio } from '../components/ui/Aviso';
 import AccionesLocal from '../components/AccionesLocal';
+import { EnlaceFicha } from '../components/RutaProtegida';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { puedeEditar } from '../config/modulos';
@@ -95,9 +96,9 @@ function Relevamiento() {
         minWidth: 180,
         valueGetter: (_v, row) => row.nombreLocal ?? localPorId(row.localId)?.nombreLocal ?? '',
         renderCell: ({ row }) => (
-          <Link to={`/locales/${row.localId}`} className="link-local">
+          <EnlaceFicha id={row.localId}>
             {row.nombreLocal ?? localPorId(row.localId)?.nombreLocal ?? `Local ${row.localId}`}
-          </Link>
+          </EnlaceFicha>
         ),
       },
       { field: 'direccionRelevada', headerName: 'Dirección relevada', flex: 1, minWidth: 190 },
@@ -208,9 +209,7 @@ function Relevamiento() {
           const rel = relevamientos.find((r) => r.localId === row.id);
           return (
             <span className="celda-apilada">
-              <Link to={`/locales/${row.id}`} className="link-local">
-                {row.nombreLocal}
-              </Link>
+              <EnlaceFicha id={row.id}>{row.nombreLocal}</EnlaceFicha>
               <small className="celda-sub">{rel ? rel.usuario : 'sin relevamiento'}</small>
             </span>
           );

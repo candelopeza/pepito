@@ -1203,3 +1203,26 @@ que nadie puede darse ese acceso.
 Archivos: `src/config/modulos.js` (módulo `accesos`), `src/pages/Accesos.jsx`,
 `src/pages/accesos/Usuarios.jsx`, `src/pages/accesos/TiposUsuario.jsx` y
 `backend/rutas/configuracion.js` (catálogo `usuarios`).
+
+## 24. Sin permiso para el padrón, no se ofrece la ficha (4 de noviembre de 2026)
+
+En la base del área, el relevador tiene **Padrón de locales** en "no" (se cambió
+desde Accesos → Tipos de usuario). Igual veía "Abrir la ficha del local" en el
+Mapa, y al tocarlo la app lo devolvía al Inicio: la ficha (`/locales/:id`) está
+protegida con el mismo permiso que el padrón.
+
+Ahora el enlace a la ficha sale solo si el rol la puede abrir. Si no puede:
+
+- el nombre del local se sigue leyendo, pero como texto común (tablas del Mapa,
+  Relevamientos y "Mis relevamientos");
+- "Abrir la ficha del local" (globo del Mapa) y el botón "Ficha" (Mis entregas)
+  no aparecen.
+
+Se hace con `EnlaceFicha`, en `src/components/RutaProtegida.jsx`: hace el mismo
+control que la ruta. Se usa en `src/pages/Mapa.jsx`, `src/pages/Relevamiento.jsx`,
+`src/pages/campo/Relevar.jsx` y `src/pages/campo/Entregas.jsx`. Las pantallas de
+oficina siguen con el enlace común: si algún día se le saca el padrón a un rol de
+oficina, se cambia ahí `<Link to={`/locales/${id}`}>` por `<EnlaceFicha id={id}>`.
+
+Si se quiere que el relevador SÍ abra la ficha, no hace falta tocar código:
+el administrador pone "Padrón de locales" en "ver" para ese tipo de usuario.

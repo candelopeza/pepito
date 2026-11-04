@@ -33,7 +33,7 @@
        el Inicio; no cambies eso sin pensarlo.
    ============================================================================ */
 
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { puedeVerRuta } from '../config/modulos';
@@ -53,6 +53,26 @@ function RutaProtegida({ ruta, children }) {
 
   // ===== Caso 2: puede pasar =====
   return children;
+}
+
+/* ----------------------------------------------------------------------------
+   EnlaceFicha — EL ENLACE A LA FICHA DE UN LOCAL, SOLO SI LA PUEDE ABRIR
+   (04/11/2026). La ficha (/locales/:id) está protegida con ruta="/locales":
+   si en Accesos → Tipos de usuario un rol tiene "Padrón de locales" en "no"
+   (pasó con el relevador), el enlace lo mandaba de rebote al Inicio. Ahora,
+   sin permiso, en lugar del enlace va `sinAcceso`:
+     - por defecto, el mismo texto sin enlace (el nombre del local se lee igual);
+     - sinAcceso={null}: no se muestra nada ("Abrir la ficha", botón "Ficha").
+   ---------------------------------------------------------------------------- */
+export function EnlaceFicha({ id, className = 'link-local', children, sinAcceso = children }) {
+  const { rol } = useRol();
+  const { permisos } = useDatos();
+  if (!puedeVerRuta(rol, '/locales', permisos)) return sinAcceso;
+  return (
+    <Link to={`/locales/${id}`} className={className}>
+      {children}
+    </Link>
+  );
 }
 
 export default RutaProtegida;

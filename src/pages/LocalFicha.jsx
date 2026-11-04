@@ -39,7 +39,7 @@ import { useDatos } from '../datos/datosContexto';
 import { useRol } from '../auth/rolContexto';
 import { puedeEditar, puedeVerRuta } from '../config/modulos';
 
-import { ETIQUETA_DOCUMENTO } from '../dominio/actuaciones';
+import { ETIQUETA_DOCUMENTO, textoFrecuencia } from '../dominio/actuaciones';
 import { fmtFecha, fmtFechaHora } from '../dominio/fechas';
 import { faltantesRegistrales } from '../dominio/reglas';
 import { colorClasificacion, etiquetaClasificacion } from '../config/catalogos';
@@ -183,7 +183,17 @@ function LocalFicha() {
       {docsVigentes.length > 0 && (
         <Aviso tipo="ok" titulo="Documentación vigente: el local está fuera del circuito sancionatorio">
           {docsVigentes
-            .map((d) => `${ETIQUETA_DOCUMENTO[d.tipo]} N° ${d.numero}, vigente hasta el ${fmtFecha(d.fechaVencimiento)}`)
+            .map((d) => {
+              // El contrato del informe 9DJ puede venir sin número ni fecha: lo
+              // sostiene la última foto de la prestataria (dominio/reglas.js).
+              const numero = d.numero ? ` N° ${d.numero}` : ' sin número informado';
+              const hasta = d.fechaVencimiento
+                ? `vigente hasta el ${fmtFecha(d.fechaVencimiento)}`
+                : d.origen === 'INFORME_9DJ'
+                  ? 'vigente mientras el último informe de 9 de Julio lo sostenga'
+                  : 'sin fecha de vencimiento';
+              return `${ETIQUETA_DOCUMENTO[d.tipo]}${numero}, ${hasta}`;
+            })
             .join(' · ')}
           . Al vencer, el local reingresa automáticamente a primera notificación pendiente.
         </Aviso>
@@ -225,6 +235,16 @@ function LocalFicha() {
         <Dato etiqueta="Teléfono">{local.telefono}</Dato>
         <Dato etiqueta="CUIL del titular habilitado">{local.titularCuil}</Dato>
         <Dato etiqueta="Id en el sistema anterior">{local.idLegacy}</Dato>
+        {/* Del contrato vigente (sql/13). La carga coordinación en Informe 9 de Julio. */}
+        {local.vigente?.contrato && (
+          <Dato etiqueta="Frecuencia de recolección contratada">
+            {local.frecuenciaSemanal ? (
+              textoFrecuencia(local.frecuenciaSemanal)
+            ) : (
+              <span className="texto-gris">sin cargar (Herramientas → Informe 9 de Julio)</span>
+            )}
+          </Dato>
+        )}
         {/* Ubicación OFICIAL: la que sale de geocodificar la dirección. */}
         <Dato etiqueta="Ubicación del padrón (geocodificada)">
           {local.sinGeo ? 'sin ubicación' : `${local.latitud}, ${local.longitud}`}

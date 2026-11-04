@@ -86,8 +86,33 @@ export const instanciaPorEmitir = (local) => (String(local?.estado ?? '').starts
    automática". Si esto se rompe, cualquiera detiene una intimación subiendo un
    archivo.
    ============================================================================ */
+/* El id de estado VIGENTE de un trámite de documentación en la base
+   (backend/mapeo.js, ID_ESTADO.DOC_VIGENTE). Las actuaciones llegan del
+   servidor con `idEstado`; las armadas a mano (pruebas) no lo traen. */
+const ID_ESTADO_DOC_VIGENTE = 18;
+
+/* >>> LOS CONTRATOS DEL INFORME 9 DE JULIO NO SE RIGEN POR FECHA <<<
+   Misma regla que backend/mapeo.js (documentoVigente): el informe de la
+   prestataria es una FOTO de su padrón de contratos, y lo que el área sabe
+   de esos locales es que FIGURAN en el último informe, no cuándo vence cada
+   contrato (218 de los heredados de la base histórica vienen sin fecha). Un
+   contrato INFORME_9DJ está vigente mientras la última foto lo sostenga (su
+   trámite sigue en VIGENTE) y deja de estarlo cuando un informe posterior lo
+   retira. Para el resto de la documentación manda la fecha.
+   Hasta el 4/11/2026 el front miraba solo la fecha: un contrato del informe
+   sin fecha se mostraba "Vencida" en el historial mientras el estado del
+   local decía "Contrato vigente - 9 de Julio". */
+export function documentoVigente(a, refISO = hoyISO()) {
+  if (a.validado === false) return false;
+  if (a.origen === 'INFORME_9DJ') {
+    if (a.idEstado !== undefined) return a.idEstado === ID_ESTADO_DOC_VIGENTE;
+    return !a.fechaVencimiento || estaVigente(a.fechaVencimiento, refISO);
+  }
+  return estaVigente(a.fechaVencimiento, refISO);
+}
+
 function documentoCuenta(a, refISO) {
-  return a.validado !== false && estaVigente(a.fechaVencimiento, refISO);
+  return documentoVigente(a, refISO);
 }
 
 export function documentacionVigente(actuaciones, localId, refISO = hoyISO()) {
@@ -252,11 +277,14 @@ export const ESTADOS_CON_DOCUMENTACION = [
    Al aprobar, coordinación elige el tipo y carga el expediente, y sin
    expediente no se aprueba. Desde el 30/10/2026 tampoco pide el número del
    documento: lo carga coordinación al aprobar, y sin él tampoco se aprueba.
-   En false, el portal vuelve a pedirle las tres cosas al titular, como antes. */
+   Desde el 4/11/2026 el titular vuelve a elegir el TIPO (contrato, DDJJ o
+   DDJJ de reciclaje), que es lo único que sabe seguro; número y expediente
+   siguen siendo de coordinación. En false, el portal vuelve a pedirle las
+   tres cosas al titular, como antes. */
 export const COORDINACION_COMPLETA_PRESENTACION = true;
-/* El tipo con el que entra la presentación mientras espera: el Form D.A 03,
-   que es lo que presenta casi todo el mundo. No cuenta para nada hasta que
-   coordinación lo confirma o lo cambia al aprobar. */
+/* El tipo que el portal ofrece preseleccionado: el Form D.A 03, que es lo que
+   presenta casi todo el mundo. El titular lo cambia si presenta otra cosa, y
+   coordinación lo confirma o lo corrige al aprobar. */
 export const TIPO_PROVISORIO_PORTAL = 'DDJJ_RECICLAJE';
 /* Quién aprueba o rechaza lo que entra por el portal (hasta el 28/10/2026
    también administrativo, que ahora ve la bandeja sin decidir). El

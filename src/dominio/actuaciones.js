@@ -157,6 +157,16 @@ export const ORIGENES_DOCUMENTO = [
 
 export const ETIQUETA_ORIGEN = Object.fromEntries(ORIGENES_DOCUMENTO.map((o) => [o.id, o.etiqueta]));
 
+/* La frecuencia de recolección del contrato (documentacion.frecuencia_semanal,
+   sql/13): veces por semana que pasa la prestataria. La carga coordinación en
+   Herramientas → Informe 9 de Julio. 7 es todos los días. */
+export const FRECUENCIAS_SEMANALES = [1, 2, 3, 4, 5, 6, 7];
+export function textoFrecuencia(n) {
+  if (!n) return '';
+  if (n === 7) return 'Todos los días';
+  return n === 1 ? '1 vez por semana' : `${n} veces por semana`;
+}
+
 /* ---------------------------------------------------------------- consultas
    [NO PORTAR] El sistema viejo determinaba "la más reciente" por el orden
    físico de las filas de la planilla: cualquier inserción rompía el cálculo en

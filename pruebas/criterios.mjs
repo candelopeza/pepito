@@ -13,8 +13,8 @@
    mal computado es una intimación impugnable, no un bug cosmético.
    ============================================================================ */
 import { vencimientoHabil, plazoVencido } from '../src/dominio/fechas.js';
-import { vencimientoAnual, estaVigente } from '../src/dominio/vigencias.js';
-import { requiereDatosRegistrales, resolverEstado } from '../src/dominio/reglas.js';
+import { vencimientoAnual, vencimientoMensual, estaVigente } from '../src/dominio/vigencias.js';
+import { documentoVigente, requiereDatosRegistrales, resolverEstado } from '../src/dominio/reglas.js';
 import { accionesRapidasPara, puedeVerRuta } from '../src/config/modulos.js';
 import { textoDeCedula } from '../src/dominio/textoCedula.js';
 import { armarNumeroCedula, completarNumeroCedula, mismoNumeroCedula, numeroCedula } from '../src/dominio/actuaciones.js';
@@ -210,6 +210,26 @@ chequear(
   accionesRapidasPara('relevador', { modulos: { relevamientos: { relevador: 'no' } }, rolesDeshabilitados: [] }).some((a) => a.id === 'nuevo-relevamiento'),
   false,
 );
+
+// El contrato que presenta el titular vale un mes desde la aprobación
+// (pedido del 4/11/2026): el mismo día del mes siguiente, y si no existe, el
+// último día de ese mes.
+chequear('aprobado el 4/11 vence el 4/12', vencimientoMensual('2026-11-04'), '2026-12-04');
+chequear('aprobado el 15/12 vence el 15/01 del año siguiente', vencimientoMensual('2026-12-15'), '2027-01-15');
+chequear('aprobado el 31/01 vence el 28/02 (febrero no tiene 31)', vencimientoMensual('2026-01-31'), '2026-02-28');
+chequear('aprobado el 31/01 de un año bisiesto vence el 29/02', vencimientoMensual('2028-01-31'), '2028-02-29');
+chequear('aprobado el 31/03 vence el 30/04', vencimientoMensual('2026-03-31'), '2026-04-30');
+chequear('el día del vencimiento mensual ya no está vigente', estaVigente('2026-12-04', '2026-12-04'), false);
+chequear('el día anterior sí', estaVigente('2026-12-04', '2026-12-03'), true);
+
+// Los contratos del informe 9 de Julio no se rigen por fecha (misma regla que
+// backend/mapeo.js): valen mientras la última foto los sostenga.
+const contrato9dj = (extra) => ({ id: 9, localId: 1, tipo: 'CONTRATO', origen: 'INFORME_9DJ', fecha: '2026-10-02', fechaVencimiento: null, ...extra });
+chequear('contrato del informe sin fecha, trámite vigente: cuenta', documentoVigente(contrato9dj({ idEstado: 18 }), HOY), true);
+chequear('contrato del informe sin fecha, retirado por el informe siguiente: no cuenta', documentoVigente(contrato9dj({ idEstado: 19 }), HOY), false);
+chequear('y el local con ese contrato está en Contrato vigente - 9 de Julio', est(localCompleto, [contrato9dj({ idEstado: 18 })]), 'CONTRATO_9DJ');
+chequear('un contrato de la oficina sin fecha no cuenta', documentoVigente({ tipo: 'CONTRATO', origen: 'CARGADO_OFICINA', fechaVencimiento: null, idEstado: 18 }, HOY), false);
+chequear('un contrato del titular vencido no cuenta aunque el trámite diga vigente', documentoVigente({ tipo: 'CONTRATO', origen: 'PRESENTADO_TITULAR', fechaVencimiento: '2026-09-01', idEstado: 18 }, HOY), false);
 
 console.log(`\n${ok} criterio(s) cumplidos · ${mal} falla(s)`);
 if (mal) process.exit(1);

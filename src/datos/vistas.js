@@ -60,6 +60,7 @@ export function conEstado(base, refISO = hoyISO()) {
     // La cédula en curso: la última emitida (con número). De ahí sale a quién
     // está asignada, para las bandejas del notificador y de coordinación.
     const cedulas = ordenadas.filter((a) => a.tipo === 'NOTIFICACION' && a.numeroCedula);
+    const vigente = documentacionVigente(propias, l.id, refISO);
     return {
       ...l,
       estado: codigo,
@@ -68,7 +69,10 @@ export function conEstado(base, refISO = hoyISO()) {
       estadoGrupo: grupoEstado(codigo),
       plazo,
       diasRestantes: plazo ? diasEntre(refISO, plazo.vencimiento) : null,
-      vigente: documentacionVigente(propias, l.id, refISO),
+      vigente,
+      // Veces por semana que pasa la prestataria, según el contrato vigente
+      // (la carga coordinación en Herramientas → Informe 9 de Julio).
+      frecuenciaSemanal: vigente.contrato?.frecuenciaSemanal ?? null,
       cantidadActuaciones: ordenadas.length,
       sinGeo: l.latitud === null || l.longitud === null,
       cedulaEnCurso: cedulas.length ? cedulas[cedulas.length - 1] : null,

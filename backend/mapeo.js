@@ -298,11 +298,6 @@ export function aActuacionFront(fila, documentoPorTramite = new Map()) {
         // script, quedan en null y la pantalla no muestra "Sin imprimir".
         impresaPor: fila.impresaPor ?? null,
         impresaEn: fechaHora(fila.impresaEn),
-        // Notificación por correo (sql/13). Sin las columnas, medio 'papel' y
-        // sin envío, que es lo que pasaba siempre.
-        medio: fila.medioNotificacion ?? 'papel',
-        correoEnviadoA: fila.correoEnviadoA ?? null,
-        correoEnviadoEn: fechaHora(fila.correoEnviadoEn),
       };
 
     case ID_TTRAMITE.PRESENTACION_DOCUMENTACION: {

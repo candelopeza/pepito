@@ -16,9 +16,6 @@
      impresion   columnas tramite.impresa_*   sql/04-columnas-opcionales.sql
      archivos    tabla `archivo`              sql/08-tabla-archivo.sql
      titularCuil columna local.titular_cuil   sql/12-titular-cuil.sql
-     correo      columnas tramite.medio_notificacion, correo_enviado_*
-                 (sql/13-notificacion-por-correo.sql) Y el servidor SMTP
-                 configurado en .env (CORREO_HOST, ver correo.js)
 
    >>> POR QUÉ ASÍ Y NO "QUE FALLE SI FALTA" <<<
    Si el backend diera por hecho que la tabla existe, una base sin el script
@@ -29,7 +26,6 @@
    ============================================================================ */
 
 import { consultar } from './conexion-bd.js';
-import { correoConfigurado } from './correo.js';
 
 const VACIO = {
   auditoria: false,
@@ -38,7 +34,6 @@ const VACIO = {
   impresion: false,
   archivos: false,
   titularCuil: false,
-  correo: false,
   revisadoEn: null,
   error: null,
 };
@@ -54,7 +49,7 @@ export async function revisarCapacidades() {
          FROM information_schema.columns
         WHERE table_schema = DATABASE()
           AND (table_name IN ('auditoria', 'parametro', 'permisos_modulos', 'tipos_usuario', 'archivo')
-               OR (table_name = 'tramite' AND column_name IN ('impresa_por', 'impresa_en', 'medio_notificacion', 'correo_enviado_a', 'correo_enviado_en'))
+               OR (table_name = 'tramite' AND column_name IN ('impresa_por', 'impresa_en'))
                OR (table_name = 'local' AND column_name = 'titular_cuil'))`,
     );
     const hay = (tabla, columna) =>
@@ -67,11 +62,6 @@ export async function revisarCapacidades() {
       impresion: hay('tramite', 'impresa_por') && hay('tramite', 'impresa_en'),
       archivos: hay('archivo'),
       titularCuil: hay('local', 'titular_cuil'),
-      correo:
-        correoConfigurado() &&
-        hay('tramite', 'medio_notificacion') &&
-        hay('tramite', 'correo_enviado_a') &&
-        hay('tramite', 'correo_enviado_en'),
       revisadoEn: new Date().toISOString(),
       error: null,
     };

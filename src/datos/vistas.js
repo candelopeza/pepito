@@ -17,7 +17,7 @@
 import { diasEntre, hoyISO, sumarDias } from '../dominio/fechas.js';
 import { colorEstado, etiquetaEstado, grupoEstado } from '../dominio/estados.js';
 import { ACCIONES, accionesDisponibles, documentacionVigente, plazoEnCurso, resolverEstado } from '../dominio/reglas.js';
-import { deLocal, dosEntregasEfectivas } from '../dominio/actuaciones.js';
+import { FRECUENCIAS_SEMANALES, deLocal, dosEntregasEfectivas } from '../dominio/actuaciones.js';
 
 /* Enriquece cada local con todo lo derivado. Es lo que consumen las grillas.
    Ojo: devuelve objetos NUEVOS, no toca los del store. */
@@ -380,6 +380,55 @@ export function cedulas(base) {
    etiqueta de presentación: no existe ningún usuario que se llame así. */
 const SIN_AGENTE = 'Sin agente registrado';
 
+/* ============================================================================
+   VOLUMEN DE GENERACIÓN  (pedido de coordinación, 4/11/2026)
+   ----------------------------------------------------------------------------
+   "Dimensionar a grandes rasgos el volumen de generación de residuos de los
+   locales". El dato que se tiene es la FRECUENCIA DE RECOLECCIÓN contratada
+   (veces por semana que pasa la prestataria, documentacion.frecuencia_semanal,
+   sql/13), cargada por coordinación sobre los contratos vigentes. No se sabe
+   cuánto se retira en cada pasada, así que la medida es RETIROS POR SEMANA:
+   un local con 3 pasadas semanales cuenta 3. Es una aproximación, y la
+   pantalla lo dice. Es una foto de hoy: vale para los contratos vigentes.
+   ============================================================================ */
+export function volumenDeGeneracion(locales) {
+  const conContrato = locales.filter((l) => l.vigente?.contrato);
+  const conFrecuencia = conContrato.filter((l) => l.frecuenciaSemanal);
+  const retirosSemanales = conFrecuencia.reduce((t, l) => t + l.frecuenciaSemanal, 0);
+
+  const porFrecuencia = FRECUENCIAS_SEMANALES.map((n) => ({
+    frecuencia: n,
+    locales: conFrecuencia.filter((l) => l.frecuenciaSemanal === n).length,
+  }));
+
+  const rubros = new Map();
+  for (const l of conContrato) {
+    const rubro = String(l.rubro ?? '').trim() || 'Sin rubro';
+    if (!rubros.has(rubro)) rubros.set(rubro, { rubro, locales: 0, conFrecuencia: 0, retirosSemanales: 0 });
+    const r = rubros.get(rubro);
+    r.locales += 1;
+    if (l.frecuenciaSemanal) {
+      r.conFrecuencia += 1;
+      r.retirosSemanales += l.frecuenciaSemanal;
+    }
+  }
+  const porRubro = [...rubros.values()]
+    .map((r) => ({ ...r, promedio: r.conFrecuencia ? Math.round((r.retirosSemanales / r.conFrecuencia) * 10) / 10 : null }))
+    .sort((a, b) => b.retirosSemanales - a.retirosSemanales || b.locales - a.locales);
+
+  return {
+    conContrato: conContrato.length,
+    conFrecuencia: conFrecuencia.length,
+    sinFrecuencia: conContrato.length - conFrecuencia.length,
+    retirosSemanales,
+    // 52 semanas / 12 meses: un mes tiene 4,33 semanas.
+    retirosMensuales: Math.round((retirosSemanales * 52) / 12),
+    promedio: conFrecuencia.length ? Math.round((retirosSemanales / conFrecuencia.length) * 10) / 10 : null,
+    porFrecuencia,
+    porRubro,
+  };
+}
+
 export function indicadores(base, locales, refISO = hoyISO()) {
   const desdeMes = `${refISO.slice(0, 7)}-01`;
 
@@ -475,6 +524,9 @@ export function indicadores(base, locales, refISO = hoyISO()) {
 
     // --- producción por agente
     porAgente: Object.values(porAgente).sort((a, b) => b.relevamientos + b.entregas - (a.relevamientos + a.entregas)),
+
+    // --- volumen de generación (foto de hoy, sobre los contratos vigentes)
+    volumen: volumenDeGeneracion(locales),
   };
 }
 

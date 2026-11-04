@@ -265,4 +265,7 @@ export const api = {
   informe9djAplicar: (id, datos) => post(`/informe-9dj/cargas/${id}/aplicar`, datos),
   informe9djDescartar: (id) => post(`/informe-9dj/cargas/${id}/descartar`),
   informe9djAnular: (id, motivo) => post(`/informe-9dj/cargas/${id}/anular`, { motivo }),
+  // La frecuencia de recolección de los contratos del último informe (sql/13).
+  informe9djContratos: () => get('/informe-9dj/contratos'),
+  informe9djFrecuencia: (idTramite, frecuencia) => put(`/informe-9dj/contratos/${idTramite}/frecuencia`, { frecuencia }),
 };

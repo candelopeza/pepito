@@ -19,6 +19,10 @@
      POST   /informe-9dj/cargas/:id/descartar  carga equivocada, sin efectos
      POST   /informe-9dj/cargas/:id/anular     revierte una carga APLICADA,
                                            con motivo y usuario (sección 5.2)
+     GET    /informe-9dj/contratos          los locales con contrato vigente hoy
+                                           (informe, titular u oficina) y su frecuencia
+     PUT    /informe-9dj/contratos/:idTramite/frecuencia   { frecuencia }
+                                           veces por semana (1 a 7, o null)
 
    >>> LOS CONTRATOS DE ORIGEN INFORME_9DJ SON DE ESTE MÓDULO <<<
    Desde la ficha del local no se editan ni se dan de baja (lo rechaza
@@ -31,7 +35,8 @@
    ============================================================================ */
 
 import { Router } from 'express';
-import { consultar, enTransaccion } from '../conexion-bd.js';
+import { consultar, ejecutar, enTransaccion } from '../conexion-bd.js';
+import { tiene } from '../capacidades.js';
 import { cicloActual, insertarTramite, recortarObservacion } from '../consultas.js';
 import { ID_ESTADO, ID_TDOC, ID_TTRAMITE } from '../mapeo.js';
 import { hoyISO } from '../../src/dominio/fechas.js';
@@ -355,6 +360,89 @@ router.get('/cargas/:id', async (req, res, next) => {
 });
 
 /* ===========================================================================
+   GET /informe-9dj/contratos  ->  los locales con contrato vigente hoy
+   ---------------------------------------------------------------------------
+   Pedido de coordinación (4/11/2026): el informe de 9 de Julio no dice con
+   qué frecuencia pasa la prestataria por cada local; ese dato lo tiene
+   coordinación y lo carga acá, contrato por contrato. Se listan TODOS los
+   contratos vigentes hoy, vengan de donde vengan:
+     - los del último informe aplicado (los de informes anteriores que el
+       último no trajo ya fueron retirados, así que no están vigentes);
+     - los que presentó un titular por el portal y coordinación aprobó (valen
+       un mes, después los confirma el informe);
+     - los que cargó la oficina.
+   Un contrato vencido no aparece: ya no es un contrato vigente. `informe` es
+   el último aplicado, para el encabezado de la tabla.
+   =========================================================================== */
+router.get('/contratos', async (_req, res, next) => {
+  try {
+    const [ultimo] = await consultar(
+      `SELECT id_informe idInforme, periodo, fecha_aplicacion fechaAplicacion, usuario_aplicacion usuarioAplicacion
+         FROM informe_9dj WHERE habilita = 1 AND estado = 'APLICADO'
+        ORDER BY fecha_aplicacion DESC, id_informe DESC LIMIT 1`,
+    );
+    // Sin la columna (sql/13) la lista sale igual, con la frecuencia vacía.
+    const columnaFrecuencia = tiene('frecuencia') ? 'd.frecuencia_semanal' : 'NULL';
+    const contratos = await consultar(
+      `SELECT t.id_tramite id, l.id_local localId, l.nombre_local nombreLocal, l.razon_social razonSocial,
+              l.cuit, l.direccion_local direccion, d.numero numeroContrato, d.origen,
+              DATE_FORMAT(d.fecha_vencimiento, '%Y-%m-%d') vencimiento, ${columnaFrecuencia} frecuenciaSemanal,
+              (SELECT MAX(f.id_informe) FROM informe_9dj_fila f WHERE f.id_tramite = t.id_tramite AND f.habilita = 1) idInforme
+         FROM tramite t
+         JOIN documentacion d ON d.id_tramite = t.id_tramite AND d.habilita = 1 AND d.id_tdocumentacion = ?
+         JOIN local l ON l.id_local = t.id_local AND l.habilita = 1
+        WHERE t.habilita = 1 AND t.id_estado = ?
+          AND (d.fecha_vencimiento IS NULL OR d.fecha_vencimiento > ?)
+        ORDER BY l.nombre_local`,
+      [ID_TDOC.CONTRATO, ID_ESTADO.DOC_VIGENTE, hoyISO()],
+    );
+    res.json({
+      informe: ultimo
+        ? { id: ultimo.idInforme, periodo: ultimo.periodo, fechaAplicacion: ultimo.fechaAplicacion, usuarioAplicacion: ultimo.usuarioAplicacion }
+        : null,
+      contratos: contratos.map((c) => ({
+        ...c,
+        idInforme: c.idInforme === null ? null : Number(c.idInforme),
+        frecuenciaSemanal: c.frecuenciaSemanal === null ? null : Number(c.frecuenciaSemanal),
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* PUT /informe-9dj/contratos/:idTramite/frecuencia  { frecuencia }
+   Veces por semana, de 1 a 7 (7 = todos los días); null la borra. Lo carga
+   coordinación o la Dirección. Es un dato del área, no de la foto de la
+   prestataria: por eso sí se edita aunque el contrato venga del informe. */
+router.put('/contratos/:idTramite/frecuencia', requiereRol('coordinacion', 'direccion'), async (req, res, next) => {
+  try {
+    if (!tiene('frecuencia')) {
+      return res.status(503).json({
+        error: 'La base todavía no guarda la frecuencia de recolección. Correr backend/sql/13-frecuencia-recoleccion.sql desde HeidiSQL.',
+      });
+    }
+    const crudo = req.body?.frecuencia;
+    const frecuencia = crudo === null || crudo === undefined || crudo === '' ? null : Number(crudo);
+    if (frecuencia !== null && (!Number.isInteger(frecuencia) || frecuencia < 1 || frecuencia > 7)) {
+      return res.status(400).json({ error: 'La frecuencia es la cantidad de veces por semana: un entero de 1 a 7.' });
+    }
+    const idTramite = Number(req.params.idTramite);
+    const [doc] = await consultar(
+      `SELECT d.id_documentacion id FROM documentacion d
+         JOIN tramite t ON t.id_tramite = d.id_tramite AND t.habilita = 1
+        WHERE d.id_tramite = ? AND d.habilita = 1 AND d.id_tdocumentacion = ?`,
+      [idTramite, ID_TDOC.CONTRATO],
+    );
+    if (!doc) return res.status(404).json({ error: 'Ese trámite no es un contrato' });
+    await ejecutar('UPDATE documentacion SET frecuencia_semanal = ? WHERE id_documentacion = ?', [frecuencia, doc.id]);
+    res.json({ id: idTramite, frecuenciaSemanal: frecuencia });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* ===========================================================================
    POST /informe-9dj/cargas  ->  subir un archivo
    ---------------------------------------------------------------------------
    { nombreArchivo, contenidoBase64, periodo? }
@@ -404,6 +492,24 @@ router.post('/cargas', async (req, res, next) => {
       throw e;
     }
     if (!lectura.filas.length) return res.status(400).json({ error: 'El archivo se leyó pero no tiene ninguna fila con datos.' });
+
+    /* >>> UN VENCIMIENTO QUE NO SE ENTIENDE FRENA LA CARGA <<<
+       No se guarda nada: se devuelve fila por fila qué tiene de malo, para
+       que corrijan el archivo y lo vuelvan a subir. Guardarlo vacío sería
+       inventar que el contrato no tiene vencimiento, y la base rechazaría
+       una fecha como 31/11 con un error que nadie entiende. */
+    const malLeidas = lectura.filas.filter((f) => f.motivoVencimiento);
+    if (malLeidas.length) {
+      const detalle = malLeidas
+        .slice(0, 10)
+        .map((f) => `fila ${f.numeroDeFila}${f.razonSocial ? ` (${f.razonSocial})` : ''}: ${f.motivoVencimiento}`)
+        .join(' · ');
+      return res.status(400).json({
+        error:
+          `No se cargó el informe: ${malLeidas.length} fila(s) tienen un vencimiento que no se puede leer. ` +
+          `${detalle}${malLeidas.length > 10 ? ' · …' : ''}. Corregí el archivo y volvé a subirlo.`,
+      });
+    }
 
     // El cruce contra el padrón: por CUIT y, si no cruza, por similitud de
     // dirección y nombre (las coincidencias parecidas quedan como candidatos).

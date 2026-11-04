@@ -429,6 +429,21 @@ seccion('8. Cargar dos veces el mismo archivo avisa que ya fue procesado');
 }
 
 /* ===========================================================================
+   Un vencimiento que no existe en el calendario frena la carga con el motivo
+   (pedido del 4/11/2026). Antes quedaba vacío sin aviso.
+   =========================================================================== */
+seccion('5b. Una fecha imposible rechaza la carga y dice por qué');
+
+{
+  const conFechaMala = Buffer.from(`CUIT;Razón Social;Domicilio;Vencimiento\n${CUIT_NUEVO};FECHA MALA;CALLE 1;2027-11-31\n`);
+  const { estado, cuerpo } = await cargar('fecha-mala.csv', conFechaMala);
+  verificar('la carga se rechaza (400) en vez de guardar la fila sin fecha', estado === 400, `estado ${estado}: ${JSON.stringify(cuerpo)}`);
+  verificar('el mensaje dice la fila y por qué no es una fecha', /fila \d+ \(FECHA MALA\)/.test(cuerpo?.error ?? '') && /noviembre de 2027 tiene 30 d/.test(cuerpo?.error ?? ''), cuerpo?.error);
+  const { cuerpo: cargas } = await get('/informe-9dj/cargas');
+  verificar('no quedó ninguna carga en revisión por el intento', !cargas.some((c) => c.estado === 'EN_REVISION'), '');
+}
+
+/* ===========================================================================
    CRITERIOS 6 y 16 — la alarma de informe incompleto y el descarte limpio
    =========================================================================== */
 seccion('6. Un informe con muchas menos filas dispara la advertencia');

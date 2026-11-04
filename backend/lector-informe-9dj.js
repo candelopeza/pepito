@@ -79,8 +79,13 @@ export function huellaDeArchivo(buffer) {
    3. FECHAS
    ---------------------------------------------------------------------------
    El vencimiento puede venir como 31/12/2026, 31-12-2026, 2026-12-31 o como
-   fecha de Excel (un Date ya armado). Lo que no se entiende queda en null: un
-   vencimiento inventado es peor que un vencimiento vacío.
+   fecha de Excel (un Date ya armado). Una celda vacía es un contrato sin
+   vencimiento informado, y eso se acepta. Una celda CON ALGO que no se
+   entiende (texto, o un día que no existe como 31/11) NO se acepta en
+   silencio: `motivoDeFecha` explica qué tiene de malo y la carga entera se
+   rechaza con ese motivo (rutas/informe-9dj.js), para que corrijan el archivo
+   y lo vuelvan a subir. Pedido del 4/11/2026: antes quedaba vacío y nadie se
+   enteraba, o la base lo rechazaba al guardar con un error incomprensible.
    --------------------------------------------------------------------------- */
 export function normalizarFecha(valor) {
   if (valor === null || valor === undefined || valor === '') return null;
@@ -104,10 +109,38 @@ export function normalizarFecha(valor) {
   return null;
 }
 
+const DIAS_DEL_MES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/* Por qué un vencimiento no se pudo leer, o null si está bien (o vacío). */
+export function motivoDeFecha(valor) {
+  if (valor === null || valor === undefined || valor === '') return null;
+  if (valor instanceof Date) return Number.isNaN(valor.getTime()) ? 'la celda tiene una fecha inválida de Excel' : null;
+  if (normalizarFecha(valor) !== null) return null;
+  const texto = String(valor).trim();
+  const m = texto.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/) ?? texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (m) {
+    const esISO = texto.match(/^\d{4}-/);
+    const mes = Number(m[2]);
+    const dia = Number(esISO ? m[3] : m[1]);
+    let anio = Number(esISO ? m[1] : m[3]);
+    if (anio < 100) anio += 2000;
+    if (mes < 1 || mes > 12) return `"${texto}" no es una fecha: el mes ${mes} no existe`;
+    const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+    if (dia < 1 || dia > ultimo) return `"${texto}" no es una fecha: ${DIAS_DEL_MES[mes]} de ${anio} tiene ${ultimo} días`;
+  }
+  return `"${texto}" no se reconoce como fecha (se esperan formatos como 31/12/2026 o 2026-12-31)`;
+}
+
 function componerFecha(a, mes, dia) {
+  const aa = Number(a);
   const mm = Number(mes);
   const dd = Number(dia);
   if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  // Que el día exista en ese mes: 31/11 o 29/02 de un año no bisiesto pasan
+  // el control de arriba, pero la base los rechaza al guardar y se caía la
+  // carga entera. Una fecha imposible queda vacía, como una ilegible.
+  const fecha = new Date(Date.UTC(aa, mm - 1, dd));
+  if (fecha.getUTCFullYear() !== aa || fecha.getUTCMonth() !== mm - 1 || fecha.getUTCDate() !== dd) return null;
   return `${a}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
 }
 
@@ -172,6 +205,7 @@ function armarFila(celdas, mapa, numeroDeFila) {
     direccion: leer('direccion'),
     numeroContrato: String(leer('numeroContrato')),
     vencimiento: normalizarFecha(leer('vencimiento')),
+    motivoVencimiento: motivoDeFecha(leer('vencimiento')),
     // La fila tal como vino, para que el agente pueda cotejar contra el
     // archivo original sin salir de la pantalla.
     crudo: celdas.map((c) => (c instanceof Date ? normalizarFecha(c) : String(c ?? '').trim())).join(' | '),
@@ -335,6 +369,7 @@ export function filasDesdeTexto(texto) {
       direccion: corte > 0 ? limpio.slice(corte + 1).trim() : '',
       numeroContrato: '',
       vencimiento: fecha ? normalizarFecha(fecha[0]) : null,
+      motivoVencimiento: fecha ? motivoDeFecha(fecha[0]) : null,
       crudo: linea,
     });
   });

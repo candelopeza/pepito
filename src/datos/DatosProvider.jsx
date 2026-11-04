@@ -88,7 +88,7 @@ const PERMISOS_VACIOS = { modulos: {}, rolesDeshabilitados: [] };
 /* Qué funciones opcionales tiene prendidas el servidor (backend/capacidades.js).
    Arranca todo apagado: si el servidor es viejo y no sabe responder, las
    pantallas no ofrecen lo que no se puede guardar. */
-const CAPACIDADES_VACIAS = { auditoria: false, parametros: false, accesos: false, impresion: false, geocodificador: 'ninguno' };
+const CAPACIDADES_VACIAS = { auditoria: false, parametros: false, accesos: false, impresion: false, frecuencia: false, geocodificador: 'ninguno' };
 
 /* Donde queda la última copia de los datos, para abrir la app sin señal. */
 const CLAVE_COPIA = 'copia-datos';

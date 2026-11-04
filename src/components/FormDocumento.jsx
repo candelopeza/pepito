@@ -46,8 +46,11 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
   // (PDF o foto) y la oficina lo puede ver al validar. Sin ella, se escribe el
   // nombre del archivo como antes.
   const adjuntaArchivo = Boolean(capacidades?.archivos);
-  // Desde el portal el titular no elige el tipo ni carga el número ni el
-  // expediente: los completa coordinación al aprobar (src/dominio/reglas.js).
+  // Desde el portal el titular no carga el número ni el expediente: los
+  // completa coordinación al aprobar (src/dominio/reglas.js). El TIPO sí lo
+  // elige (contrato, DDJJ o DDJJ de reciclaje; pedido del 4/11/2026): sin eso
+  // la oficina no sabe qué está mirando, y el contrato además trae su propio
+  // vencimiento. Coordinación igual puede cambiarlo al aprobar.
   const completaCoordinacion = desdePortal && COORDINACION_COMPLETA_PRESENTACION;
 
   const [datos, setDatos] = useState({
@@ -66,6 +69,9 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
   const cambiar = (campo, valor) => setDatos((p) => ({ ...p, [campo]: valor }));
 
   const esContrato = datos.tipo === 'CONTRATO';
+  // El contrato que presenta el titular vale un mes desde que la oficina lo
+  // aprueba (dominio/vigencias.js): no se le pide la fecha del papel.
+  const contratoDelTitular = desdePortal && esContrato;
 
   // El contrato trae su fecha; la DDJJ la calcula el sistema.
   const vencimientoCalculado = esContrato
@@ -91,10 +97,10 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
     if (datos.fechaEmision && datos.fechaEmision > hoyISO()) {
       e.fechaEmision = 'La fecha de emisión no puede ser futura: el documento ya fue emitido.';
     }
-    if (esContrato && !datos.fechaVencimiento) {
+    if (esContrato && !contratoDelTitular && !datos.fechaVencimiento) {
       e.fechaVencimiento = 'El contrato tiene que declarar su fecha de vencimiento.';
     }
-    if (esContrato && datos.fechaVencimiento && datos.fechaVencimiento <= datos.fechaEmision) {
+    if (esContrato && !contratoDelTitular && datos.fechaVencimiento && datos.fechaVencimiento <= datos.fechaEmision) {
       e.fechaVencimiento = 'El vencimiento tiene que ser posterior a la emisión.';
     }
     if (adjuntaArchivo) {
@@ -158,17 +164,15 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
       )}
 
       <div className="form-grilla">
-        {!completaCoordinacion && (
-          <CampoSelect
-            id="doc-tipo"
-            etiqueta="Tipo de documentación"
-            valor={datos.tipo}
-            onChange={(v) => cambiar('tipo', v)}
-            opciones={TIPOS_DOCUMENTO.map((t) => ({ id: t, etiqueta: ETIQUETA_DOCUMENTO[t] }))}
-            vacio={null}
-            ancho={2}
-          />
-        )}
+        <CampoSelect
+          id="doc-tipo"
+          etiqueta={desdePortal ? '¿Qué presentás?' : 'Tipo de documentación'}
+          valor={datos.tipo}
+          onChange={(v) => cambiar('tipo', v)}
+          opciones={TIPOS_DOCUMENTO.map((t) => ({ id: t, etiqueta: ETIQUETA_DOCUMENTO[t] }))}
+          vacio={null}
+          ancho={2}
+        />
 
         {/* El número que lleva el documento mismo (el N° del Form D.A 03, el
             del contrato). Identifica a esa presentación: con él se detecta si
@@ -221,8 +225,18 @@ function FormDocumento({ local, onGuardar, onCancelar, desdePortal = false }) {
           error={errores.fechaEmision}
         />
 
-        {/* Sin tipo elegido no hay vencimiento que mostrar: lo fija coordinación. */}
-        {completaCoordinacion ? null : esContrato ? (
+        {/* El contrato de la oficina declara su vencimiento; el del titular
+            vale un mes desde la aprobación; la DDJJ la calcula el sistema. */}
+        {contratoDelTitular ? (
+          <Campo
+            id="doc-vencimiento-mes"
+            etiqueta="Vigencia"
+            valor="Un mes desde que la oficina lo apruebe"
+            onChange={() => {}}
+            soloLectura
+            ayuda="Después, la prestataria 9 de Julio confirma mes a mes que el contrato sigue."
+          />
+        ) : esContrato ? (
           <Campo
             id="doc-vencimiento"
             etiqueta="Vencimiento del contrato"

@@ -19,8 +19,9 @@
    login: es solo para ver cómo queda la barra. Ver ese archivo.
 
    SI HAY PROBLEMA ACÁ:
-     - "No se ve el logo": el SVG está escrito a mano acá abajo (no es un
-        archivo de /public). Si desapareció, se rompió el markup del <svg>.
+     - "No se ve el logo": es src/assets/logo-ciudad-smt.png (el símbolo
+        recortado del logo oficial, 03/11/2026). Antes era un SVG dibujado a
+        mano. En el teléfono se oculta a propósito (App.css, .logo-icon).
      - "Clic en el logo no vuelve al inicio": el <Link to="/"> de abajo.
      - "La barra tapa el contenido": z-index en App.css sección 2.
      - "El ☰ no hace nada": falta la prop onAlternarMenu (la pone Layout.jsx).
@@ -40,6 +41,7 @@ import SelectorRol from './SelectorRol';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { fmtFechaHora } from '../dominio/fechas';
+import logoCiudadSmt from '../assets/logo-ciudad-smt.png';
 
 function Navbar({ onAlternarMenu }) {
   const { usuario, datosRol } = useRol();
@@ -67,13 +69,11 @@ function Navbar({ onAlternarMenu }) {
       {/* Todo el bloque del logo vuelve al Inicio */}
       <Link to="/" className="logo-link">
 
-        {/* --- Ícono: SVG inline, dibujado a mano. No es un archivo externo --- */}
+        {/* --- Ícono: el símbolo oficial de Ciudad SMT (src/assets/logo-ciudad-smt.png),
+            con el fondo transparente, sobre el azul de la barra.
+            alt vacío porque al lado ya dice CIUDAD SMT. --- */}
         <div className="logo-icon">
-          <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
-            <circle cx="20" cy="20" r="18" fill="#4FC3F7" />
-            <circle cx="20" cy="12" r="6" fill="#FFD54F" />
-            <path d="M20 20 C10 30, 10 38, 20 38 C30 38, 30 30, 20 20" fill="#0288D1" />
-          </svg>
+          <img src={logoCiudadSmt} alt="" width="40" height="40" />
         </div>
 
         {/* --- Texto del logo (dos líneas) --- */}

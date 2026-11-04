@@ -12,10 +12,15 @@
 
    LA PANTALLA es la misma grilla que el padrón (ui/Grilla.jsx): buscador a la
    izquierda, botones a la derecha (agregar, imprimir, descargar), barra de
+<<<<<<< HEAD
    columnas / filtros / densidad / exportar, y por fila los íconos de editar,
    eliminar y la llave que abre los permisos del tipo de usuario de esa persona
    (en la pestaña Tipos de usuario de Accesos.jsx, que ve solo el administrador:
    por eso la llave aparece solo si Accesos manda `abrirPermisos`).
+=======
+   columnas / filtros / densidad / exportar, y por fila el lápiz de editar y
+   la llave que abre los permisos del tipo de usuario de esa persona.
+>>>>>>> 702db7463f4a9f2b84fa898cde5e78ca876911d4
 
    >>> LA IDENTIDAD TIENE QUE SER INSTITUCIONAL (sección 7.3) <<<
    El correo tiene que ser @smt.gob.ar (salvo el titular, que entra con su
@@ -30,34 +35,40 @@
    día que la base lo tenga.
 
    >>> POR QUÉ SE DA DE BAJA Y NO SE BORRA <<<
-   Porque el usuario firmó actuaciones. La baja (activo: false) lo saca de los
-   desplegables de asignación pero conserva la trazabilidad de lo que hizo. La
-   llave de la columna Activo hace eso con un toque, sin abrir el formulario.
-   Eliminar existe, pero avisa cuántas actuaciones quedarían sin autor.
+   Porque el usuario firmó actuaciones (tramite.id_usuario apunta a él). La
+   baja (activo: false) lo saca de los desplegables de asignación y le cierra
+   la entrada, pero conserva la trazabilidad de lo que hizo. La llave de la
+   columna Habilita hace eso con un toque, sin abrir el formulario, y con otro
+   toque lo reactiva. No hay ícono de eliminar: el backend tampoco borra
+   (es la misma baja lógica), y un tacho que deja la fila donde estaba parece
+   un error.
    ============================================================================ */
 
 import { useCallback, useMemo, useState } from 'react';
 import { GridActionsCellItem } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import Aviso from '../../components/ui/Aviso';
 import Badge from '../../components/ui/Badge';
 import Grilla from '../../components/ui/Grilla';
 import Modal from '../../components/ui/Modal';
-import Confirmar from '../../components/ui/Confirmar';
 import Campo, { CampoSelect } from '../../components/ui/Campo';
 import Interruptor from '../../components/ui/hab/des';
 import { useRol } from '../../auth/rolContexto';
 import { LISTA_ROLES, ROLES } from '../../auth/roles';
 import { useDatos } from '../../datos/datosContexto';
+<<<<<<< HEAD
 import { ROL_ADMINISTRADOR, puedeEditar, rolHabilitado } from '../../config/modulos';
+=======
+import { ROL_ADMINISTRADOR, puedeEditar, puedeVerRuta, rolHabilitado } from '../../config/modulos';
+>>>>>>> 702db7463f4a9f2b84fa898cde5e78ca876911d4
 
 const USUARIO_VACIO = { nombre: '', email: '', rol: '', activo: true };
 
 function Usuarios({ abrirPermisos }) {
   const { rol, usuario } = useRol();
+<<<<<<< HEAD
   const { usuarios: todos, actuaciones, relevamientos, permisos, guardarEnCatalogo, eliminarDeCatalogo } = useDatos();
 
   /* A LOS ADMINISTRADORES LOS VE SOLO OTRO ADMINISTRADOR (03/11/2026). Desde
@@ -70,12 +81,21 @@ function Usuarios({ abrirPermisos }) {
   );
 
   const soloLectura = !puedeEditar(rol, 'accesos', permisos);
+=======
+  const navegar = useNavigate();
+  const { usuarios, permisos, guardarEnCatalogo } = useDatos();
+
+  const soloLectura = !puedeEditar(rol, 'accesos', permisos);
+  // La llave de cada fila abre los permisos de ese tipo de usuario, que es
+  // una pestaña solo del administrador (pages/Accesos.jsx): a los demás no se
+  // les ofrece, para que no toquen un ícono que no hace nada.
+  const veTipos = rol === ROL_ADMINISTRADOR && puedeVerRuta(rol, '/accesos/tipos-usuario', permisos);
+>>>>>>> 702db7463f4a9f2b84fa898cde5e78ca876911d4
 
   const [buscar, setBuscar] = useState('');
   // El usuario que se está creando o editando en el modal. null = cerrado.
   const [editando, setEditando] = useState(null);
   const [errores, setErrores] = useState({});
-  const [aEliminar, setAEliminar] = useState(null);
 
   // ¿La base guarda correo? La del área no: entonces la persona es su legajo.
   const hayCorreo = usuarios.some((u) => u.email);
@@ -83,12 +103,6 @@ function Usuarios({ abrirPermisos }) {
     (u) => Boolean((usuario.id && u.id === usuario.id) || (u.email && u.email === usuario.email)),
     [usuario.id, usuario.email],
   );
-
-  /* Cuántas actuaciones firmó. Es el dato que explica por qué conviene dar de
-     baja y no borrar: eso quedaría sin autor. */
-  const firmadas = (u) =>
-    actuaciones.filter((a) => a.usuario === u.nombre || a.notificadorId === u.id).length +
-    relevamientos.filter((r) => r.usuario === u.nombre).length;
 
   /* ---------- Las filas: activos primero, después por nombre ---------- */
   const filas = useMemo(() => {
@@ -160,7 +174,7 @@ function Usuarios({ abrirPermisos }) {
         field: 'acciones',
         headerName: 'Acciones',
         type: 'actions',
-        width: 140,
+        width: 110,
         getActions: ({ row }) => {
           const esSistema = row.rol === 'sistema';
           const lista = [];
@@ -179,6 +193,7 @@ function Usuarios({ abrirPermisos }) {
               />,
             );
           }
+<<<<<<< HEAD
           if (!soloLectura && !esSistema && !esElPropio(row)) {
             lista.push(
               <GridActionsCellItem
@@ -192,6 +207,9 @@ function Usuarios({ abrirPermisos }) {
             );
           }
           if (abrirPermisos && !esSistema) {
+=======
+          if (veTipos && !esSistema) {
+>>>>>>> 702db7463f4a9f2b84fa898cde5e78ca876911d4
             lista.push(
               <GridActionsCellItem
                 key="permisos"
@@ -213,7 +231,6 @@ function Usuarios({ abrirPermisos }) {
   const sinCorreoInstitucional = usuarios.filter(
     (u) => u.activo && u.email && !u.email.endsWith('@smt.gob.ar') && u.rol !== 'titular',
   );
-  const usos = aEliminar ? firmadas(aEliminar) : 0;
 
   return (
     <>
@@ -318,28 +335,6 @@ function Usuarios({ abrirPermisos }) {
         </Modal>
       )}
 
-      {/* ---------- Baja definitiva ---------- */}
-      <Confirmar
-        abierto={Boolean(aEliminar)}
-        titulo="Eliminar usuario"
-        textoConfirmar="Eliminar"
-        peligro
-        onCancelar={() => setAEliminar(null)}
-        onConfirmar={() => {
-          eliminarDeCatalogo('usuarios', aEliminar.id);
-          setAEliminar(null);
-        }}
-      >
-        <p>
-          Se elimina <strong>{aEliminar?.nombre}</strong>
-          {aEliminar?.email ? ` (${aEliminar.email})` : ''}.
-        </p>
-        {usos > 0 && (
-          <Aviso tipo="alerta" titulo={`Firmó ${usos} actuación(es)`}>
-            Quedarían sin autor identificable. Para conservar la trazabilidad conviene darlo de baja en vez de eliminarlo.
-          </Aviso>
-        )}
-      </Confirmar>
     </>
   );
 }

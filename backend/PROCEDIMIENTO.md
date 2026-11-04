@@ -1181,3 +1181,25 @@ pestaña. Las tarjetas que llevan a una página de afuera usan `externa` y
   la columna ya acepta NULL, así que no hace falta ningún script. Esto lo maneja
   la misma opción que el tipo y el expediente: `COORDINACION_COMPLETA_PRESENTACION`.
   La carga desde la oficina sigue pidiendo el número, como siempre.
+
+## 23. Accesos para administrativo (3 de noviembre de 2026)
+
+A pedido del área, el administrativo también entra a **Accesos**:
+
+- **Usuarios:** da de alta, edita y da de baja a la gente, igual que Dirección.
+- **Tipos de usuario:** los ve para consulta (qué módulos tiene cada tipo), pero
+  no mueve las llaves. Los permisos los cambia solo el administrador, y el
+  backend ya los aceptaba solo de él (`/configuracion/permisos`, `requiereRol('administrador')`).
+
+**Los administradores no se tocan.** Quien no es administrador (administrativo y
+Dirección) no ve a los administradores en la lista de usuarios ni el tipo
+"Administrador" en Tipos de usuario, y el formulario no le ofrece ese rol. El
+backend rechaza con 403, aunque alguien arme el pedido a mano: dar el rol
+administrador, cambiarle el rol a un administrador, darlo de baja o eliminarlo
+(`controlarUsuario` y la baja, en `backend/rutas/configuracion.js`). No es un
+permiso que se pueda prender desde Tipos de usuario: está fijo en el código, así
+que nadie puede darse ese acceso.
+
+Archivos: `src/config/modulos.js` (módulo `accesos`), `src/pages/Accesos.jsx`,
+`src/pages/accesos/Usuarios.jsx`, `src/pages/accesos/TiposUsuario.jsx` y
+`backend/rutas/configuracion.js` (catálogo `usuarios`).

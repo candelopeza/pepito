@@ -35,3 +35,6 @@ backend/archivos/
 
 # Informes de npm run verificar (backend): pueden tener datos reales
 backend/verificacion-base-*.txt
+
+# planillas exportadas para la carga diferencial (datos personales, no van al repo)
+backend/*.csv

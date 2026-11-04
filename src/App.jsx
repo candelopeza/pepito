@@ -119,9 +119,12 @@ function App() {
 
               {/* ---- Herramientas ---- */}
               {/* ---- Accesos ---- */}
+              {/* Las dos pestañas son la misma pantalla: la dirección dice cuál
+                  está abierta (pages/Accesos.jsx). Las tres se protegen con el
+                  módulo Accesos; Tipos de usuario además es solo del administrador. */}
               <Route path="accesos" element={<RutaProtegida ruta="/accesos"><Accesos /></RutaProtegida>} />
-              <Route path="accesos/tipos-usuario" element={<Navigate to="/accesos" replace />} />
-              <Route path="accesos/usuarios" element={<Navigate to="/accesos" replace />} />
+              <Route path="accesos/usuarios" element={<RutaProtegida ruta="/accesos"><Accesos /></RutaProtegida>} />
+              <Route path="accesos/tipos-usuario" element={<RutaProtegida ruta="/accesos"><Accesos /></RutaProtegida>} />
 
               <Route path="herramientas/duplicados" element={<RutaProtegida ruta="/herramientas/duplicados"><Duplicados /></RutaProtegida>} />
               <Route path="herramientas/informe-9dj" element={<RutaProtegida ruta="/herramientas/informe-9dj"><Informe9DJ /></RutaProtegida>} />

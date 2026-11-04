@@ -9,7 +9,10 @@
     "start": "node --env-file-if-exists=.env servidor.js",
     "probar": "node --env-file-if-exists=.env probar-conexion.js",
     "inspeccionar": "node --env-file-if-exists=.env inspeccionar-base.js",
-    "verificar": "node --env-file-if-exists=.env verificar-base.js"
+    "verificar": "node --env-file-if-exists=.env verificar-base.js",
+    "importar": "node --env-file-if-exists=.env importar-diferencial.js",
+    "importar:ensayo": "node --env-file-if-exists=.env importar-diferencial.js --ensayo",
+    "importar:aplicar": "node --env-file-if-exists=.env importar-diferencial.js --aplicar"
   },
   "dependencies": {
     "compression": "^1.8.2",
@@ -17,7 +20,6 @@
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "mysql2": "^3.14.1",
-    "nodemailer": "^10.3.1",
     "pdf-parse": "^2.4.5"
   }
 }

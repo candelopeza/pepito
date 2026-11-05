@@ -2219,6 +2219,8 @@
   .tarjeta-local-titulo .link-local { display: inline-block; padding: 10px 0; }
   .main-content input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
   .main-content select { min-height: 40px; }
+  /* La × que cierra las ventanas (ui/Modal.jsx) medía 27x26 (05/11/2026). */
+  .modal-cerrar { min-width: 40px; min-height: 40px; }
 }
 
 /* ========== 14.31 LA CÉDULA CON EL MODELO OFICIAL (pantalla "Ver cédula") ==========

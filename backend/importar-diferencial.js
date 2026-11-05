@@ -52,6 +52,7 @@
      - el estado del local: lo calcula el sistema a partir de los trámites.
    ============================================================================ */
 
+import './entorno.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -12,13 +12,11 @@
    los lee del .env. Este archivo no sabe qué base hay detrás.
    ============================================================================ */
 
-/* LA HORA DEL SERVIDOR ES LA DE TUCUMÁN. Todos los plazos se calculan con
-   "hoy" (hoyISO en src/dominio/fechas.js), que usa la hora local de la
-   máquina. Un servidor en UTC daría "mañana" a partir de las 21 h y vencería
-   plazos tres horas antes. Se puede pisar con TZ en el .env. */
-process.env.TZ = process.env.TZ || 'America/Argentina/Tucuman';
-
+/* Primero el .env (y la zona horaria): ver entorno.js por qué va arriba de todo. */
+import './entorno.js';
 import fs from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -162,9 +160,34 @@ await revisarCapacidades();
 vigilarCapacidades();
 iniciarTareas();
 
-app.listen(PUERTO, () => {
+/* HTTPS PROPIO, igual que back cidituc y turnero: el certificado del servidor
+   está en /home/produccion.
+
+   'cert' apunta a la CADENA COMPLETA (smt.gob.ar.fullchain.crt: certificado +
+   intermedio + cross, en ese orden), no al .crt suelto que manda la CA. Node le
+   envía al cliente solo lo que hay en 'cert': con el certificado solo, los
+   navegadores igual entran pero Node/curl/PHP/Python cortan con
+   UNABLE_TO_VERIFY_LEAF_SIGNATURE. Cómo armar la cadena al renovar: ver el
+   comentario largo en el index.js de back cidituc. No usar 'ca' para esto (en
+   un servidor sirve para validar certificados de cliente, no lo que se envía).
+
+   Node lee los archivos al arrancar: después de renovar hay que reiniciar.
+
+   En la PC de desarrollo esos archivos no existen: ahí sigue en HTTP. */
+const CLAVE_TLS = '/home/produccion/smt.gob.ar.key';
+const CERTIFICADO_TLS = '/home/produccion/smt.gob.ar.fullchain.crt';
+//const CERTIFICADO_TLS = '/home/produccion/smt.gob.ar.crt'; // rollback: solo el certificado hoja
+
+const tls = fs.existsSync(CLAVE_TLS) && fs.existsSync(CERTIFICADO_TLS)
+  ? { key: fs.readFileSync(CLAVE_TLS), cert: fs.readFileSync(CERTIFICADO_TLS) }
+  : null;
+const servidor = tls ? https.createServer(tls, app) : http.createServer(app);
+
+servidor.listen(PUERTO, () => {
   const c = capacidades();
-  console.log(`API Grandes Generadores escuchando en http://localhost:${PUERTO}`);
+  console.log(`API Grandes Generadores escuchando en ${tls ? 'https' : 'http'}://localhost:${PUERTO}`);
+  if (tls) console.log(`  certificado: ${CERTIFICADO_TLS}`);
+  else console.log(`  sin HTTPS: no está ${CLAVE_TLS} o ${CERTIFICADO_TLS}`);
   if (CARPETA_FRONT) console.log(`  la aplicación también se sirve acá, desde ${CARPETA_FRONT}`);
   console.log(
     `  auditoría: ${c.auditoria ? 'sí' : 'NO (sql/05)'} · parámetros editables: ${c.parametros ? 'sí' : 'NO (sql/06)'} · ` +

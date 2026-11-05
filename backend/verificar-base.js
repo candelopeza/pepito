@@ -20,6 +20,7 @@
    la aceptara, el script se detiene sin seguir.
    ============================================================================ */
 
+import './entorno.js';
 import { writeFileSync } from 'node:fs';
 import { pool, consultar } from './conexion-bd.js';
 import { capacidades, revisarCapacidades } from './capacidades.js';

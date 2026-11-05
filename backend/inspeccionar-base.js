@@ -14,6 +14,7 @@
    NO modifica nada: solo SELECT sobre information_schema.
    ============================================================================ */
 
+import './entorno.js';
 import mysql from 'mysql2/promise';
 
 const baseDatos = process.env.DB_NOMBRE || 'grandes_generadores';

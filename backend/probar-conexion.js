@@ -15,6 +15,7 @@
    NUNCA modifica nada: son todas consultas de lectura.
    ============================================================================ */
 
+import './entorno.js';
 import mysql from 'mysql2/promise';
 
 // Las tablas que ya tenía la base, cargadas por el área.

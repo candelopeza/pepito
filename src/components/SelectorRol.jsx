@@ -37,6 +37,10 @@ function SelectorRol() {
 
   const activos = usuarios.filter((u) => u.activo !== false);
 
+  // Sin usuarios cargados no hay nada que elegir: la barra queda limpia y la
+  // app es solo el portal del titular (ROL_POR_DEFECTO).
+  if (activos.length === 0) return null;
+
   return (
     <div className="selector-rol">
       <span className="selector-rol-aviso" title="Identificación provisoria hasta el ingreso por CiDiTuc">

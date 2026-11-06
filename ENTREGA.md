@@ -31,16 +31,18 @@ nada que configurar.
 
 - El servidor **solo reconoce a los usuarios cargados en la base**, por su
   número de persona. Un nombre que no está en la base no puede escribir.
-- La barra del sistema tiene un único desplegable **"Elegí tu usuario…"** con
-  los agentes reales. Sin elegir, se es público (portal del titular).
+- La aplicación no tiene forma de identificarse todavía: todo el que entra
+  es público (portal del titular). Decisión de la Dirección del 2026-11-06:
+  los tipos de usuario se vinculan directamente cuando el sistema se sume a
+  CiDiTuc. Hasta entonces el personal del área no puede operar desde la app.
 - La variable `ACEPTAR_ROL_DECLARADO` del `.env` queda en `no` (o sin la
   línea). Solo se pone en `si` para correr las pruebas automáticas contra un
   backend de prueba; **nunca en producción**.
 
-Esta identificación por número de persona es provisoria **hasta CiDiTuc**: cuando el
-sistema se sume al login único, la identidad la provee CiDiTuc y se reemplaza
-un solo archivo del backend (`middlewares/usuario.js`) y el selector de la
-barra. Las rutas no se tocan.
+Cuando el sistema se sume al login único, la identidad la provee CiDiTuc y se
+cambian dos archivos: `backend/middlewares/usuario.js` (leer el token en vez
+de los headers) y `src/auth/RolProvider.jsx` (llamar a `elegirAgente` con la
+persona de la sesión). Las rutas y las pantallas no se tocan.
 
 ## 3. Revisar la configuración (pantalla Parámetros)
 
@@ -72,43 +74,44 @@ npm install
 npm run build        →  deja dist/index.html
 ```
 
-Ese `dist/index.html` es la aplicación entera. Lo sirve el mismo backend
-(`CARPETA_FRONT=../dist` en `backend/.env`), así todo vive en una sola
-dirección: **https://grangenerador.smt.gob.ar**.
+Ese `dist/index.html` es la aplicación entera. No hay que tocar nada antes de
+compilar: `.env.production` ya trae la dirección de la API del servidor.
 
-Dónde corre (datos de Sistemas, 2026-11-06):
+Cómo está armado el servidor (verificado el 2026-11-06 contra lo publicado):
 
 | | |
 | --- | --- |
 | Servidor | **181.105.6.205** |
-| Puerto del backend | **3344** (`PUERTO=3344` en `backend/.env`) |
-| Dominio | **grangenerador.smt.gob.ar** → apunta a 181.105.6.205, puerto 3344 |
-| HTTPS | lo hace el propio backend con el certificado del municipio en `/home/produccion/smt.gob.ar.key` y `smt.gob.ar.fullchain.crt` (igual que CiDiTuc y el turnero; ver `servidor.js`). Si esos archivos no están, arranca en HTTP | No hay que tocar nada
-antes de compilar: `.env.production` ya trae `VITE_API_URL=/` ("la API está
-en el mismo servidor que la app").
+| La aplicación | **https://grangenerador.smt.gob.ar** (puerto 443): la sirve **Apache**, que entrega el `dist/index.html` copiado en su carpeta |
+| La API | **https://grangenerador.smt.gob.ar:3344** : el backend Node escucha en el 3344 con su propio HTTPS (certificado del municipio, igual que CiDiTuc y el turnero; ver `servidor.js`) |
+| Cómo se unen | el front compilado lleva `VITE_API_URL=https://grangenerador.smt.gob.ar:3344/` (`.env.production`), y el backend acepta ese origen con `ORIGEN_FRONT` |
 
-El backend corre con Node 22:
+**Cada vez que se actualiza el sistema**, en el servidor:
 
 ```
+git pull
+npm install           (solo si cambió package.json)
+npm run build         →  copiar dist/index.html a la carpeta que sirve Apache
 cd backend
-npm install
-npm run start        →  escucha en el puerto que diga PUERTO= en el .env (3344 en el servidor)
+npm install           (solo si cambió backend/package.json)
+reiniciar el backend
 ```
 
-con su `backend/.env` (se arma copiando `backend/.env.ejemplo`; **nunca** se
-sube a git) con los datos de la base real y además:
+Si se olvida el paso de copiar el `dist/index.html`, la dirección sigue
+mostrando la versión anterior aunque el código ya esté actualizado.
+
+El backend corre con Node 22 (`npm run start` en `backend/`), con su
+`backend/.env` (se arma copiando `backend/.env.ejemplo`; **nunca** se sube a
+git) con los datos de la base real y además:
 
 ```
 PUERTO=3344
 ORIGEN_FRONT=https://grangenerador.smt.gob.ar
-CARPETA_FRONT=../dist
 CARPETA_ARCHIVOS=<la carpeta que asigne Sistemas, incluida en el respaldo>
 ACEPTAR_ROL_DECLARADO=no
 ```
 
-Sistemas apunta el subdominio a 181.105.6.205 y deja abierto el puerto 3344;
-el certificado ya está en el servidor, en `/home/produccion`. Conviene dejar
-el backend como servicio del servidor, para que arranque solo.
+Conviene dejar el backend como servicio del servidor, para que arranque solo.
 
 ## 6. Qué queda afuera de esta entrega (pendientes conocidos)
 

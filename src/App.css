@@ -8,7 +8,6 @@
    ÍNDICE (buscá el número para saltar de sección)
      1. LAYOUT ................. components/Layout.jsx
      2. NAVBAR ................. components/Navbar.jsx
-    2.b SELECTOR DE ROL ....... components/SelectorRol.jsx  (PROVISORIO)
      3. SIDEBAR ................ components/Sidebar.jsx
      4. MAIN CONTENT + TÍTULOS . components/Layout.jsx + ui/PageHeader.jsx
      5. INFO BAR + BTN VOLVER .. ui/PageHeader.jsx + pages/Home.jsx
@@ -43,7 +42,7 @@
 /* ========== 2. NAVBAR (barra azul de arriba) ==========
    Usado en: components/Navbar.jsx
    De izquierda a derecha: botón ☰, logo "CIUDAD / SMT", y pegado al borde
-   derecho el bloque del usuario.
+   derecho los avisos de conexión (normalmente vacío).
 
    El `margin-left: auto` de .navbar-derecha es lo que empuja ese bloque al
    extremo (aprovecha que .navbar ya es flex). Si el nombre aparece pegado al
@@ -98,7 +97,8 @@
 .ciudad { color: white; font-size: 11px; font-weight: 600; letter-spacing: 1px; }
 .smt { color: white; font-size: 24px; font-weight: 800; letter-spacing: 1px; }
 
-/* --- Bloque de la derecha: selector de rol (provisorio) + usuario --- */
+/* --- Bloque de la derecha: solo los avisos de conexión (06/11/2026: sin
+   usuario ni selector hasta CiDiTuc) --- */
 .navbar-derecha {
   margin-left: auto;
   display: flex;
@@ -106,58 +106,6 @@
   gap: 18px;
 }
 
-/* El legajo del usuario elegido en la barra, o "Sin identificar".
-   Todavía no despliega ningún menú; por eso no lleva cursor: pointer. */
-.navbar-usuario {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: white;
-}
-
-.navbar-usuario-nombre {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-
-/* ========== 2.b SELECTOR DE ROL — PROVISORIO ==========
-   Usado en: components/SelectorRol.jsx (dentro de la navbar)
-   SE BORRA ENTERO cuando haya login: este bloque y el archivo del componente.
-
-   Ya NO se posiciona solo: vive adentro de .navbar-derecha (sección 2), que
-   es la que lo empuja al extremo derecho junto con el nombre del usuario.
-
-   Se ve distinto al resto A PROPÓSITO: tiene que quedar claro que es una
-   herramienta de prueba y no una función del sistema. */
-.selector-rol {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.selector-rol-select {
-  background: rgba(255,255,255,0.15);
-  color: white;
-  border: 1px solid rgba(255,255,255,0.35);
-  border-radius: 6px;
-  padding: 7px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.selector-rol-select:hover { background: rgba(255,255,255,0.25); }
-.selector-rol-select:focus { outline: 2px solid white; outline-offset: 1px; }
-
-/* Las <option> se dibujan fuera de la navbar (las pinta el sistema
-   operativo), así que con el texto blanco quedarían invisibles sobre el
-   fondo blanco del desplegable. Por eso se les pone color oscuro. */
-.selector-rol-select option { color: #333; background: white; }
 
 
 /* ========== 3. SIDEBAR (menú lateral izquierdo) ==========
@@ -766,7 +714,6 @@
 @media (max-width: 768px) {
   .main-content { padding: 20px; }
   .grid-accesos { grid-template-columns: 1fr; }
-  .navbar-usuario-nombre { display: none; }
 
   /* Las dos grillas nuevas del Inicio. Las acciones a una columna por el mismo
      motivo que .grid-accesos; los indicadores a DOS y no a una porque son
@@ -1955,8 +1902,6 @@
 }
 .navbar-conexion-pendientes { background: #e3f2fd; color: #1565c0; cursor: pointer; border: none; }
 .hist-foto { max-width: 220px; max-height: 160px; border-radius: 6px; border: 1px solid #e0e0e0; display: block; }
-.portal-prueba { margin-bottom: 14px; }
-.portal-prueba input { min-width: 240px; }
 
 /* ========== 14.18 TABLAS SIN COLORES ==========
    Pedido del área (2026-10-02): todas las tablas iguales, con las filas
@@ -2057,16 +2002,7 @@
   .ciudad { display: none; }
   .smt { font-size: 20px; }
   .navbar-derecha { gap: 8px; min-width: 0; }
-  .selector-rol { gap: 4px; min-width: 0; }
-  .selector-rol-aviso { display: none; }
-  .selector-rol-select { max-width: 112px; padding: 6px; font-size: 12px; text-overflow: ellipsis; }
-  .navbar-usuario-icono { display: none; }
 }
-
-/* El campo de PRUEBA del portal usa el estilo del selector de la barra azul,
-   pero está sobre fondo claro: con el texto blanco no se veía lo escrito. */
-.portal-prueba .selector-rol-select { color: #333; background: white; border-color: #cfd8dc; }
-.portal-prueba .selector-rol-select::placeholder { color: #90a4ae; }
 
 /* ---------------------------------------------------------------------------
    INFORME 9 DE JULIO: los botones de decisión viven dentro de las celdas de

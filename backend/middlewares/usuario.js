@@ -27,19 +27,19 @@ import { ROL_POR_TUSUARIO } from '../mapeo.js';
    escritura suya terminaba en 401. Ver también requiereRol() abajo. */
 const ROLES_VALIDOS = ['relevador', 'notificador', 'administrativo', 'coordinacion', 'direccion', 'administrador', 'titular', 'sistema'];
 
-/* >>> EL ROL DECLARADO POR UN USUARIO QUE NO ESTÁ EN LA BASE <<<
-   Mientras se prueba, hace falta poder entrar con cualquier rol aunque la
-   tabla `usuario` tenga tres filas: por eso, por defecto, se acepta el rol
-   que manda el navegador. En producción eso es inaceptable (cualquiera se
-   declara coordinación), así que se apaga con una línea en el .env:
+/* >>> EL ROL DECLARADO POR UN USUARIO QUE NO ESTÁ EN LA BASE: APAGADO <<<
+   Desde el 06/11/2026 solo entran los agentes cargados en la tabla `usuario`,
+   con el rol de su tipo de usuario, igual que en producción. Un nombre que no
+   está en la base no es nadie (req.usuario = null) y no puede escribir. Sigue
+   sin ser un login (eso es CiDiTuc), pero no alcanza con inventarse un rol.
 
-     ACEPTAR_ROL_DECLARADO=no
+   La excepción son las pruebas automáticas (pruebas/*.mjs), que mandan roles
+   declarados sin pasar por la base. Para correrlas se prende con una línea en
+   el .env del backend de prueba, NUNCA en el de producción:
 
-   Con eso solo entran los agentes cargados en la tabla `usuario`, con el rol
-   de su tipo de usuario. Sigue sin ser un login (eso es CiDiTuc), pero ya no
-   alcanza con inventarse un rol. */
+     ACEPTAR_ROL_DECLARADO=si */
 export function aceptaRolDeclarado() {
-  return String(process.env.ACEPTAR_ROL_DECLARADO ?? 'si').trim().toLowerCase() !== 'no';
+  return String(process.env.ACEPTAR_ROL_DECLARADO ?? 'no').trim().toLowerCase() === 'si';
 }
 
 /* Caché de los usuarios de la base. Son tres filas hoy y no cambian entre

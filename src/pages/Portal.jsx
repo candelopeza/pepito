@@ -121,7 +121,7 @@ function Portal() {
     <>
       <PageHeader
         etiqueta="PORTAL DEL TITULAR"
-        titulo={`Hola, ${usuario.nombre}`}
+        titulo={usuario.nombre ? `Hola, legajo ${usuario.nombre}` : 'Hola'}
         subtitulo={`CUIL ${cuitPrueba || usuario.cuil || 'no informado'}`}
       />
 

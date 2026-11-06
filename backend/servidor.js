@@ -199,5 +199,5 @@ servidor.listen(PUERTO, () => {
     const explicacion = problemaDeConexion({ code: c.codigoError });
     if (explicacion) console.log(`  → ${explicacion}`);
   }
-  if (aceptaRolDeclarado()) console.log('  ATENCIÓN: se acepta el rol declarado por el navegador (ACEPTAR_ROL_DECLARADO=no para apagarlo)');
+  if (aceptaRolDeclarado()) console.log('  ATENCIÓN: ACEPTAR_ROL_DECLARADO=si: se acepta el rol declarado por el navegador. Solo para pruebas automáticas; en producción sacar esa línea del .env');
 });

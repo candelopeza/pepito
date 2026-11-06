@@ -106,7 +106,7 @@
   gap: 18px;
 }
 
-/* MAQUETA: el nombre sale de auth/usuarioActual.js, escrito a mano.
+/* El legajo del usuario elegido en la barra, o "Sin identificar".
    Todavía no despliega ningún menú; por eso no lleva cursor: pointer. */
 .navbar-usuario {
   display: flex;

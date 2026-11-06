@@ -4,7 +4,7 @@
    CONTENIDO:
      - izquierda: botón ☰ (abre/cierra el menú lateral) + logo "CIUDAD / SMT",
                   el logo es un link al Inicio
-     - derecha:   "Elegí tu usuario" (PROVISORIO hasta CiDiTuc) + el legajo
+     - derecha:   avisos de conexión + quién es el usuario
 
    USADO EN:  components/Layout.jsx
    ESTILOS:   App.css -> secciones 2 (NAVBAR) y 2.b (SELECTOR DE ROL)
@@ -15,9 +15,11 @@
                                Layout, porque es el que tiene al Sidebar.
 
    >>> NO HAY LOGIN TODAVÍA <<<
-   El usuario es el elegido en el desplegable de la barra, entre los cargados
-   en Accesos → Usuarios (auth/RolProvider.jsx). Sin elegir, la barra dice
-   "Sin identificar" y el servidor no acepta ninguna escritura.
+   Hasta que el sistema se sume a CiDiTuc no hay forma de identificarse: todo
+   el que abre la app es titular (auth/RolProvider.jsx) y la barra muestra
+   "Titular del local". El 06/11/2026 se sacó el desplegable "Elegí tu
+   usuario…" (components/SelectorRol.jsx, borrado): la Dirección decidió que
+   los tipos de usuario se vinculen directamente en CiDiTuc.
 
    SI HAY PROBLEMA ACÁ:
      - "No se ve el logo": es src/assets/logo-ciudad-smt.png (el símbolo
@@ -30,15 +32,13 @@
         .navbar-derecha en App.css sección 2.
 
    PENDIENTE:
-     - Cuando haya login: sacar <SelectorRol />, y el nombre pasa a salir de
-       la sesión real. Además va un menú al tocar el nombre (cerrar sesión,
-       cambiar contraseña).
+     - Cuando haya login: el nombre pasa a salir de la sesión real. Además
+       va un menú al tocar el nombre (cerrar sesión, cambiar contraseña).
    ============================================================================ */
 
 import { Link } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
-import SelectorRol from './SelectorRol';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { fmtFechaHora } from '../dominio/fechas';
@@ -107,14 +107,11 @@ function Navbar({ onAlternarMenu }) {
         )}
         {rechazados > 0 && <span className="navbar-conexion">{rechazados} no se aceptaron</span>}
 
-        {/* PROVISORIO. Se va entero cuando exista el login por CiDiTuc. */}
-        <SelectorRol />
-
         {/* Es un <div>, no un <button>: todavía no despliega nada. Cuando haya
             login acá va el menú de sesión. */}
         <div className="navbar-usuario">
           <span className="navbar-usuario-nombre">
-            {usuario.nombre ? `Legajo ${usuario.nombre}` : 'Sin identificar'}
+            {usuario.nombre ? `Legajo ${usuario.nombre}` : datosRol.etiqueta}
           </span>
           <AccountCircleIcon className="navbar-usuario-icono" />
         </div>

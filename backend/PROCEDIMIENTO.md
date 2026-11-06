@@ -406,7 +406,8 @@ fotos de las entregas.
    admite ids duplicados.
 6. **Reemplazar `middlewares/usuario.js` por CiDiTuc** cuando exista el login
    único. Las rutas no se tocan: siguen usando `req.usuario` y `requiereRol()`.
-   Mientras tanto, en producción poner `ACEPTAR_ROL_DECLARADO=no` en el `.env`.
+   El rol declarado está apagado desde el 2026-11-06 (solo entran los
+   usuarios de la base); `ACEPTAR_ROL_DECLARADO=si` solo para las pruebas.
 7. **Geocodificador real.** Hoy no hay: las direcciones nuevas quedan sin
    coordenada para revisar (antes se inventaban). Falta elegir el servicio y
    cargar el polígono KML del municipio (`src/dominio/geo.js` usa uno

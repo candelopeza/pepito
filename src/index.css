@@ -20,7 +20,8 @@
    Fuente y color de fondo de toda la app.
    Si cambia el look general de golpe, el problema está en este bloque. */
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  /* Poppins viene empaquetada (main.jsx). Lo que sigue es respaldo si no cargó. */
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: #f0f4f8;
   color: #333;
 }

@@ -143,7 +143,7 @@ function svgPin(color, glifo, ancho = ANCHO_PIN) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 38" width="${ancho}" height="${alto}" aria-hidden="true">
     <path d="M14 1C6.8 1 1 6.8 1 14c0 9.8 13 23 13 23s13-13.2 13-23C27 6.8 21.2 1 14 1z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
     <circle cx="14" cy="14" r="8.5" fill="#fff"/>
-    <text x="14" y="18.2" text-anchor="middle" font-size="11.5" font-weight="700" fill="${color}" font-family="system-ui, Segoe UI, Roboto, sans-serif">${glifo}</text>
+    <text x="14" y="18.2" text-anchor="middle" font-size="11.5" font-weight="700" fill="${color}" font-family="Poppins, system-ui, Segoe UI, Roboto, sans-serif">${glifo}</text>
   </svg>`;
 }
 

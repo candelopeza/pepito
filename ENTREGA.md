@@ -16,23 +16,18 @@ cada agente del área:
 3. Verificar en **Accesos** que cada rol tenga habilitados los módulos que le
    corresponden (ya vienen con el reparto del pliego; solo revisar).
 
-## 2. Apagar los perfiles de prueba (una línea en el servidor)
+## 2. Los perfiles de prueba ya están apagados
 
-En `backend/.env`, agregar:
+Desde el 2026-11-06 no hay roles de prueba ni usuarios inventados: no hay
+nada que configurar.
 
-```
-ACEPTAR_ROL_DECLARADO=no
-```
-
-y reiniciar el backend. Con eso:
-
-- El servidor deja de aceptar roles declarados por el navegador: **solo
-  reconoce a los usuarios cargados en la base**, por su número de persona.
-- La barra del sistema cambia sola: desaparecen el selector de rol de prueba y
-  los nombres supuestos (Jorge Medina, Ana Gómez, etc.) y queda un único
-  desplegable **"Elegí tu usuario…"** con los agentes reales.
-- El buscador de prueba del portal del titular ("ver como el CUIT…") también
-  se oculta.
+- El servidor **solo reconoce a los usuarios cargados en la base**, por su
+  número de persona. Un nombre que no está en la base no puede escribir.
+- La barra del sistema tiene un único desplegable **"Elegí tu usuario…"** con
+  los agentes reales. Sin elegir, se es público (portal del titular).
+- La variable `ACEPTAR_ROL_DECLARADO` del `.env` queda en `no` (o sin la
+  línea). Solo se pone en `si` para correr las pruebas automáticas contra un
+  backend de prueba; **nunca en producción**.
 
 Esta identificación por número de persona es provisoria **hasta CiDiTuc**: cuando el
 sistema se sume al login único, la identidad la provee CiDiTuc y se reemplaza
@@ -68,26 +63,43 @@ npm install
 npm run build        →  deja dist/index.html
 ```
 
-Ese `dist/index.html` es la aplicación entera: se aloja donde indique la
-Dirección de Innovación Tecnológica (el mismo esquema que cualquier portal
-municipal). Antes de compilar, poner en el `.env` de la raíz la dirección
-real de la API:
+Ese `dist/index.html` es la aplicación entera. Lo sirve el mismo backend
+(`CARPETA_FRONT=../dist` en `backend/.env`), así todo vive en una sola
+dirección: **https://grangenerador.smt.gob.ar**.
 
-```
-VITE_API_URL=https://<donde-corra-el-backend>
-```
+Dónde corre (datos de Sistemas, 2026-11-06):
+
+| | |
+| --- | --- |
+| Servidor | **181.105.6.205** |
+| Puerto del backend | **3344** (`PUERTO=3344` en `backend/.env`) |
+| Dominio | **grangenerador.smt.gob.ar** → apunta a 181.105.6.205, puerto 3344 |
+| HTTPS | lo hace el propio backend con el certificado del municipio en `/home/produccion/smt.gob.ar.key` y `smt.gob.ar.fullchain.crt` (igual que CiDiTuc y el turnero; ver `servidor.js`). Si esos archivos no están, arranca en HTTP | No hay que tocar nada
+antes de compilar: `.env.production` ya trae `VITE_API_URL=/` ("la API está
+en el mismo servidor que la app").
 
 El backend corre con Node 22:
 
 ```
 cd backend
 npm install
-npm run start        →  escucha en el puerto 3000 (o PUERTO= en el .env)
+npm run start        →  escucha en el puerto que diga PUERTO= en el .env (3344 en el servidor)
 ```
 
-con su `backend/.env` apuntando a la base real (ya existe; **nunca** se sube a
-git) más la línea del paso 2. Conviene dejarlo como servicio de Windows o del
-servidor que asigne DITEC, para que arranque solo.
+con su `backend/.env` (se arma copiando `backend/.env.ejemplo`; **nunca** se
+sube a git) con los datos de la base real y además:
+
+```
+PUERTO=3344
+ORIGEN_FRONT=https://grangenerador.smt.gob.ar
+CARPETA_FRONT=../dist
+CARPETA_ARCHIVOS=<la carpeta que asigne Sistemas, incluida en el respaldo>
+ACEPTAR_ROL_DECLARADO=no
+```
+
+Sistemas apunta el subdominio a 181.105.6.205 y deja abierto el puerto 3344;
+el certificado ya está en el servidor, en `/home/produccion`. Conviene dejar
+el backend como servicio del servidor, para que arranque solo.
 
 ## 6. Qué queda afuera de esta entrega (pendientes conocidos)
 

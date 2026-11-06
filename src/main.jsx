@@ -17,10 +17,19 @@ import ReactDOM from 'react-dom/client';
 // --- 2. La app ---
 import App from './App';
 
-// --- 3. Estilos globales (reset + body). Los de componentes están en App.css ---
+// --- 3. Tipografía: Poppins, empaquetada con la app (no se baja de internet,
+//        así anda igual en la red del municipio). Solo alfabeto latino (alcanza
+//        para español, con ñ y acentos) y solo los pesos que usa App.css.
+import '@fontsource/poppins/latin-400.css';
+import '@fontsource/poppins/latin-500.css';
+import '@fontsource/poppins/latin-600.css';
+import '@fontsource/poppins/latin-700.css';
+import '@fontsource/poppins/latin-800.css';
+
+// --- 4. Estilos globales (reset + body). Los de componentes están en App.css ---
 import './index.css';
 
-// --- 4. Montaje ---
+// --- 5. Montaje ---
 // StrictMode es solo de desarrollo: hace que los efectos corran DOS veces
 // a propósito, para detectar bugs. En producción no pasa.
 ReactDOM.createRoot(document.getElementById('root')).render(

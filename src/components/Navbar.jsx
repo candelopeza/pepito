@@ -4,7 +4,7 @@
    CONTENIDO:
      - izquierda: botón ☰ (abre/cierra el menú lateral) + logo "CIUDAD / SMT",
                   el logo es un link al Inicio
-     - derecha:   el selector de rol (PROVISORIO) + el nombre del usuario
+     - derecha:   "Elegí tu usuario" (PROVISORIO hasta CiDiTuc) + el legajo
 
    USADO EN:  components/Layout.jsx
    ESTILOS:   App.css -> secciones 2 (NAVBAR) y 2.b (SELECTOR DE ROL)
@@ -14,9 +14,10 @@
                                lo apretaron; quién muestra o esconde el menú es
                                Layout, porque es el que tiene al Sidebar.
 
-   >>> EL NOMBRE DEL USUARIO ES DE MENTIRA <<<
-   Sale de auth/usuarioActual.js, que hoy es un objeto escrito a mano. NO hay
-   login: es solo para ver cómo queda la barra. Ver ese archivo.
+   >>> NO HAY LOGIN TODAVÍA <<<
+   El usuario es el elegido en el desplegable de la barra, entre los cargados
+   en Accesos → Usuarios (auth/RolProvider.jsx). Sin elegir, la barra dice
+   "Sin identificar" y el servidor no acepta ninguna escritura.
 
    SI HAY PROBLEMA ACÁ:
      - "No se ve el logo": es src/assets/logo-ciudad-smt.png (el símbolo
@@ -106,16 +107,14 @@ function Navbar({ onAlternarMenu }) {
         )}
         {rechazados > 0 && <span className="navbar-conexion">{rechazados} no se aceptaron</span>}
 
-        {/* PROVISORIO. Se va entero cuando exista login. */}
+        {/* PROVISORIO. Se va entero cuando exista el login por CiDiTuc. */}
         <SelectorRol />
 
-        {/* MAQUETA: el nombre viene de auth/usuarioActual.js, escrito a mano.
-            Es un <div>, no un <button>: todavía no despliega nada. Cuando haya
+        {/* Es un <div>, no un <button>: todavía no despliega nada. Cuando haya
             login acá va el menú de sesión. */}
         <div className="navbar-usuario">
           <span className="navbar-usuario-nombre">
-            {usuario.nombre}
-
+            {usuario.nombre ? `Legajo ${usuario.nombre}` : 'Sin identificar'}
           </span>
           <AccountCircleIcon className="navbar-usuario-icono" />
         </div>

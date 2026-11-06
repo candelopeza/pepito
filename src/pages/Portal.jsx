@@ -72,7 +72,6 @@ function Portal() {
   const {
     novedadesExpedientes,
     parametros,
-    capacidades,
     localesConEstado,
     actuacionesDeLocal,
     usuarios,
@@ -86,13 +85,14 @@ function Portal() {
   const [presentando, setPresentando] = useState(null);
   const [pidiendoProrroga, setPidiendoProrroga] = useState(null);
   const [solicitud, setSolicitud] = useState({ dias: '', motivo: '' });
-  // PRUEBA: ver el portal como el titular de este CUIT (ver el encabezado).
-  const [cuitPrueba, setCuitPrueba] = useState('');
 
   /* Los locales de esta persona. Es el punto que hay que reemplazar cuando se
-     defina la vinculación con CiDiTuc: hoy compara el CUIL del usuario contra
-     el campo `titularCuil` del local o, si no lo tiene, contra su CUIT. */
-  const identificacion = normalizarCuit(cuitPrueba || usuario.cuil);
+     defina la vinculación con CiDiTuc: el titular entra con su identidad y su
+     CUIL llega en `usuario.cuil`. Hoy nadie lo trae (se sacó el buscador de
+     prueba "ver como el CUIT…" el 06/11/2026), así que el portal muestra el
+     aviso de "ningún local" hasta que exista esa vinculación. Compara el CUIL
+     contra `titularCuil` del local o, si no lo tiene, contra su CUIT. */
+  const identificacion = normalizarCuit(usuario.cuil);
   const mios = localesConEstado.filter((l) =>
     l.titularCuil
       ? normalizarCuit(l.titularCuil) === identificacion
@@ -122,28 +122,8 @@ function Portal() {
       <PageHeader
         etiqueta="PORTAL DEL TITULAR"
         titulo={usuario.nombre ? `Hola, legajo ${usuario.nombre}` : 'Hola'}
-        subtitulo={`CUIL ${cuitPrueba || usuario.cuil || 'no informado'}`}
+        subtitulo={usuario.cuil ? `CUIL ${usuario.cuil}` : 'Ingresá con CiDiTuc para ver tus locales'}
       />
-
-      {/* El buscador por CUIT es una herramienta de prueba: en modo entrega
-          (rol declarado apagado) no se muestra. El acceso real del titular
-          llega con CiDiTuc: cada titular entra con su identidad y ve lo suyo.
-          Mientras tanto, la OFICINA puede abrir el portal de un CUIT para
-          verlo como lo vería el titular. */}
-      {capacidades?.aceptaRolDeclarado !== false && (
-        <div className="selector-rol portal-prueba">
-          <span className="selector-rol-aviso" title="Herramienta de prueba: se elimina cuando haya CiDiTuc">
-            PRUEBA
-          </span>
-          <input
-            className="selector-rol-select"
-            placeholder="Ver como el titular del CUIT…"
-            value={cuitPrueba}
-            onChange={(e) => setCuitPrueba(e.target.value)}
-            aria-label="Ver el portal como el titular de un CUIT (prueba)"
-          />
-        </div>
-      )}
 
       {mios.length === 0 ? (
         <Vacio titulo="No tenés cargado ningún local">

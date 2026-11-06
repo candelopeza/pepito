@@ -4,17 +4,25 @@ Qué hay que hacer —y en qué orden— para que el Sistema Grandes Generadores
 quede operando con usuarios reales, sin perfiles de prueba, listo para sumarse
 a CiDiTuc como un portal más.
 
-## 1. Los usuarios reales (lo hace Dirección, una sola vez)
+## 1. Los usuarios reales (se cargan desde la base, una sola vez)
 
-Hoy la base tiene los usuarios cargados para las pruebas. Hay que cargar a
-cada agente del área:
+Decisión de la Dirección (2026-11-06): los usuarios se cargan **solo desde la
+base de datos**, no desde la aplicación. Sin usuarios cargados la aplicación
+abre directo en el portal del titular y la barra no ofrece nada.
 
-1. Entrar al sistema → **Accesos → Usuarios**.
-2. Crear un usuario por persona, con su **número de persona** (id_persona,
-   el identificador del padrón municipal) y su tipo (relevador,
-   notificador, administrativo, coordinación, dirección).
-3. Verificar en **Accesos** que cada rol tenga habilitados los módulos que le
-   corresponden (ya vienen con el reparto del pliego; solo revisar).
+1. Correr una vez `backend/sql/14-vaciar-usuarios.sql` en HeidiSQL: saca a
+   todos los usuarios de prueba (a los que firmaron trámites los deja dados de
+   baja, para no romper el historial).
+2. Cargar a cada agente del área con un INSERT como el que está al final de
+   ese mismo script: su **número de persona** (id_persona, el identificador
+   del padrón municipal, el mismo que usará CiDiTuc) y su tipo (2 relevador,
+   3 notificador, 4 administrativo, 5 coordinación, 6 dirección,
+   8 administrador). El backend lo toma solo en menos de un minuto.
+3. Con un administrador cargado, entrar y verificar en **Accesos** que cada
+   tipo de usuario tenga habilitados los módulos que le corresponden (ya
+   vienen con el reparto del pliego; solo revisar). Desde **Accesos →
+   Usuarios** también se puede dar de alta o de baja, pero lo acordado es
+   hacerlo desde la base.
 
 ## 2. Los perfiles de prueba ya están apagados
 
@@ -45,7 +53,8 @@ barra. Las rutas no se tocan.
 ## 4. La base de datos
 
 - Las tablas del sistema ya están creadas (scripts `backend/sql/03` a `13`,
-  todos idempotentes: correrlos de nuevo no rompe nada).
+  todos idempotentes: correrlos de nuevo no rompe nada). El `14` es el que
+  vacía los usuarios de prueba (paso 1).
 - Los datos de prueba (locales "cande", cargas de ensayo del informe 9DJ,
   trámites de ensayo) quedaron dados de baja lógica el 2026-10-15: no se ven
   en el sistema, pero están en la base con `habilita = 0` por si hace falta

@@ -4,7 +4,7 @@
    CONTENIDO:
      - izquierda: botón ☰ (abre/cierra el menú lateral) + logo "CIUDAD / SMT",
                   el logo es un link al Inicio
-     - derecha:   avisos de conexión + quién es el usuario
+     - derecha:   solo los avisos de conexión (normalmente nada)
 
    USADO EN:  components/Layout.jsx
    ESTILOS:   App.css -> secciones 2 (NAVBAR) y 2.b (SELECTOR DE ROL)
@@ -38,14 +38,11 @@
 
 import { Link } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
-import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { fmtFechaHora } from '../dominio/fechas';
 import logoCiudadSmt from '../assets/logo-ciudad-smt.png';
 
 function Navbar({ onAlternarMenu }) {
-  const { usuario, datosRol } = useRol();
   // Trabajo sin conexión (sección 6.2): "indicación visible de cuántos
   // registros quedan pendientes". Va en la barra para que se vea en todas las
   // pantallas, no solo en la del formulario.
@@ -85,7 +82,11 @@ function Navbar({ onAlternarMenu }) {
 
       </Link>
 
-      {/* ===== DERECHA: selector de rol + usuario =====
+      {/* ===== DERECHA: solo los avisos de conexión =====
+          Normalmente está vacío. Desde el 06/11/2026 acá no hay usuario ni
+          selector: la Dirección pidió la barra limpia hasta CiDiTuc. Los
+          avisos "Sin conexión" / "N sin enviar" quedan porque son del pliego
+          (sección 6.2) y solo aparecen cuando pasa algo.
           El margin-left: auto de .navbar-derecha es lo que empuja este bloque
           al extremo derecho (aprovecha que .navbar ya es flex). */}
       <div className="navbar-derecha">
@@ -106,15 +107,6 @@ function Navbar({ onAlternarMenu }) {
           </button>
         )}
         {rechazados > 0 && <span className="navbar-conexion">{rechazados} no se aceptaron</span>}
-
-        {/* Es un <div>, no un <button>: todavía no despliega nada. Cuando haya
-            login acá va el menú de sesión. */}
-        <div className="navbar-usuario">
-          <span className="navbar-usuario-nombre">
-            {usuario.nombre ? `Legajo ${usuario.nombre}` : datosRol.etiqueta}
-          </span>
-          <AccountCircleIcon className="navbar-usuario-icono" />
-        </div>
 
       </div>
 

@@ -42,7 +42,7 @@
 /* ========== 2. NAVBAR (barra azul de arriba) ==========
    Usado en: components/Navbar.jsx
    De izquierda a derecha: botón ☰, logo "CIUDAD / SMT", y pegado al borde
-   derecho el bloque del usuario.
+   derecho los avisos de conexión (normalmente vacío).
 
    El `margin-left: auto` de .navbar-derecha es lo que empuja ese bloque al
    extremo (aprovecha que .navbar ya es flex). Si el nombre aparece pegado al
@@ -97,29 +97,13 @@
 .ciudad { color: white; font-size: 11px; font-weight: 600; letter-spacing: 1px; }
 .smt { color: white; font-size: 24px; font-weight: 800; letter-spacing: 1px; }
 
-/* --- Bloque de la derecha: selector de rol (provisorio) + usuario --- */
+/* --- Bloque de la derecha: solo los avisos de conexión (06/11/2026: sin
+   usuario ni selector hasta CiDiTuc) --- */
 .navbar-derecha {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 18px;
-}
-
-/* El legajo del usuario elegido en la barra, o "Sin identificar".
-   Todavía no despliega ningún menú; por eso no lleva cursor: pointer. */
-.navbar-usuario {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: white;
-}
-
-.navbar-usuario-nombre {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  white-space: nowrap;
 }
 
 
@@ -730,7 +714,6 @@
 @media (max-width: 768px) {
   .main-content { padding: 20px; }
   .grid-accesos { grid-template-columns: 1fr; }
-  .navbar-usuario-nombre { display: none; }
 
   /* Las dos grillas nuevas del Inicio. Las acciones a una columna por el mismo
      motivo que .grid-accesos; los indicadores a DOS y no a una porque son
@@ -2019,7 +2002,6 @@
   .ciudad { display: none; }
   .smt { font-size: 20px; }
   .navbar-derecha { gap: 8px; min-width: 0; }
-  .navbar-usuario-icono { display: none; }
 }
 
 /* ---------------------------------------------------------------------------

@@ -42,10 +42,26 @@ const app = express();
 const PUERTO = Number(process.env.PUERTO) || 3000;
 
 /* --- middlewares generales ------------------------------------------------ */
-// El front (Vite) corre en otro puerto: sin esto el navegador bloquea los fetch.
-// ORIGEN_FRONT admite varios origenes separados por coma: el front se abre
-// desde la PC (localhost) y desde los celulares de la red (la IP de la PC).
-app.use(cors({ origin: process.env.ORIGEN_FRONT ? process.env.ORIGEN_FRONT.split(',').map((o) => o.trim()) : true }));
+/* El front se abre desde OTRO origen que la API (en desarrollo otro puerto;
+   en producción Apache en el 443 y la API en el 3344): sin esto el navegador
+   bloquea los fetch con "blocked by CORS policy".
+
+   ORIGEN_FRONT admite varios orígenes separados por coma. Un origen es
+   protocolo + dominio + puerto, SIN ruta: https://grangenerador.smt.gob.ar.
+   Se normaliza lo que suele venir mal escrito en el .env (barra final,
+   espacios, comillas, mayúsculas, entradas vacías), porque un origen que no
+   coincide EXACTO deja a todo el mundo afuera sin ningún aviso. Vacío =
+   cualquiera (solo para desarrollo).
+
+   Qué quedó permitido se ve en GET /salud (origenesPermitidos) y en la
+   consola al arrancar: es lo primero que hay que mirar ante un error de CORS
+   en producción (06/11/2026: el servidor arrancó con un ORIGEN_FRONT que no
+   coincidía con nada y la app no cargaba ni un dato). */
+const ORIGENES_PERMITIDOS = String(process.env.ORIGEN_FRONT ?? '')
+  .split(',')
+  .map((o) => o.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '').toLowerCase())
+  .filter(Boolean);
+app.use(cors({ origin: ORIGENES_PERMITIDOS.length ? ORIGENES_PERMITIDOS : true }));
 
 /* --- todo lo que sale, comprimido -----------------------------------------
    Cada vez que se abre la app, y DESPUÉS DE CADA GUARDADO, el front vuelve a
@@ -106,6 +122,7 @@ app.get('/salud', (_req, res) => {
     capacidades: capacidades(),
     geocodificador: modoGeocodificador(),
     aceptaRolDeclarado: aceptaRolDeclarado(),
+    origenesPermitidos: ORIGENES_PERMITIDOS.length ? ORIGENES_PERMITIDOS : 'cualquiera',
     tareaDiaria: estadoTareas(),
   });
 });
@@ -189,6 +206,11 @@ servidor.listen(PUERTO, () => {
   if (tls) console.log(`  certificado: ${CERTIFICADO_TLS}`);
   else console.log(`  sin HTTPS: no está ${CLAVE_TLS} o ${CERTIFICADO_TLS}`);
   if (CARPETA_FRONT) console.log(`  la aplicación también se sirve acá, desde ${CARPETA_FRONT}`);
+  console.log(
+    ORIGENES_PERMITIDOS.length
+      ? `  front permitido (ORIGEN_FRONT): ${ORIGENES_PERMITIDOS.join(', ')}`
+      : '  front permitido: cualquiera (ORIGEN_FRONT vacío; solo para desarrollo)',
+  );
   console.log(
     `  auditoría: ${c.auditoria ? 'sí' : 'NO (sql/05)'} · parámetros editables: ${c.parametros ? 'sí' : 'NO (sql/06)'} · ` +
       `accesos: ${c.accesos ? 'sí' : 'NO (sql/07)'} · constancia de impresión: ${c.impresion ? 'sí' : 'NO (sql/04)'} · ` +

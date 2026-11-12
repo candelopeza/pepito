@@ -30,6 +30,7 @@ import { COPIAS_OFICIALES, FORMATO_OFICIAL, LOGOS, contenidoCedulaOficial, falta
 import { descargarPdf, imprimirPdf, nombreCedula, pdfCedulas, quienGenera } from './pdfCedulas';
 import logoMunicipio from '../assets/cedula/logo-municipio.png';
 import logoAmbiente from '../assets/cedula/logo-ambiente.png';
+import qrPlantillas from '../assets/cedula/qr-plantillas.png';
 
 /* La cédula sale en PDF (components/pdfCedulas.js): igual en cualquier
    navegador y con la constancia de notificación. En false vuelve a imprimirse
@@ -92,17 +93,53 @@ function CedulaOficial({ cedula, local }) {
           <Partes partes={p} />
         </p>
       ))}
-      {c.ordenanzas.map((o) => (
-        <p key={o.titulo} className="justificado">
-          ☐ <strong>{o.titulo}</strong>
-          {o.texto}
-        </p>
-      ))}
+      {c.vinetas ? (
+        // Modelo del 12/11: ordenanzas con viñeta.
+        <ul className="cedula-oficial-vinetas">
+          {c.ordenanzas.map((o) => (
+            <li key={o.titulo} className="justificado">
+              <strong>{o.titulo}</strong>
+              {o.texto}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        c.ordenanzas.map((o) => (
+          <p key={o.titulo} className="justificado">
+            ☐ <strong>{o.titulo}</strong>
+            {o.texto}
+          </p>
+        ))
+      )}
       {c.cierre.map((p, i) => (
         <p key={i} className="justificado">
           <Partes partes={p} />
         </p>
       ))}
+      {/* La documentación a presentar y el QR a las plantillas. En pantalla el
+          QR también se puede tocar: en el teléfono no se puede escanear la
+          propia pantalla. */}
+      {c.documentacion && (
+        <div className="cedula-oficial-documentacion">
+          <div className="cedula-oficial-documentacion-lista">
+            <strong>{c.documentacion.titulo}</strong>
+            {c.documentacion.items.map((item, i) => (
+              <span key={i}>
+                <Partes partes={item} />
+              </span>
+            ))}
+          </div>
+          <a
+            className="cedula-oficial-qr"
+            href={c.documentacion.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Abrir las plantillas para descargar"
+          >
+            <img src={qrPlantillas} alt="Código QR a las plantillas para descargar" />
+          </a>
+        </div>
+      )}
       {c.instancia === 1 ? (
         <div className="cedula-oficial-firmas tres">
           <strong>Firma Recepción</strong>

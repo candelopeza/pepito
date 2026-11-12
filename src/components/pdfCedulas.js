@@ -39,6 +39,8 @@ import { ESTADOS, etiquetaEstado } from '../dominio/estados.js';
 import { COPIAS_OFICIALES, FORMATO_OFICIAL, LOGOS, PIE_GENERADO_EN_CEDULAS, contenidoCedulaOficial } from '../dominio/cedulaOficial.js';
 import logoMunicipio from '../assets/cedula/logo-municipio.png';
 import logoAmbiente from '../assets/cedula/logo-ambiente.png';
+// El QR a las plantillas del recuadro de documentación (dominio/cedulaOficial.js, URL_PLANTILLAS).
+import qrPlantillas from '../assets/cedula/qr-plantillas.png';
 
 /* Cuántas copias de cada cédula. Con 2 sale ORIGINAL (queda en el local) y
    DUPLICADO (vuelve a la oficina con la constancia firmada). */
@@ -261,6 +263,10 @@ function dibujarConstancia(doc, y0, notificador) {
    o abriendo el archivo con doble clic. Para cambiarlos: reemplazar esos dos
    archivos y compilar de nuevo. Si una imagen no carga, en su lugar va el
    nombre en texto y la cédula se imprime igual.
+
+   12/11/2026: modelo nuevo de la Dirección. Ordenanzas con viñeta y, antes de
+   las firmas, el recuadro con la documentación a presentar y el QR a las
+   plantillas (src/assets/cedula/qr-plantillas.png, recuadroDocumentacion).
    =========================================================================== */
 /* Prepara un logo para el PDF, con su tamaño en píxeles (para no deformarlo).
    null si no carga. */
@@ -384,10 +390,46 @@ function puntos(doc, x1, y, x2) {
   doc.setLineDashPattern([], 0);
 }
 
+/* El recuadro "DOCUMENTACIÓN QUE DEBE PRESENTAR" del modelo del 12/11/2026: la
+   lista a la izquierda y el QR a las plantillas en su propia celda, a la
+   derecha. `y` es el renglón donde iría el próximo texto; devuelve el renglón
+   siguiente al recuadro. Si la imagen del QR no carga, en su celda va la
+   dirección escrita. */
+const LADO_QR = 22; // mm: se lee bien con cualquier teléfono
+function recuadroDocumentacion(doc, documentacion, { x, y, ancho, tam, dibujar, qr }) {
+  const t = tam * 0.8; // la letra del recuadro, más chica que el texto, como en el modelo
+  const pt = t * 0.3528;
+  const margen = 1.6;
+  const celdaQr = LADO_QR + margen * 2;
+  const arriba = y - tam * 0.3528 * 0.4;
+  const opciones = { x: x + margen, ancho: ancho - celdaQr - margen * 2, tam: t, justificar: false, dibujar };
+  let yy = arriba + margen + pt * 0.85;
+  yy = parrafo(doc, [{ t: documentacion.titulo, e: 'bold' }], { ...opciones, y: yy });
+  for (const item of documentacion.items) yy = parrafo(doc, item, { ...opciones, y: yy });
+  const alto = Math.max(yy - pt * 1.22 + pt * 0.35 + margen - arriba, celdaQr);
+
+  if (dibujar) {
+    const xQr = x + ancho - celdaQr;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.3);
+    doc.rect(x, arriba, ancho, alto);
+    doc.line(xQr, arriba, xQr, arriba + alto);
+    if (qr) {
+      doc.addImage(qr.datos, qr.tipo, xQr + margen, arriba + (alto - LADO_QR) / 2, LADO_QR, LADO_QR, undefined, 'FAST');
+    } else {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6);
+      doc.text(doc.splitTextToSize(apto(documentacion.url), celdaQr - margen * 2), xQr + margen, arriba + margen + 2);
+    }
+  }
+  return arriba + alto + tam * 0.3528 * 1.4;
+}
+
 /* El cuerpo de la cédula oficial, desde los datos del local hasta el último
-   párrafo. Devuelve dónde termina. Con dibujar = false solo mide (para elegir
-   el tamaño de letra que entra en una hoja). */
-function cuerpoOficial(doc, contenido, { x, y, ancho, tam, dibujar }) {
+   párrafo (y el recuadro de documentación, si va). Devuelve dónde termina. Con
+   dibujar = false solo mide (para elegir el tamaño de letra que entra en una
+   hoja). `qr`: la imagen del QR del recuadro. */
+function cuerpoOficial(doc, contenido, { x, y, ancho, tam, dibujar, qr = null }) {
   const opciones = { x, ancho, tam, dibujar };
   const salto = tam * 0.3528 * 0.55;
 
@@ -399,18 +441,32 @@ function cuerpoOficial(doc, contenido, { x, y, ancho, tam, dibujar }) {
   y += salto * 2;
   for (const p of contenido.parrafos) y = parrafo(doc, p, { ...opciones, y });
 
-  // Las ordenanzas, cada una con su casillero vacío para tildar a mano.
-  const lado = tam * 0.3528 * 0.78;
-  for (const { titulo, texto } of contenido.ordenanzas) {
-    y += salto;
-    if (dibujar) {
-      doc.setDrawColor(0);
-      doc.setLineWidth(0.25);
-      doc.rect(x, y - lado * 0.95, lado, lado);
+  if (contenido.vinetas) {
+    // Modelo del 12/11: cada ordenanza con una viñeta (○) y el texto con sangría.
+    const radio = tam * 0.3528 * 0.17;
+    for (const { titulo, texto } of contenido.ordenanzas) {
+      if (dibujar) {
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.2);
+        doc.circle(x + 6, y - tam * 0.3528 * 0.3, radio);
+      }
+      y = parrafo(doc, [{ t: titulo, e: 'bold' }, { t: texto }], { ...opciones, x: x + 10, ancho: ancho - 10, y });
     }
-    y = parrafo(doc, [{ t: titulo, e: 'bold' }, { t: texto }], { ...opciones, y, sangria: lado + 1.6 });
+  } else {
+    // Modelo del 26/10: cada ordenanza con su casillero vacío para tildar a mano.
+    const lado = tam * 0.3528 * 0.78;
+    for (const { titulo, texto } of contenido.ordenanzas) {
+      y += salto;
+      if (dibujar) {
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.25);
+        doc.rect(x, y - lado * 0.95, lado, lado);
+      }
+      y = parrafo(doc, [{ t: titulo, e: 'bold' }, { t: texto }], { ...opciones, y, sangria: lado + 1.6 });
+    }
   }
   for (const p of contenido.cierre) y = parrafo(doc, p, { ...opciones, y });
+  if (contenido.documentacion) y = recuadroDocumentacion(doc, contenido.documentacion, { x, y, ancho, tam, dibujar, qr });
   return y;
 }
 
@@ -456,7 +512,7 @@ function dibujarCedulaOficial(doc, { cedula, local }, { logos, generado }) {
   const firmasYObservaciones = instancia === 1 ? 34 : 52;
   const limite = ZONA.alto - 16 - firmasYObservaciones;
   const tam = [10.5, 10, 9.5, 9, 8.5].find((t) => cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam: t, dibujar: false }) <= limite) ?? 8.5;
-  y = cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam, dibujar: true });
+  y = cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam, dibujar: true, qr: logos.qr });
 
   // Firmas
   doc.setFont('times', 'bold');
@@ -505,7 +561,7 @@ export async function pdfCedulas(items, plantilla, { generadoPor = '' } = {}) {
   doc.setProperties({ title: 'Cédulas de notificación', author: 'Dirección de Ambiente' });
   const generado = PIE_GENERADO_EN_CEDULAS ? leyendaGenerado(generadoPor) : '';
   const logos = FORMATO_OFICIAL
-    ? { municipio: await cargarLogo(logoMunicipio), ambiente: await cargarLogo(logoAmbiente) }
+    ? { municipio: await cargarLogo(logoMunicipio), ambiente: await cargarLogo(logoAmbiente), qr: await cargarLogo(qrPlantillas) }
     : null;
   const copias = FORMATO_OFICIAL ? COPIAS_OFICIALES : COPIAS_POR_CEDULA;
   let primera = true;

@@ -23,6 +23,7 @@ import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
 import { identificarUsuario, aceptaRolDeclarado } from './middlewares/usuario.js';
+import { modoCidituc, tokenDelPedido } from './cidituc.js';
 import { problemaDeConexion } from './conexion-bd.js';
 import { capacidades, revisarCapacidades, vigilarCapacidades } from './capacidades.js';
 import { modoGeocodificador } from './geocodificador.js';
@@ -123,7 +124,37 @@ app.get('/salud', (_req, res) => {
     geocodificador: modoGeocodificador(),
     aceptaRolDeclarado: aceptaRolDeclarado(),
     origenesPermitidos: ORIGENES_PERMITIDOS.length ? ORIGENES_PERMITIDOS : 'cualquiera',
+    cidituc: modoCidituc(),
     tareaDiaria: estadoTareas(),
+  });
+});
+
+/* --- quién soy ------------------------------------------------------------
+   El front lo pide al arrancar con el token de CiDiTuc (src/auth/RolProvider).
+   Responde { modo, persona, motivo }: persona es { id, nombre (id_persona),
+   rol, cuil, nombreCompleto } o null, y motivo explica el null para que el
+   problema se vea en la consola del navegador y no haya que adivinar. */
+app.get('/sesion', (req, res) => {
+  const modo = modoCidituc();
+  const token = tokenDelPedido(req);
+  let motivo = null;
+  if (!req.usuario?.porCidituc) {
+    if (modo === 'apagado') motivo = 'CiDiTuc no está configurado en el servidor (CIDITUC_* en backend/.env)';
+    else if (!token) motivo = 'No llegó ningún token (Authorization: Bearer)';
+    else motivo = 'El token no es válido para este servidor o venció';
+  }
+  res.json({
+    modo,
+    persona: req.usuario?.porCidituc
+      ? {
+          id: req.usuario.id,
+          nombre: req.usuario.nombre,
+          rol: req.usuario.rol,
+          cuil: req.usuario.cuil,
+          nombreCompleto: req.usuario.nombreCompleto,
+        }
+      : null,
+    motivo,
   });
 });
 
@@ -210,6 +241,11 @@ servidor.listen(PUERTO, () => {
     ORIGENES_PERMITIDOS.length
       ? `  front permitido (ORIGEN_FRONT): ${ORIGENES_PERMITIDOS.join(', ')}`
       : '  front permitido: cualquiera (ORIGEN_FRONT vacío; solo para desarrollo)',
+  );
+  console.log(
+    modoCidituc() === 'apagado'
+      ? '  CiDiTuc: APAGADO (sin CIDITUC_SECRETO / CIDITUC_CLAVE_PUBLICA / CIDITUC_URL_VALIDAR): nadie puede identificarse'
+      : `  CiDiTuc: ${modoCidituc()}`,
   );
   console.log(
     `  auditoría: ${c.auditoria ? 'sí' : 'NO (sql/05)'} · parámetros editables: ${c.parametros ? 'sí' : 'NO (sql/06)'} · ` +

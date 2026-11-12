@@ -35,6 +35,8 @@ function direccionDeLaApi() {
   return `${protocolo}//${maquina}:${import.meta.env.VITE_API_PUERTO || 3000}`;
 }
 
+import { leerToken } from '../auth/sesion';
+
 const BASE = direccionDeLaApi();
 // Para los mensajes: con BASE vacía (mismo servidor) se nombra la dirección de la página.
 const DONDE = BASE || (typeof location !== 'undefined' ? location.origin : 'este servidor');
@@ -58,9 +60,16 @@ export function identificarse(usuario) {
 }
 
 /* `usuario`: por defecto, el activo. La cola sin conexión pasa el de quien hizo
-   la carga, que puede no ser el que está elegido cuando vuelve la señal. */
+   la carga, que puede no ser el que está elegido cuando vuelve la señal.
+
+   CON CiDiTuc (12/11/2026): si esta pestaña tiene token (auth/sesion.js) va
+   como Authorization: Bearer y es lo único que el backend mira. Las dos
+   cabeceras x-usuario-* quedan para las pruebas automáticas (el backend las
+   ignora salvo con ACEPTAR_ROL_DECLARADO=si). */
 function cabeceras(usuario = usuarioActual) {
   const h = { 'Content-Type': 'application/json' };
+  const token = leerToken();
+  if (token) h.Authorization = `Bearer ${token}`;
   if (usuario?.nombre) h['x-usuario-nombre'] = encodeURIComponent(usuario.nombre);
   if (usuario?.rol) h['x-usuario-rol'] = usuario.rol;
   return h;
@@ -156,6 +165,8 @@ const borrar = (ruta) => pedir(ruta, { method: 'DELETE' });
    --------------------------------------------------------------------------- */
 export const api = {
   salud: () => get('/salud'),
+  // Quién soy según el token de CiDiTuc: { modo, persona | null, motivo }.
+  sesion: () => get('/sesion'),
 
   // --- lectura del padrón ---------------------------------------------------
   locales: () => get('/locales'),

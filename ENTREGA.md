@@ -24,25 +24,47 @@ abre directo en el portal del titular y la barra no ofrece nada.
    Usuarios** también se puede dar de alta o de baja, pero lo acordado es
    hacerlo desde la base.
 
-## 2. Los perfiles de prueba ya están apagados
+## 2. La identificación: CiDiTuc (desde el 2026-11-12)
 
-Desde el 2026-11-06 no hay roles de prueba ni usuarios inventados: no hay
-nada que configurar.
+No hay roles de prueba ni usuarios inventados. La identidad la da CiDiTuc:
+abre el sistema con un **token** en el parámetro `auth` de la dirección, el
+front lo guarda en el navegador (localStorage) y lo saca de la dirección, lo
+manda en cada pedido, y el backend lo verifica con el secreto compartido y
+saca el **número de persona** (`id_persona`). Con ese número:
 
-- El servidor **solo reconoce a los usuarios cargados en la base**, por su
-  número de persona. Un nombre que no está en la base no puede escribir.
-- La aplicación no tiene forma de identificarse todavía: todo el que entra
-  es público (portal del titular). Decisión de la Dirección del 2026-11-06:
-  los tipos de usuario se vinculan directamente cuando el sistema se sume a
-  CiDiTuc. Hasta entonces el personal del área no puede operar desde la app.
-- La variable `ACEPTAR_ROL_DECLARADO` del `.env` queda en `no` (o sin la
-  línea). Solo se pone en `si` para correr las pruebas automáticas contra un
-  backend de prueba; **nunca en producción**.
+- si está en la tabla `usuario` con `habilita = 1`, es personal del área y
+  entra con el rol de su tipo de usuario (lo que puede hacer lo define
+  Accesos → Tipos de usuario);
+- si no está, es público: portal del titular, con el CUIL que traiga el token.
 
-Cuando el sistema se sume al login único, la identidad la provee CiDiTuc y se
-cambian dos archivos: `backend/middlewares/usuario.js` (leer el token en vez
-de los headers) y `src/auth/RolProvider.jsx` (llamar a `elegirAgente` con la
-persona de la sesión). Las rutas y las pantallas no se tocan.
+**Lo que hay que configurar en `backend/.env` del servidor** (una sola vez):
+el secreto con el que CiDiTuc firma el token, el mismo que usan estadísticas
+y reclamos. Lo tiene Sistemas; **no se escribe en el código ni en git**:
+
+```
+CIDITUC_SECRETO=<el secreto compartido de CiDiTuc>
+```
+
+Si el número de persona no viniera con el nombre `id_persona`, el nombre real
+va en `CIDITUC_CAMPO_PERSONA` (también `CIDITUC_CAMPO_CUIL` y
+`CIDITUC_CAMPO_NOMBRE`). Las otras formas de verificación (clave pública o
+consulta a CiDiTuc) están implementadas por si cambian el mecanismo; ver
+`backend/.env.ejemplo`.
+
+**Cómo comprobar que quedó bien**, sin adivinar:
+
+1. `https://grangenerador.smt.gob.ar:3344/salud` tiene que decir `"cidituc":`
+   con el modo elegido, no `"apagado"`.
+2. Entrar desde CiDiTuc. Si la aplicación sigue mostrando el portal del
+   titular a una persona cargada como administrador, abrir la consola del
+   navegador (F12): aparece `[CiDiTuc] No se pudo identificar a la persona:`
+   seguido del motivo (no llegó token, token inválido o vencido, o CiDiTuc no
+   configurado). Si no llegó token, CiDiTuc lo está mandando con otro nombre
+   o en otro lugar de la dirección: ver `src/auth/sesion.js`.
+
+La variable `ACEPTAR_ROL_DECLARADO` del `.env` queda en `no` (o sin la
+línea). Solo se pone en `si` para correr las pruebas automáticas contra un
+backend de prueba o para desarrollar sin CiDiTuc; **nunca en producción**.
 
 ## 3. Revisar la configuración (pantalla Parámetros)
 

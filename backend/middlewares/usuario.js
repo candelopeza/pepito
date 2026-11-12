@@ -5,22 +5,28 @@
    pero eso es interfaz: el código viaja entero al navegador y cualquiera puede
    llamar a la API a mano. La restricción DE VERDAD es esta.
 
-   >>> PROVISORIO HASTA CiDiTuc (capítulo 8 del pliego) <<<
-   Hoy no hay login. El front manda en cada pedido dos headers:
-     x-usuario-nombre: el id_persona del agente en el padrón municipal
-     x-usuario-rol:    coordinacion
-   y el servidor les cree. Cuando exista el inicio de sesión único, este
-   archivo cambia para leer el token. Las rutas NO se tocan: siguen usando
-   req.usuario y requiereRol().
+   >>> CON CiDiTuc (capítulo 8 del pliego), desde el 12/11/2026 <<<
+   El front manda en cada pedido el token de CiDiTuc (Authorization: Bearer).
+   cidituc.js lo verifica y saca el número de persona (id_persona). Con ese
+   número se busca en la tabla `usuario`:
+     - está y habilita = 1  →  req.usuario con el rol de SU tipo de usuario
+                                (Accesos → Tipos de usuario manda sobre lo
+                                que puede hacer). Es el personal del área.
+     - no está               →  es público: rol titular, con el CUIL que
+                                traiga el token, para el portal.
+   Token inválido o vencido → nadie (req.usuario = null): lee lo público y no
+   puede escribir. Las rutas NO se tocan: siguen usando req.usuario y
+   requiereRol().
 
-   LO QUE SÍ SE VERIFICA CONTRA LA BASE: si el nombre coincide con un
-   `id_persona` de la tabla `usuario`, se toma el rol de SU tipo_usuario y no
-   el que vino en el header. Un agente cargado en la base no puede subirse el
-   rol editando un header; solo los que no están cargados usan lo declarado.
+   LAS DOS CABECERAS DE ANTES (x-usuario-nombre / x-usuario-rol) solo se
+   aceptan con ACEPTAR_ROL_DECLARADO=si: son para las pruebas automáticas y
+   para desarrollar sin CiDiTuc. En producción se ignoran, porque cualquiera
+   podría mandar el legajo de un administrador en una cabecera.
    ============================================================================ */
 
 import { consultar } from '../conexion-bd.js';
 import { ROL_POR_TUSUARIO } from '../mapeo.js';
+import { personaDelToken, tokenDelPedido } from '../cidituc.js';
 
 /* 'administrador' se sumó: es el perfil de control total que ya existía en el
    front (src/auth/roles.js) y que el backend no reconocía, así que toda
@@ -48,8 +54,12 @@ export function aceptaRolDeclarado() {
 let cache = { usuarios: null, vence: 0 };
 const DURACION_CACHE_MS = 60_000;
 
-async function usuariosDeLaBase() {
-  if (cache.usuarios && Date.now() < cache.vence) return cache.usuarios;
+/* `fresco`: ignorar la caché y leer la tabla ahora. Lo pide GET /sesion, que
+   es el único pedido que hace la página al recargar: así un cambio de tipo de
+   usuario hecho directo en la base se ve con recargar, sin esperar el minuto
+   ni reiniciar. La lectura fresca renueva la caché para los demás pedidos. */
+async function usuariosDeLaBase(fresco = false) {
+  if (!fresco && cache.usuarios && Date.now() < cache.vence) return cache.usuarios;
   const filas = await consultar('SELECT id_usuario, id_persona, id_tusuario FROM usuario WHERE habilita = 1');
   const mapa = new Map(filas.map((u) => [String(u.idPersona).toLowerCase(), u]));
   cache = { usuarios: mapa, vence: Date.now() + DURACION_CACHE_MS };
@@ -63,32 +73,50 @@ export function olvidarUsuarios() {
   cache = { usuarios: null, vence: 0 };
 }
 
+function rolDe(registrado) {
+  return ROL_POR_TUSUARIO[registrado.idTusuario] ?? 'sistema';
+}
+
 /* Se ejecuta en TODOS los pedidos (ver servidor.js). Deja en req.usuario
-   { id, nombre, rol } o null si no vino nada identificable. */
+   { id, nombre (el id_persona), rol, cuil, nombreCompleto } o null si no vino
+   nada identificable. */
 export async function identificarUsuario(req, _res, next) {
   try {
-    const cabeceraNombre = req.get('x-usuario-nombre');
-    const cabeceraRol = req.get('x-usuario-rol');
-    if (!cabeceraNombre) {
-      req.usuario = null;
+    req.usuario = null;
+
+    // 1. El token de CiDiTuc: la identificación real.
+    const token = tokenDelPedido(req);
+    if (token) {
+      const persona = await personaDelToken(token);
+      if (persona) {
+        const registrado = (await usuariosDeLaBase(req.path === '/sesion')).get(persona.idPersona.toLowerCase());
+        req.usuario = {
+          id: registrado?.idUsuario ?? null,
+          nombre: persona.idPersona,
+          rol: registrado ? rolDe(registrado) : 'titular',
+          cuil: persona.cuil ?? null,
+          nombreCompleto: persona.nombre ?? null,
+          porCidituc: true,
+        };
+      }
       return next();
     }
+
+    // 2. Las cabeceras de prueba: solo en modo prueba.
+    if (!aceptaRolDeclarado()) return next();
+    const cabeceraNombre = req.get('x-usuario-nombre');
+    const cabeceraRol = req.get('x-usuario-rol');
+    if (!cabeceraNombre) return next();
 
     const nombre = decodeURIComponent(cabeceraNombre);
     const registrado = (await usuariosDeLaBase()).get(nombre.toLowerCase());
 
     if (registrado) {
       // Está en la base: manda su tipo_usuario, no lo que dijo el header.
-      req.usuario = {
-        id: registrado.idUsuario,
-        nombre,
-        rol: ROL_POR_TUSUARIO[registrado.idTusuario] ?? 'sistema',
-      };
-    } else if (aceptaRolDeclarado() && ROLES_VALIDOS.includes(cabeceraRol)) {
-      // No está cargado todavía: vale lo declarado, como antes.
+      req.usuario = { id: registrado.idUsuario, nombre, rol: rolDe(registrado) };
+    } else if (ROLES_VALIDOS.includes(cabeceraRol)) {
+      // No está cargado: vale lo declarado (solo en modo prueba).
       req.usuario = { id: null, nombre, rol: cabeceraRol };
-    } else {
-      req.usuario = null;
     }
     next();
   } catch (e) {

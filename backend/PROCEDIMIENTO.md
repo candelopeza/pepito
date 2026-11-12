@@ -1227,3 +1227,42 @@ oficina, se cambia ahí `<Link to={`/locales/${id}`}>` por `<EnlaceFicha id={id}
 
 Si se quiere que el relevador SÍ abra la ficha, no hace falta tocar código:
 el administrador pone "Padrón de locales" en "ver" para ese tipo de usuario.
+
+## 25. Las notificaciones con la documentación a presentar y el QR (12 de noviembre de 2026)
+
+La Dirección pasó un modelo nuevo de notificación. Se aplica a las dos (primera y
+segunda), en el PDF y en "Ver cédula":
+
+- **Texto nuevo:** más corto, las ordenanzas con viñeta (ya no con casillero) y
+  "sita en calle" en lugar de "cita". La segunda conserva su plazo y sus firmas.
+- **Recuadro antes de las firmas:** "DOCUMENTACIÓN QUE DEBE PRESENTAR · CUATRO (4)
+  DOCUMENTOS" con los cuatro ítems. El modelo decía "CINCO (5)" y se corrigió.
+- **QR a las plantillas:** a la derecha del recuadro. Lleva a
+  `https://campsite.bio/grandesgeneradores`, la página de la Dirección con la DDJJ
+  de Generadores Menores, el Formulario de Contrato y la DDJJ de separación de
+  residuos. Es la misma dirección del QR del modelo (con su `?qrcode=`, para que
+  la Dirección siga contando los escaneos). En pantalla, el QR también se puede
+  tocar.
+
+Todo entra en una hoja, con la misma letra de antes.
+
+**Dónde está:** el texto, el recuadro y la dirección del QR, en
+`src/dominio/cedulaOficial.js`. El dibujo en el PDF, en
+`src/components/pdfCedulas.js` (`recuadroDocumentacion`). La pantalla, en
+`src/components/VistaCedula.jsx`, con estilos en `src/App.css` (bloque 14.31).
+
+**Archivo nuevo:** `src/assets/cedula/qr-plantillas.png`, la imagen del QR. Va
+dentro de la app, como los logos, así sale también sin señal.
+
+**Para apagarlo,** en `src/dominio/cedulaOficial.js`:
+
+- `TEXTO_NOVIEMBRE = false` vuelve al texto del 26/10 (sigue en el archivo);
+- `RECUADRO_DOCUMENTACION = false` saca el recuadro con el QR.
+
+**Si cambia la dirección del QR,** se cambia `URL_PLANTILLAS` en ese archivo y se
+vuelve a generar la imagen desde la carpeta del proyecto (no instala nada en el
+proyecto):
+
+```
+npx --yes qrcode -o src/assets/cedula/qr-plantillas.png -w 400 -e M -q 0 "LA-DIRECCIÓN-NUEVA"
+```

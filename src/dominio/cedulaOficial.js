@@ -14,11 +14,47 @@
    FORMATO_OFICIAL en false vuelve al formato anterior: el texto editable de
    Configuración → Plantilla de cédula (dominio/textoCedula.js), que quedó
    intacto.
+
+   12/11/2026: la Dirección pasó un modelo nuevo. El texto es más corto, las
+   ordenanzas van con viñeta y abajo hay un recuadro con la documentación a
+   presentar y un QR a las plantillas. Se apagan por separado con
+   TEXTO_NOVIEMBRE y RECUADRO_DOCUMENTACION; el texto del 26/10 sigue abajo.
    ============================================================================ */
 
 import { faltantesParaCedula, rubroSinInformar } from './reglas.js';
 
 export const FORMATO_OFICIAL = true;
+
+/* El texto del modelo del 12/11/2026, en las dos notificaciones: más corto,
+   las ordenanzas con viñeta en vez de casillero y "sita en calle". En false
+   vuelve el texto del 26/10 (ORDENANZAS y los párrafos de
+   contenidoCedulaOficial). */
+export const TEXTO_NOVIEMBRE = true;
+
+/* El recuadro "DOCUMENTACIÓN QUE DEBE PRESENTAR" con el QR, entre el último
+   párrafo y las firmas, en las dos notificaciones. En false sale sin él. */
+export const RECUADRO_DOCUMENTACION = true;
+
+/* Adónde lleva el QR: la página de la Dirección con las plantillas para
+   descargar (DDJJ de Generadores Menores, Formulario de presentación de
+   Contrato y DDJJ de separación de residuos secos y limpios). Es la misma
+   dirección del QR del modelo, con su "?qrcode=", así la Dirección sigue
+   contando los escaneos. La imagen es src/assets/cedula/qr-plantillas.png: si
+   cambia la dirección, hay que generarla de nuevo (backend/PROCEDIMIENTO.md,
+   sección 25). */
+export const URL_PLANTILLAS = 'https://campsite.bio/grandesgeneradores?qrcode=6af4609fec6a92a9d93f2edf';
+
+/* Lo que dice el recuadro. El modelo decía "CINCO (5)" con cuatro ítems: se
+   dejó "CUATRO (4)" (12/11/2026). */
+const DOCUMENTACION = {
+  titulo: 'DOCUMENTACIÓN QUE DEBE PRESENTAR · CUATRO (4) DOCUMENTOS',
+  items: [
+    [{ t: '1) NOTIFICACIÓN', e: 'bold' }, { t: ' (esta hoja).' }],
+    [{ t: '2) FOTOCOPIA DEL DNI', e: 'bold' }, { t: ' de quien firma la nota.' }],
+    [{ t: '3) DOCUMENTACIÓN COMPLETA Y FIRMADA:', e: 'bold' }, { t: ' use el modelo correspondiente del código QR y complete sus datos' }],
+    [{ t: '4) DOCUMENTACIÓN AUTORIZANTE A REALIZAR EL TRAMITE', e: 'bold' }, { t: ' si corresponde' }],
+  ],
+};
 
 /* Tres copias iguales de cada cédula: para el local, para la Dirección de
    Ambiente y para el expediente. */
@@ -82,6 +118,54 @@ const ORDENANZAS = [
   },
 ];
 
+/* Las ordenanzas del modelo del 12/11/2026: más cortas, con viñeta. */
+const ORDENANZAS_NOVIEMBRE = [
+  { titulo: 'Ordenanza N.º 2822/98:', texto: ' Prohíbe los basurales a cielo abierto y la disposición de residuos en cuerpos de agua.' },
+  {
+    titulo: 'Ordenanza N.º 4742/14:',
+    texto: ' Establece la obligación de los grandes generadores de contratar servicios especiales de recolección de residuos, a su cuenta y costo.',
+  },
+  { titulo: 'Ordenanza N.º 728/67:', texto: ' Regula los días y horarios permitidos para la disposición de residuos en la vía pública.' },
+  { titulo: 'Ordenanza N.º 1740:', texto: ' Regula el tratamiento y la disposición técnica y ambientalmente adecuada de los residuos generados.' },
+];
+
+/* El texto del modelo del 12/11/2026, con el plazo de la cédula. */
+function textoNoviembre(plazo) {
+  return {
+    parrafos: [
+      [
+        { t: 'Por medio de la presente, se notifica a Ud./s que, en un plazo de ' },
+        { t: `${plazo} días hábiles`, e: 'bold' },
+        {
+          t: ' a partir de la fecha de recepción de la misma, deberá presentarse para realizar el empadronamiento obligatorio ante el Registro de Retiro de Residuos Sólidos Urbanos (RSU), correspondiente a la empresa autorizada por el Municipio, y presentar posteriormente el contrato acordado en la ',
+        },
+        { t: 'Dirección de Ambiente de la Municipalidad de San Miguel de Tucumán', e: 'bold' },
+        { t: ', sita en calle San Martín N.º 1009, de lunes a viernes, de 8:00 a 13:00 hs.' },
+      ],
+      [
+        { t: 'La presente notificación se enmarca en la ' },
+        { t: 'Ley Provincial N.º 8.177', e: 'bold' },
+        {
+          t: ', de aplicación general a todos los generadores de residuos, y en las siguientes normativas municipales, según corresponda al rubro del establecimiento:',
+        },
+      ],
+    ],
+    ordenanzas: ORDENANZAS_NOVIEMBRE,
+    cierre: [
+      [
+        { t: 'En caso de no encontrarse comprendido en los supuestos anteriores, deberá presentar una ' },
+        { t: 'Declaración Jurada', e: 'bold' },
+        { t: ' ante la Dirección de Ambiente, a fin de acreditar que no reviste la condición de Gran Generador.' },
+      ],
+      [
+        {
+          t: 'Vencido el plazo establecido sin haberse presentado con la documentación correspondiente, se procederá a labrar las actas de infracción pertinentes, conforme a las ordenanzas vigentes.',
+        },
+      ],
+    ],
+  };
+}
+
 /* Todo lo que lleva una cédula, con los datos del local completados. El plazo
    sale de la cédula (lo fija la emisión); si no lo trae, el del modelo. */
 export function contenidoCedulaOficial(cedula, local) {
@@ -98,12 +182,21 @@ export function contenidoCedulaOficial(cedula, local) {
   const domicilio = dato('Domicilio comercial', local?.direccion);
   const rubro = dato('Rubro', rubroSinInformar(local?.rubro) ? '' : local.rubro);
 
-  return {
+  const comun = {
     instancia,
     titulo: instancia === 1 ? 'PRIMERA NOTIFICACION' : 'SEGUNDA NOTIFICACION',
     numero: numeroOficial(cedula?.numeroCedula),
     // La primera lleva los datos en un párrafo; la segunda, en dos renglones.
     datos: instancia === 1 ? [[razonSocial, comercio, cuit, domicilio, rubro]] : [[razonSocial, comercio, cuit], [domicilio, rubro]],
+    // Las ordenanzas con viñeta (modelo del 12/11) o con casillero (26/10).
+    vinetas: TEXTO_NOVIEMBRE,
+    // El recuadro con la documentación y el QR; null si está apagado.
+    documentacion: RECUADRO_DOCUMENTACION ? { ...DOCUMENTACION, url: URL_PLANTILLAS } : null,
+  };
+  if (TEXTO_NOVIEMBRE) return { ...comun, ...textoNoviembre(plazo) };
+
+  return {
+    ...comun,
     parrafos: [
       [
         { t: 'Por medio de la presente, notifico a Ud./s para que en un plazo de ' },

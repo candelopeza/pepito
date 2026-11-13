@@ -106,6 +106,23 @@
   gap: 18px;
 }
 
+/* La persona que entró por CiDiTuc: nombre en mayúsculas + ícono (13/11/2026).
+   Todavía no despliega ningún menú; por eso no lleva cursor: pointer. */
+.navbar-usuario {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+}
+
+.navbar-usuario-nombre {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 
 
 /* ========== 3. SIDEBAR (menú lateral izquierdo) ==========
@@ -2002,6 +2019,8 @@
   .ciudad { display: none; }
   .smt { font-size: 20px; }
   .navbar-derecha { gap: 8px; min-width: 0; }
+  /* En el teléfono no entra el nombre: queda solo el ícono. */
+  .navbar-usuario-nombre { display: none; }
 }
 
 /* ---------------------------------------------------------------------------

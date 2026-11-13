@@ -38,11 +38,17 @@
 
 import { Link } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { fmtFechaHora } from '../dominio/fechas';
 import logoCiudadSmt from '../assets/logo-ciudad-smt.png';
 
 function Navbar({ onAlternarMenu }) {
+  /* Quién entró por CiDiTuc (auth/RolProvider.jsx): el nombre si CiDiTuc lo
+     dio, si no el legajo. Sin identificar, no se muestra nada (13/11/2026). */
+  const { usuario } = useRol();
+  const nombreVisible = usuario.nombreCompleto || (usuario.nombre ? `Legajo ${usuario.nombre}` : '');
   // Trabajo sin conexión (sección 6.2): "indicación visible de cuántos
   // registros quedan pendientes". Va en la barra para que se vea en todas las
   // pantallas, no solo en la del formulario.
@@ -107,6 +113,15 @@ function Navbar({ onAlternarMenu }) {
           </button>
         )}
         {rechazados > 0 && <span className="navbar-conexion">{rechazados} no se aceptaron</span>}
+
+        {/* La persona que entró por CiDiTuc. Es un <div>, no un <button>:
+            todavía no despliega nada (acá iría cerrar sesión). */}
+        {nombreVisible && (
+          <div className="navbar-usuario" title={usuario.nombre ? `Número de persona ${usuario.nombre}` : undefined}>
+            <span className="navbar-usuario-nombre">{nombreVisible}</span>
+            <AccountCircleIcon className="navbar-usuario-icono" />
+          </div>
+        )}
 
       </div>
 

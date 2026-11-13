@@ -1266,3 +1266,25 @@ proyecto):
 ```
 npx --yes qrcode -o src/assets/cedula/qr-plantillas.png -w 400 -e M -q 0 "LA-DIRECCIÓN-NUEVA"
 ```
+
+## 26. El ícono de la pestaña: el logo de Ciudad SMT (13 de noviembre de 2026)
+
+**Qué cambió:** el ícono que se ve en la pestaña del navegador. Antes salía el
+rayo violeta de Vite: el `favicon.svg` de la plantilla seguía declarado y Chrome
+lo prefería al PNG "GG". Ahora es el símbolo de Ciudad SMT, el mismo de la barra
+azul.
+
+**Dónde está:** en `index.html`, la línea `<link rel="icon" ...>`. Apunta a
+`src/assets/logo-ciudad-smt.png`, el logo que ya usaba la barra, así que no hay
+archivo nuevo. Al compilar, Vite lo copia a `dist/` con un nombre propio
+(`logo-ciudad-smt-XXXX.png`): **al subir el build hay que subir la carpeta
+`dist/` completa**, no solo el `index.html`.
+
+**No cambió:** el ícono de la app instalada en el teléfono o la PC sigue siendo
+el cuadrado azul "GG SMT" (`public/icono-app-*.png`, `manifest.webmanifest`).
+
+**Si no se ve el cambio:** Chrome guarda el ícono viejo. Recargar con Ctrl+F5 o
+cerrar y volver a abrir la pestaña.
+
+**Para volver atrás:** en `index.html`, borrar la línea nueva y descomentar una
+de las dos de abajo (el `favicon.svg` o el `icono-app-32.png`).

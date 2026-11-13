@@ -1288,3 +1288,41 @@ cerrar y volver a abrir la pestaña.
 
 **Para volver atrás:** en `index.html`, borrar la línea nueva y descomentar una
 de las dos de abajo (el `favicon.svg` o el `icono-app-32.png`).
+
+## 27. El nombre de la persona arriba a la derecha (13 de noviembre de 2026)
+
+**Qué cambió:** volvió a la barra azul el bloque de la derecha con el nombre y el
+ícono redondo, como estaba hasta el 06/11. El desplegable "Elegí tu usuario…" no
+vuelve: el nombre sale de la sesión de CiDiTuc (el inicio de sesión que agregó
+cande el 12/11).
+
+**Qué se lee:**
+
+| Situación | La barra dice |
+|---|---|
+| Se está consultando la sesión | Ingresando… |
+| CiDiTuc mandó el nombre | el nombre (en mayúsculas; si es largo se corta con "…" y se lee entero al pasar el mouse) |
+| Entró por CiDiTuc pero sin nombre | Persona N.º 151880 (el número de persona) |
+| Sin token, o CiDiTuc apagado en el servidor | Sin identificar |
+
+En el teléfono queda solo el ícono, como antes.
+
+**OJO, el nombre todavía no llega:** al 13/11 el token real de CiDiTuc trae solo
+`{ id }` (el número de persona) y la tabla `usuario` no tiene columna de nombre.
+Por eso hoy la barra muestra el número. Para que salga el nombre hay que pedirle a
+Sistemas que **sume el nombre al token** (por ejemplo `"nombre": "Juan Pérez"`):
+`backend/cidituc.js` ya lo lee del campo `nombre`, sin tocar código. Si viene con
+otro nombre de campo, se indica en el `.env` del backend:
+
+```
+CIDITUC_CAMPO_NOMBRE=nombre_completo
+```
+
+Si viene en dos campos (nombre y apellido) o hay que pedirlo a otra dirección de
+CiDiTuc, sí hay que tocar `backend/cidituc.js`.
+
+**Dónde está:** `src/components/Navbar.jsx` (lee `usuario.nombreCompleto` de
+`useRol()`), estilos en `src/App.css` sección 2 (`.navbar-usuario`). El dato lo
+arma `src/auth/RolProvider.jsx` con lo que devuelve `GET /sesion`.
+
+**Para sacarlo:** en `src/components/Navbar.jsx`, `MOSTRAR_PERSONA = false`.

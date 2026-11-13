@@ -163,6 +163,47 @@ function personaDelCuerpo(cuerpo) {
   };
 }
 
+/* ---------------------------------------------------------------------------
+   4. El nombre de la persona
+   ---------------------------------------------------------------------------
+   El token real no trae el nombre, solo el número de persona. Para saludar
+   ("Hola, Candelaria") y mostrarlo en la barra se le pide a CiDiTuc con
+   CIDITUC_URL_PERSONA, una dirección con {id} donde va el número:
+       CIDITUC_URL_PERSONA=https://cidituc.smt.gob.ar/api/persona/{id}
+   Se llama con el mismo Bearer del usuario. Del JSON se toma el nombre
+   (CIDITUC_CAMPO_NOMBRE, o nombre/apellido, name, persona.nombre). Sin la
+   variable, no hay nombre y el front muestra el legajo. */
+const cacheNombres = new Map();
+const DURACION_NOMBRE_MS = 10 * 60_000;
+
+async function nombreDeLaPersona(idPersona, token) {
+  const plantilla = process.env.CIDITUC_URL_PERSONA;
+  if (!plantilla) return null;
+  const guardado = cacheNombres.get(idPersona);
+  if (guardado && Date.now() < guardado.vence) return guardado.nombre;
+
+  let nombre = null;
+  try {
+    const respuesta = await fetch(plantilla.replace('{id}', encodeURIComponent(idPersona)), {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (respuesta.ok) {
+      const datos = await respuesta.json();
+      const campo = process.env.CIDITUC_CAMPO_NOMBRE;
+      const directo = primero(datos, [campo, 'nombre_completo', 'nombreCompleto', 'name', 'persona.nombre_completo'].filter(Boolean));
+      const partes = [primero(datos, ['nombre', 'nombres', 'persona.nombre']), primero(datos, ['apellido', 'apellidos', 'persona.apellido'])].filter(Boolean);
+      nombre = directo ?? (partes.length ? partes.join(' ') : null);
+      if (nombre) nombre = String(nombre).trim();
+    }
+  } catch {
+    nombre = null;
+  }
+  if (cacheNombres.size > 2000) cacheNombres.clear();
+  cacheNombres.set(idPersona, { nombre, vence: Date.now() + DURACION_NOMBRE_MS });
+  return nombre;
+}
+
 /* Caché corta por token: en modo API evita preguntarle a CiDiTuc en cada
    pedido (la app hace varios por pantalla). Un minuto, como la de usuarios. */
 const cache = new Map();
@@ -183,6 +224,7 @@ export async function personaDelToken(token) {
     cuerpo = null;
   }
   const persona = cuerpo ? personaDelCuerpo(cuerpo) : null;
+  if (persona && !persona.nombre) persona.nombre = await nombreDeLaPersona(persona.idPersona, token);
 
   if (cache.size > 500) cache.clear();
   cache.set(token, { persona, vence: Date.now() + DURACION_CACHE_MS });

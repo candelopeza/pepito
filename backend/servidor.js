@@ -23,7 +23,7 @@ import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
 import { identificarUsuario, aceptaRolDeclarado } from './middlewares/usuario.js';
-import { modoCidituc, tokenDelPedido } from './cidituc.js';
+import { estadoNombres, modoCidituc, tokenDelPedido } from './cidituc.js';
 import { problemaDeConexion } from './conexion-bd.js';
 import { capacidades, revisarCapacidades, vigilarCapacidades } from './capacidades.js';
 import { modoGeocodificador } from './geocodificador.js';
@@ -125,6 +125,7 @@ app.get('/salud', (_req, res) => {
     aceptaRolDeclarado: aceptaRolDeclarado(),
     origenesPermitidos: ORIGENES_PERMITIDOS.length ? ORIGENES_PERMITIDOS : 'cualquiera',
     cidituc: modoCidituc(),
+    ciditucNombre: estadoNombres(),
     tareaDiaria: estadoTareas(),
   });
 });

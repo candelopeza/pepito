@@ -121,6 +121,10 @@
   letter-spacing: 0.5px;
   text-transform: uppercase;
   white-space: nowrap;
+  /* Un nombre largo se corta con "…"; entero se lee al pasar el mouse. */
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 

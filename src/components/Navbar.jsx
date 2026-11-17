@@ -44,11 +44,24 @@ import { useDatos } from '../datos/datosContexto';
 import { fmtFechaHora } from '../dominio/fechas';
 import logoCiudadSmt from '../assets/logo-ciudad-smt.png';
 
+/* Para sacar el bloque del nombre de la barra: false. */
+const MOSTRAR_PERSONA = true;
+
 function Navbar({ onAlternarMenu }) {
-  /* Quién entró por CiDiTuc (auth/RolProvider.jsx): el nombre si CiDiTuc lo
-     dio, si no el legajo. Sin identificar, no se muestra nada (13/11/2026). */
-  const { usuario } = useRol();
-  const nombreVisible = usuario.nombreCompleto || (usuario.nombre ? `Legajo ${usuario.nombre}` : '');
+  /* Quién entró por CiDiTuc (auth/RolProvider.jsx): se muestra el NOMBRE que
+     devuelve CiDiTuc, nunca el legajo ni el número de persona (13/11/2026, la
+     Dirección lo pidió expreso). Si todavía no hay nombre —porque el servidor
+     no tiene configurado CIDITUC_URL_PERSONA, ver backend/.env.ejemplo— no se
+     muestra nada en vez del número. */
+  const { usuario, sesion } = useRol();
+  // Qué dice el bloque de la derecha (PROCEDIMIENTO.md sección 27). El nombre
+  // lo trae el backend de CiDiTuc (backend/cidituc.js, CIDITUC_URL_PERSONA).
+  // Nunca se muestra el número de persona: no es un dato para el público.
+  let nombreVisible;
+  if (sesion?.estado === 'cargando') nombreVisible = 'Ingresando…';
+  else if (usuario.nombreCompleto) nombreVisible = usuario.nombreCompleto;
+  else if (sesion?.estado === 'identificado') nombreVisible = 'Usuario CiDiTuc';
+  else nombreVisible = 'Sin identificar';
   // Trabajo sin conexión (sección 6.2): "indicación visible de cuántos
   // registros quedan pendientes". Va en la barra para que se vea en todas las
   // pantallas, no solo en la del formulario.
@@ -116,8 +129,8 @@ function Navbar({ onAlternarMenu }) {
 
         {/* La persona que entró por CiDiTuc. Es un <div>, no un <button>:
             todavía no despliega nada (acá iría cerrar sesión). */}
-        {nombreVisible && (
-          <div className="navbar-usuario" title={usuario.nombre ? `Número de persona ${usuario.nombre}` : undefined}>
+        {MOSTRAR_PERSONA && (
+          <div className="navbar-usuario" title={nombreVisible}>
             <span className="navbar-usuario-nombre">{nombreVisible}</span>
             <AccountCircleIcon className="navbar-usuario-icono" />
           </div>

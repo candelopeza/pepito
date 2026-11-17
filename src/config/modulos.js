@@ -228,16 +228,14 @@ export const MODULOS = [
     rolesEdicion: ['administrativo', 'coordinacion'],
   },
 
-  /* ===================== CONFIGURACIÓN ===================== */
-  {
-    id: 'config-rubros',
-    titulo: 'Rubros',
-    descripcion: 'Catálogo de rubros de los establecimientos',
-    ruta: '/config/rubros',
-    grupo: 'configuracion',
-    roles: ['coordinacion', 'direccion'],
-    rolesEdicion: ['coordinacion', 'direccion'],
-  },
+  /* ===================== CONFIGURACIÓN =====================
+     Desde el 17/11/2026 solo Feriados. Rubros, Plantilla de cédula y
+     Parámetros del sistema se sacaron a pedido de cande: no se van a poder
+     cambiar desde la app. Rubros, plantilla y parámetros siguen valiendo con
+     lo que hay guardado en la base, o con los valores de fábrica
+     (backend/parametros-sistema.js). Las pantallas siguen en git por si hay
+     que volver a ponerlas: pages/config/Rubros.jsx, Plantilla.jsx y
+     Parametros.jsx, más su <Route> en App.jsx. */
   {
     id: 'config-feriados',
     titulo: 'Feriados',
@@ -246,24 +244,6 @@ export const MODULOS = [
     grupo: 'configuracion',
     roles: ['coordinacion', 'direccion'],
     rolesEdicion: ['coordinacion', 'direccion'],
-  },
-  {
-    id: 'config-plantilla',
-    titulo: 'Plantilla de cédula',
-    descripcion: 'Texto del documento de notificación',
-    ruta: '/config/plantilla',
-    grupo: 'configuracion',
-    roles: ['coordinacion', 'direccion'],
-    rolesEdicion: ['coordinacion', 'direccion'],
-  },
-  {
-    id: 'config-parametros',
-    titulo: 'Parámetros del sistema',
-    descripcion: 'Plazos de notificación y criterios de cómputo',
-    ruta: '/config/parametros',
-    grupo: 'configuracion',
-    roles: ['direccion'],
-    rolesEdicion: ['direccion'],
   },
 
 

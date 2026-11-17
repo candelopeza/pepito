@@ -72,10 +72,9 @@ import Informe9DJ from './pages/herramientas/Informe9DJ';
 import Accesos from './pages/Accesos';
 
 // --- Configuración ---
-import Rubros from './pages/config/Rubros';
+// Desde el 17/11/2026 solo Feriados (ver config/modulos.js). Rubros,
+// Plantilla y Parametros siguen en pages/config/ pero sin ruta.
 import Feriados from './pages/config/Feriados';
-import Plantilla from './pages/config/Plantilla';
-import Parametros from './pages/config/Parametros';
 
 // --- Portal del titular y 404 ---
 import Portal from './pages/Portal';
@@ -131,12 +130,14 @@ function App() {
               {/* La pestaña se integró al Mapa: los marcadores viejos siguen andando. */}
               <Route path="herramientas/geocodificacion" element={<Navigate to="/mapa" replace />} />
 
-              {/* ---- Configuración (tablas maestras y parámetros) ---- */}
-              <Route path="config/rubros" element={<RutaProtegida ruta="/config/rubros"><Rubros /></RutaProtegida>} />
+              {/* ---- Configuración: solo feriados ----
+                  Los marcadores viejos de rubros, plantilla y parámetros
+                  caen en Feriados en vez de una pantalla en blanco. */}
               <Route path="config/feriados" element={<RutaProtegida ruta="/config/feriados"><Feriados /></RutaProtegida>} />
-              <Route path="config/plantilla" element={<RutaProtegida ruta="/config/plantilla"><Plantilla /></RutaProtegida>} />
-              <Route path="config/parametros" element={<RutaProtegida ruta="/config/parametros"><Parametros /></RutaProtegida>} />
-              <Route path="configuracion" element={<Navigate to="/config/rubros" replace />} />
+              <Route path="config/rubros" element={<Navigate to="/config/feriados" replace />} />
+              <Route path="config/plantilla" element={<Navigate to="/config/feriados" replace />} />
+              <Route path="config/parametros" element={<Navigate to="/config/feriados" replace />} />
+              <Route path="configuracion" element={<Navigate to="/config/feriados" replace />} />
 
               {/* ---- Portal del titular ---- */}
               <Route path="portal" element={<RutaProtegida ruta="/portal"><Portal /></RutaProtegida>} />

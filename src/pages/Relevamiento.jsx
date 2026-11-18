@@ -60,6 +60,11 @@ const ROLES_METRICAS_CAMPO = ['coordinacion', 'direccion', 'administrador'];
 
 const ESTADOS_DE_CONTROL = ['REVISION_DATOS', 'EXENTO_REVISION'];
 
+/* Las métricas de campo arrancan ocultas en las dos tablas, para que entren
+   las acciones sin correr la pantalla a la derecha. Quien las quiera ver las
+   prende desde COLUMNAS. */
+const COLUMNAS_OCULTAS = ['coordenada', 'offline'];
+
 /* ¿Este rol tiene algo que hacer en el control? Sale de la tabla de actos: si
    mañana el administrativo confirma exenciones, aparece solo. */
 function tieneActosDeControl(rol) {
@@ -75,25 +80,38 @@ function Relevamiento() {
   const veMetricasCampo = ROLES_METRICAS_CAMPO.includes(rol);
 
   // Quién soy en la tabla de usuarios (igual que en Entregas).
-  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.nombre === usuario.nombre);
-  const esMio = (r) => (yo ? r.idUsuario === yo.id : r.usuario === usuario.nombre);
+  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.legajo === usuario.nombre);
+  const esMio = (r) => (yo ? r.idUsuario === yo.id : r.usuario === usuario.nombreCompleto);
   // El relevador arranca con lo suyo; el resto, con todo. El botón lo cambia.
   const [verTodosElegido, setVerTodos] = useState(null);
   const verTodos = verTodosElegido ?? rol !== 'relevador';
 
   const veControl = rol === 'direccion' || tieneActosDeControl(rol);
-  const pendientes = veControl
-    ? localesConEstado.filter((l) => ESTADOS_DE_CONTROL.includes(l.estado) && esTrabajoDe(l, rol))
-    : [];
+  const pendientes = useMemo(
+    () => (veControl ? localesConEstado.filter((l) => ESTADOS_DE_CONTROL.includes(l.estado) && esTrabajoDe(l, rol)) : []),
+    [veControl, localesConEstado, rol],
+  );
 
+  /* >>> LAS DOS TABLAS SON LA MISMA TABLA (17/11/2026) <<<
+     Pedido de cande: arriba los relevamientos que esperan control, con las
+     acciones (confirmar exención, corregir clasificación, habilitar...), y
+     abajo el listado completo. Las dos usan ESTAS columnas y las mismas
+     props de la Grilla, así tienen el mismo ancho y el mismo aspecto. Antes
+     la de arriba era una tabla de LOCALES con columnas propias. */
   const columnas = useMemo(
     () => [
-      { field: 'id', headerName: 'N°', width: 70 },
+      {
+        field: 'id',
+        headerName: 'N°',
+        width: 70,
+        // Un local pendiente que nunca se relevó (alta manual) no tiene número de relevamiento.
+        renderCell: ({ row }) => (row.sinRelevamiento ? '—' : row.id),
+      },
       {
         field: 'nombreLocal',
         headerName: 'Local',
         flex: 1,
-        minWidth: 180,
+        minWidth: 160,
         valueGetter: (_v, row) => row.nombreLocal ?? localPorId(row.localId)?.nombreLocal ?? '',
         renderCell: ({ row }) => (
           <EnlaceFicha id={row.localId}>
@@ -101,25 +119,31 @@ function Relevamiento() {
           </EnlaceFicha>
         ),
       },
-      { field: 'direccionRelevada', headerName: 'Dirección relevada', flex: 1, minWidth: 190 },
+      { field: 'direccionRelevada', headerName: 'Dirección relevada', flex: 1, minWidth: 170 },
       {
         field: 'rubro',
         headerName: 'Rubro',
-        width: 150,
+        width: 140,
         valueGetter: (_v, row) => row.rubro ?? localPorId(row.localId)?.rubro ?? '',
       },
       {
         field: 'clasificacion',
         headerName: 'Clasificación',
-        width: 165,
-        renderCell: ({ value }) => <Badge color={colorClasificacion(value)}>{etiquetaClasificacion(value)}</Badge>,
+        width: 150,
+        renderCell: ({ value }) =>
+          value ? <Badge color={colorClasificacion(value)}>{etiquetaClasificacion(value)}</Badge> : '—',
       },
-      { field: 'usuario', headerName: 'Relevado por', width: 160 },
+      {
+        field: 'usuario',
+        headerName: 'Relevado por',
+        width: 150,
+        renderCell: ({ row }) => (row.sinRelevamiento ? <span className="texto-gris">sin relevamiento</span> : row.usuario),
+      },
       {
         field: 'fechaHora',
         headerName: 'Fecha y hora',
-        width: 155,
-        renderCell: ({ value }) => fmtFechaHora(value),
+        width: 175,
+        renderCell: ({ value }) => (value ? fmtFechaHora(value) : '—'),
       },
       // Solo para los roles que supervisan campo (ver arriba).
       ...(veMetricasCampo
@@ -130,7 +154,9 @@ function Relevamiento() {
               width: 210,
               valueGetter: (_v, row) => (row.latitud === null ? 'sin GPS' : `${row.latitud}, ${row.longitud}`),
               renderCell: ({ row }) =>
-                row.latitud === null ? (
+                row.sinRelevamiento ? (
+                  '—'
+                ) : row.latitud === null ? (
                   <span className="texto-gris" title="El dispositivo no tenía permiso de geolocalización">
                     sin GPS
                   </span>
@@ -145,7 +171,7 @@ function Relevamiento() {
       {
         field: 'control',
         headerName: 'Control',
-        width: 175,
+        width: 130,
         valueGetter: (_v, row) => (row.revisadoEn ? 'controlado' : 'pendiente'),
         renderCell: ({ row }) =>
           row.revisadoEn ? (
@@ -176,9 +202,22 @@ function Relevamiento() {
       {
         field: 'estadoLocal',
         headerName: 'Estado actual del local',
-        width: 220,
+        width: 200,
         valueGetter: (_v, row) => localPorId(row.localId)?.estado ?? '',
         renderCell: ({ row }) => <BadgeEstado codigo={localPorId(row.localId)?.estado} sinColor />,
+      },
+      {
+        /* Los mismos botones que en el tablero y la ficha (AccionesLocal):
+           cada rol ve solo lo que puede hacer según el estado del local. */
+        field: 'acciones',
+        headerName: 'Acciones',
+        width: 170,
+        sortable: false,
+        filterable: false,
+        renderCell: ({ row }) => {
+          const local = localPorId(row.localId);
+          return local ? <AccionesLocal local={local} compacto /> : null;
+        },
       },
     ],
     [localPorId, veMetricasCampo],
@@ -196,60 +235,34 @@ function Relevamiento() {
     </Link>
   );
 
-  /* Las columnas necesitan la lista de relevamientos para mostrar quién
-     clasificó cada local, así que se arman acá y no como constante del módulo. */
-  const columnasPendientes = useMemo(
-    () => [
-      {
-        field: 'nombreLocal',
-        headerName: 'Local',
-        flex: 1.2,
-        minWidth: 200,
-        renderCell: ({ row }) => {
-          const rel = relevamientos.find((r) => r.localId === row.id);
-          return (
-            <span className="celda-apilada">
-              <EnlaceFicha id={row.id}>{row.nombreLocal}</EnlaceFicha>
-              <small className="celda-sub">{rel ? rel.usuario : 'sin relevamiento'}</small>
-            </span>
-          );
+  /* LAS FILAS DE ARRIBA: un renglón por local pendiente de control, con su
+     relevamiento más reciente. Un local pendiente sin relevamiento (dado de
+     alta a mano en el padrón) igual aparece, armado con los datos del local,
+     para que no se pierda del control. */
+  const filasPendientes = useMemo(() => {
+    const ultimo = new Map();
+    relevamientos.forEach((r) => {
+      const previo = ultimo.get(r.localId);
+      if (!previo || String(r.fechaHora ?? '') > String(previo.fechaHora ?? '')) ultimo.set(r.localId, r);
+    });
+    return pendientes.map(
+      (l) =>
+        ultimo.get(l.id) ?? {
+          id: `local-${l.id}`,
+          localId: l.id,
+          nombreLocal: l.nombreLocal,
+          direccionRelevada: l.direccion,
+          rubro: l.rubro,
+          clasificacion: null,
+          usuario: '',
+          fechaHora: null,
+          latitud: null,
+          longitud: null,
+          revisadoEn: null,
+          sinRelevamiento: true,
         },
-      },
-      { field: 'direccion', headerName: 'Dirección', flex: 1.2, minWidth: 180 },
-      {
-        field: 'clasifico',
-        headerName: 'Clasificó',
-        width: 180,
-        valueGetter: (_v, row) => {
-          const rel = relevamientos.find((r) => r.localId === row.id);
-          return rel ? etiquetaClasificacion(rel.clasificacion) : '—';
-        },
-        renderCell: ({ row }) => {
-          const rel = relevamientos.find((r) => r.localId === row.id);
-          return rel ? (
-            <Badge color={colorClasificacion(rel.clasificacion)}>{etiquetaClasificacion(rel.clasificacion)}</Badge>
-          ) : (
-            '—'
-          );
-        },
-      },
-      {
-        field: 'estado',
-        headerName: 'Estado',
-        width: 210,
-        renderCell: ({ row }) => <BadgeEstado codigo={row.estado} sinColor />,
-      },
-      {
-        field: 'acciones',
-        headerName: 'Acciones',
-        width: 260,
-        sortable: false,
-        filterable: false,
-        renderCell: ({ row }) => <AccionesLocal local={row} compacto />,
-      },
-    ],
-    [relevamientos],
-  );
+    );
+  }, [pendientes, relevamientos]);
 
   return (
     <>
@@ -280,28 +293,36 @@ function Relevamiento() {
             <span>Pendientes de control de coordinación</span>
           </div>
 
-          {pendientes.length === 0 ? (
+          {filasPendientes.length === 0 ? (
             <Vacio titulo="Todo controlado">No hay relevamientos esperando el control administrativo.</Vacio>
           ) : (
             <Grilla
-              filas={pendientes}
-              columnas={columnasPendientes}
+              filas={filasPendientes}
+              columnas={columnas}
               nombreArchivo="relevamientos-pendientes"
               vacio="No hay relevamientos esperando control."
-              alto="auto"
+              ordenInicial={[{ field: 'fechaHora', sort: 'desc' }]}
+              columnasOcultas={COLUMNAS_OCULTAS}
               botones={botonNuevo}
             />
           )}
         </>
       )}
 
-      {/* ================= LISTADO COMPLETO ================= */}
+      {/* ================= LISTADO COMPLETO =================
+          Mismas columnas y mismas props que la de arriba. */}
+      {veControl && (
+        <div className="accesos-header">
+          <span>Todos los relevamientos</span>
+        </div>
+      )}
       <Grilla
         filas={filas}
         columnas={columnas}
         nombreArchivo="relevamientos"
         vacio={verTodos ? 'Todavía no hay relevamientos cargados.' : 'Todavía no cargaste relevamientos.'}
         ordenInicial={[{ field: 'fechaHora', sort: 'desc' }]}
+        columnasOcultas={COLUMNAS_OCULTAS}
         botones={botonNuevo}
       />
     </>

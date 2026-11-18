@@ -54,7 +54,13 @@ import { LISTA_ROLES, ROLES } from '../../auth/roles';
 import { useDatos } from '../../datos/datosContexto';
 import { ROL_ADMINISTRADOR, puedeEditar, puedeVerRuta, rolHabilitado } from '../../config/modulos';
 
-const USUARIO_VACIO = { nombre: '', email: '', rol: '', activo: true };
+/* >>> EL NÚMERO DE PERSONA NO SE MUESTRA (18/11/2026) <<<
+   La grilla muestra el NOMBRE. El número de persona de CiDiTuc (`legajo`)
+   aparece solo dentro de este formulario, porque hace falta para dar de alta
+   a alguien, y el backend se lo manda solo a quien administra usuarios. El
+   nombre se completa solo cuando la persona entra por CiDiTuc, o se escribe
+   acá para quien todavía no entró. */
+const USUARIO_VACIO = { legajo: '', nombreCompleto: '', email: '', rol: '', activo: true };
 
 function Usuarios() {
   const { rol, usuario } = useRol();
@@ -102,9 +108,11 @@ function Usuarios() {
   /* ---------- Alta / edición ---------- */
   async function guardar() {
     const e = {};
-    const nombre = String(editando.nombre ?? '').trim();
+    const legajo = String(editando.legajo ?? '').trim();
+    const nombreCompleto = String(editando.nombreCompleto ?? '').trim();
     const email = String(editando.email ?? '').trim();
-    if (!nombre) e.nombre = hayCorreo ? 'El nombre es obligatorio.' : 'El legajo es obligatorio.';
+    if (!legajo) e.legajo = 'El número de persona es obligatorio.';
+    else if (!/^\d+$/.test(legajo)) e.legajo = 'Son solo números.';
     if (hayCorreo) {
       if (!email) e.email = 'El correo es obligatorio.';
       else if (editando.rol !== 'titular' && !email.toLowerCase().endsWith('@smt.gob.ar')) {
@@ -115,16 +123,24 @@ function Usuarios() {
     setErrores(e);
     if (Object.keys(e).length) return;
 
-    // Se cierra solo si se guardó: si el servidor lo rechaza (legajo repetido,
-    // por ejemplo), el formulario queda abierto con lo escrito.
-    if (await guardarEnCatalogo('usuarios', { ...editando, nombre, email })) setEditando(null);
+    // Se cierra solo si se guardó: si el servidor lo rechaza (número de
+    // persona repetido, por ejemplo), el formulario queda abierto con lo escrito.
+    if (await guardarEnCatalogo('usuarios', { ...editando, legajo, nombreCompleto, email })) setEditando(null);
   }
 
   /* ---------- Las columnas ---------- */
   const columnas = useMemo(
     () => [
       { field: 'id', headerName: 'ID', width: 70 },
-      { field: 'nombre', headerName: hayCorreo ? 'Nombre' : 'Legajo', flex: 1, minWidth: 200 },
+      {
+        field: 'nombre',
+        headerName: 'Nombre',
+        flex: 1,
+        minWidth: 200,
+        // Sin nombre todavía: se ve su tipo y su número interno, en gris, para
+        // que se note que falta cargarlo.
+        renderCell: ({ row }) => (row.sinNombre ? <span className="texto-gris">{row.nombre}</span> : row.nombre),
+      },
       ...(hayCorreo ? [{ field: 'email', headerName: 'Correo', flex: 1, minWidth: 220 }] : []),
       {
         field: 'rolEtiqueta',
@@ -174,7 +190,14 @@ function Usuarios() {
                 title="Editar"
                 onClick={() => {
                   setErrores({});
-                  setEditando({ id: row.id, nombre: row.nombre, email: row.email, rol: row.rol, activo: row.activo });
+                  setEditando({
+                    id: row.id,
+                    legajo: row.legajo ?? '',
+                    nombreCompleto: row.nombreCompleto ?? '',
+                    email: row.email,
+                    rol: row.rol,
+                    activo: row.activo,
+                  });
                 }}
               />,
             );
@@ -245,11 +268,19 @@ function Usuarios() {
           <div className="formulario formulario-modal">
             <Campo
               id="usr-nombre"
-              etiqueta={hayCorreo ? 'Nombre y apellido' : 'Legajo'}
-              valor={editando.nombre}
-              onChange={(v) => setEditando({ ...editando, nombre: v })}
-              error={errores.nombre}
-              teclado={hayCorreo ? undefined : 'numeric'}
+              etiqueta="Nombre y apellido"
+              valor={editando.nombreCompleto}
+              onChange={(v) => setEditando({ ...editando, nombreCompleto: v })}
+              ayuda="Se completa solo cuando la persona entra por CiDiTuc. Cargalo si todavía no entró."
+            />
+            <Campo
+              id="usr-legajo"
+              etiqueta="Número de persona de CiDiTuc"
+              valor={editando.legajo}
+              onChange={(v) => setEditando({ ...editando, legajo: v })}
+              error={errores.legajo}
+              teclado="numeric"
+              ayuda="Solo sirve para reconocerla cuando entra. No se muestra en ninguna otra parte del sistema."
             />
             {hayCorreo && (
               <Campo

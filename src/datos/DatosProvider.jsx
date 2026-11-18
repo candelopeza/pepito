@@ -103,7 +103,10 @@ const ENVIAR_A_NOMBRE_DE_QUIEN_CARGO = true;
 
 /* Lo que se guarda del autor: lo justo para las cabeceras de api.js y para
    mostrar en la lista de pendientes quién la cargó. */
-const autorDeLaCarga = (u) => (u?.nombre ? { id: u.id ?? null, nombre: String(u.nombre), rol: u.rol } : null);
+// `nombre` es el número de persona (identifica al autor ante el backend);
+// `mostrar` es lo único que se ve en pantalla (18/11/2026).
+const autorDeLaCarga = (u) =>
+  u?.nombre ? { id: u.id ?? null, nombre: String(u.nombre), mostrar: u.nombreCompleto || '', rol: u.rol } : null;
 
 /* La forma del store antes de que lleguen los datos. Existe para que nada
    explote si algo se renderiza antes de tiempo: todas las colecciones son

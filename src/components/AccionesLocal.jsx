@@ -441,7 +441,10 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
               onChange={(v) => setForm({ ...form, notificadorId: v })}
               opciones={notificadores.map((u) => ({
                 id: u.id,
-                etiqueta: `${u.nombre} (${u.rol}) · ${enCursoDe(u.id)} en curso`,
+                // El nombre del agente, nunca su número de persona (18/11/2026).
+                // Sin nombre cargado, `nombre` ya dice su tipo ("Relevador N° 6,
+                // sin nombre"): no se repite el rol entre paréntesis.
+                etiqueta: `${u.nombre}${u.sinNombre ? '' : ` (${u.rol})`} · ${enCursoDe(u.id)} en curso`,
               }))}
               ayuda="Suele ser el mismo agente que releva."
             />

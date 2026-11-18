@@ -27,6 +27,8 @@
 import { consultar } from '../conexion-bd.js';
 import { ROL_POR_TUSUARIO } from '../mapeo.js';
 import { personaDelToken, tokenDelPedido } from '../cidituc.js';
+import { tiene } from '../capacidades.js';
+import { asegurarPersonas, etiquetaRol, nombreVisible, olvidarPersonas } from '../personas.js';
 
 /* 'administrador' se sumó: es el perfil de control total que ya existía en el
    front (src/auth/roles.js) y que el backend no reconocía, así que toda
@@ -60,7 +62,8 @@ const DURACION_CACHE_MS = 60_000;
    ni reiniciar. La lectura fresca renueva la caché para los demás pedidos. */
 async function usuariosDeLaBase(fresco = false) {
   if (!fresco && cache.usuarios && Date.now() < cache.vence) return cache.usuarios;
-  const filas = await consultar('SELECT id_usuario, id_persona, id_tusuario FROM usuario WHERE habilita = 1');
+  const columnas = tiene('nombreUsuario') ? 'id_usuario, id_persona, id_tusuario, nombre_completo' : 'id_usuario, id_persona, id_tusuario';
+  const filas = await consultar(`SELECT ${columnas} FROM usuario WHERE habilita = 1`);
   const mapa = new Map(filas.map((u) => [String(u.idPersona).toLowerCase(), u]));
   cache = { usuarios: mapa, vence: Date.now() + DURACION_CACHE_MS };
   return mapa;
@@ -71,6 +74,25 @@ async function usuariosDeLaBase(fresco = false) {
    minuto de la caché. */
 export function olvidarUsuarios() {
   cache = { usuarios: null, vence: 0 };
+  olvidarPersonas();
+}
+
+/* >>> EL NOMBRE DEL AGENTE SE GUARDA SOLO (18/11/2026) <<<
+   Cuando un agente cargado en `usuario` entra por CiDiTuc y CiDiTuc devuelve
+   su nombre, se guarda en usuario.nombre_completo (sql/16-nombre-usuario.sql)
+   si cambió. Así los demás lo ven por su nombre (el desplegable de
+   notificadores, Accesos, el historial) y nunca por su número de persona. No
+   frena el pedido: si falla, se intenta en el próximo. */
+async function guardarNombre(registrado, nombre) {
+  if (!tiene('nombreUsuario') || !nombre) return;
+  if (String(registrado.nombreCompleto ?? '').trim() === nombre.trim()) return;
+  try {
+    await consultar('UPDATE usuario SET nombre_completo = ? WHERE id_usuario = ?', [nombre.trim().slice(0, 150), registrado.idUsuario]);
+    registrado.nombreCompleto = nombre.trim();
+    olvidarPersonas();
+  } catch (e) {
+    console.warn(`[usuarios] no se pudo guardar el nombre del usuario ${registrado.idUsuario}: ${e.message}`);
+  }
 }
 
 function rolDe(registrado) {
@@ -83,6 +105,9 @@ function rolDe(registrado) {
 export async function identificarUsuario(req, _res, next) {
   try {
     req.usuario = null;
+    // Los nombres de los agentes para traducir autores guardados como número
+    // (backend/personas.js). Tiene su propia caché de un minuto.
+    await asegurarPersonas();
 
     // 1. El token de CiDiTuc: la identificación real.
     const token = tokenDelPedido(req);
@@ -90,12 +115,17 @@ export async function identificarUsuario(req, _res, next) {
       const persona = await personaDelToken(token);
       if (persona) {
         const registrado = (await usuariosDeLaBase(req.path === '/sesion')).get(persona.idPersona.toLowerCase());
+        if (registrado) await guardarNombre(registrado, persona.nombre);
+        const rol = registrado ? rolDe(registrado) : 'titular';
         req.usuario = {
           id: registrado?.idUsuario ?? null,
+          // `nombre` es el número de persona: sirve para buscarlo en la base,
+          // NUNCA para mostrarlo. Lo que se muestra y se firma es `firma`.
           nombre: persona.idPersona,
-          rol: registrado ? rolDe(registrado) : 'titular',
+          rol,
           cuil: persona.cuil ?? null,
-          nombreCompleto: persona.nombre ?? null,
+          nombreCompleto: persona.nombre ?? registrado?.nombreCompleto ?? null,
+          firma: persona.nombre || (registrado ? nombreVisible(registrado) : etiquetaRol(rol)),
           porCidituc: true,
         };
       }
@@ -113,10 +143,10 @@ export async function identificarUsuario(req, _res, next) {
 
     if (registrado) {
       // Está en la base: manda su tipo_usuario, no lo que dijo el header.
-      req.usuario = { id: registrado.idUsuario, nombre, rol: rolDe(registrado) };
+      req.usuario = { id: registrado.idUsuario, nombre, rol: rolDe(registrado), firma: nombreVisible(registrado) };
     } else if (ROLES_VALIDOS.includes(cabeceraRol)) {
       // No está cargado: vale lo declarado (solo en modo prueba).
-      req.usuario = { id: null, nombre, rol: cabeceraRol };
+      req.usuario = { id: null, nombre, rol: cabeceraRol, firma: /^\d+$/.test(nombre) ? etiquetaRol(cabeceraRol) : nombre };
     }
     next();
   } catch (e) {
@@ -146,5 +176,6 @@ export function requiereRol(...roles) {
 /* Nombre para firmar actuaciones y auditoría. Si no hay usuario, firma el
    sistema (procesos automáticos, sección 7.2). */
 export function firmante(req) {
-  return req.usuario?.nombre ?? 'Sistema';
+  if (!req.usuario) return 'Sistema';
+  return req.usuario.firma ?? etiquetaRol(req.usuario.rol);
 }

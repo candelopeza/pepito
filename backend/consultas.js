@@ -22,6 +22,7 @@
 import { consultar, consultarEn } from './conexion-bd.js';
 import { PARAMETROS, PLANTILLA_CEDULA } from './parametros-sistema.js';
 import { aActuacionFront, aLocalFront, estadoDeLocal, ID_TTRAMITE, SERIE_CEDULA } from './mapeo.js';
+import { nombreDeActor, sinNumerosDePersona } from './personas.js';
 import { tiene } from './capacidades.js';
 import { archivosPorTramite } from './archivos.js';
 
@@ -37,6 +38,13 @@ import { archivosPorTramite } from './archivos.js';
 
 /* El SELECT del padrón. El rubro viene resuelto a texto con un LEFT JOIN
    (LEFT y no INNER: un local sin rubro cargado tiene que aparecer igual). */
+/* El local con sus observaciones sin números de persona (la marca de una
+   fusión de duplicados guardaba quién la hizo con su número). */
+function aLocalVisible(fila) {
+  const local = aLocalFront(fila);
+  return { ...local, observaciones: sinNumerosDePersona(local.observaciones) };
+}
+
 const SQL_LOCAL = `
   SELECT l.*, r.nombre_rubro
     FROM local l
@@ -45,13 +53,13 @@ const SQL_LOCAL = `
 
 export async function locales(cx = null) {
   const filas = await consultarEn(cx, `${SQL_LOCAL} ORDER BY l.id_local`);
-  return agregarDatosDeBloqueo(filas.map(aLocalFront), cx);
+  return agregarDatosDeBloqueo(filas.map(aLocalVisible), cx);
 }
 
 export async function localPorId(idLocal, cx = null) {
   const [fila] = await consultarEn(cx, `${SQL_LOCAL} AND l.id_local = ?`, [idLocal]);
   if (!fila) return null;
-  const [local] = await agregarDatosDeBloqueo([aLocalFront(fila)], cx);
+  const [local] = await agregarDatosDeBloqueo([aLocalVisible(fila)], cx);
   return local;
 }
 
@@ -126,7 +134,7 @@ export async function localPorIdIncluyendoBajas(idLocal) {
       WHERE l.id_local = ?`,
     [idLocal],
   );
-  return fila ? aLocalFront(fila) : null;
+  return fila ? aLocalVisible(fila) : null;
 }
 
 /* ---------------------------------------------------------------------------
@@ -170,7 +178,20 @@ const ORDEN_CRONOLOGICO = 'ORDER BY t.fecha_inicio, t.id_tramite';
    en null como antes. */
 const TIPOS_CON_ARCHIVO = ['NOTIFICACION', 'DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO'];
 
-async function conEvidencias(actuaciones, cx = null, todas = false) {
+/* El número de persona no sale nunca del backend (backend/personas.js): el
+   autor de cada trámite, quién imprimió la cédula y las observaciones viejas
+   que lo nombran se traducen al nombre del agente. */
+function sinNumeroDePersona(a) {
+  return {
+    ...a,
+    usuario: nombreDeActor(a.usuario),
+    observaciones: sinNumerosDePersona(a.observaciones),
+    ...(a.impresaPor !== undefined ? { impresaPor: nombreDeActor(a.impresaPor) } : {}),
+  };
+}
+
+async function conEvidencias(lista, cx = null, todas = false) {
+  const actuaciones = lista.map(sinNumeroDePersona);
   if (!tiene('archivos')) return actuaciones;
   const ids = actuaciones.filter((a) => TIPOS_CON_ARCHIVO.includes(a.tipo)).map((a) => a.id);
   if (!ids.length) return actuaciones;

@@ -39,6 +39,7 @@ import { CODIGOS_ESTADO } from '../../src/dominio/estados.js';
 import { consultar, ejecutar } from '../conexion-bd.js';
 import { CLAVES_PARAMETRO, feriados, parametros } from '../consultas.js';
 import { aceptaRolDeclarado, firmante, olvidarUsuarios, requiereRol } from '../middlewares/usuario.js';
+import { nombreVisible } from '../personas.js';
 import { ROL_POR_TUSUARIO, TUSUARIO_POR_ROL } from '../mapeo.js';
 import { capacidades, tiene } from '../capacidades.js';
 import { modoGeocodificador } from '../geocodificador.js';
@@ -306,6 +307,11 @@ router.put('/permisos/:modulo/:rol', requiereRol('administrador'), async (req, r
    baja, marcados con `activo: false`: la pantalla de Usuarios los muestra con
    su llave apagada para poder reactivarlos.
    --------------------------------------------------------------------------- */
+/* Quién recibe el número de persona en la lista de usuarios: los que dan de
+   alta y editan usuarios en Accesos (los mismos `roles` del catálogo, más el
+   administrador). */
+const ROLES_QUE_VEN_LEGAJO = ['administrador', 'direccion', 'administrativo'];
+
 const CATALOGOS = {
   rubros: {
     tabla: 'rubro',
@@ -320,11 +326,17 @@ const CATALOGOS = {
   /* USUARIOS (sección 7.1: la Dirección da de alta, asigna rol y da de baja
      sin intervención técnica).
 
-     La tabla `usuario` del área guarda id_persona (el legajo de la persona en
-     el padrón municipal, el mismo que va a usar CiDiTuc) y su tipo. No tiene
-     nombre ni correo: hasta que esté CiDiTuc, el nombre que se muestra es el
-     legajo. El rol se recibe como texto ('notificador') y se traduce al id
-     de tipo_usuario con TUSUARIO_POR_ROL; la llave "activo" es `habilita`. */
+     La tabla `usuario` del área guarda id_persona (el número de persona de
+     CiDiTuc) y su tipo. Desde el 18/11/2026 también el nombre
+     (nombre_completo, sql/16-nombre-usuario.sql).
+
+     >>> EL NÚMERO DE PERSONA NO SE MUESTRA <<<
+     `nombre` es el nombre visible (backend/personas.js): el nombre real, o
+     "Relevador N° 3, sin nombre" si todavía no tiene. `legajo` es el número
+     de persona y solo lo usa el formulario de alta y edición de Accesos, que
+     lo necesita para dar de alta a alguien. El rol se recibe como texto
+     ('notificador') y se traduce con TUSUARIO_POR_ROL; la llave "activo" es
+     `habilita`. */
   usuarios: {
     tabla: 'usuario',
     pk: 'id_usuario',
@@ -336,21 +348,26 @@ const CATALOGOS = {
     roles: ['direccion', 'administrativo'],
     aFront: (f) => ({
       id: f.idUsuario,
-      nombre: String(f.idPersona ?? ''),
+      nombre: nombreVisible(f),
+      nombreCompleto: String(f.nombreCompleto ?? '').trim(),
+      sinNombre: !String(f.nombreCompleto ?? '').trim(),
       legajo: String(f.idPersona ?? ''),
       tipoId: f.idTusuario,
       rol: ROL_POR_TUSUARIO[f.idTusuario] ?? 'sistema',
       activo: Number(f.habilita) === 1,
     }),
     aBase: (body, { alta }) => {
-      const datos = { id_persona: String(body.legajo ?? body.nombre ?? '').trim() };
+      const datos = { id_persona: String(body.legajo ?? '').trim() };
+      if (tiene('nombreUsuario') && body.nombreCompleto !== undefined) {
+        datos.nombre_completo = String(body.nombreCompleto ?? '').trim().slice(0, 150) || null;
+      }
       const tipo = TUSUARIO_POR_ROL[body.rol] ?? (Number(body.tipoId) || null);
       if (tipo) datos.id_tusuario = tipo;
       if (!alta && body.activo !== undefined) datos.habilita = body.activo ? 1 : 0;
       return datos;
     },
     valida: (body, { alta }) => {
-      if (!String(body.legajo ?? body.nombre ?? '').trim()) return 'El usuario necesita su legajo (id de persona)';
+      if (!String(body.legajo ?? '').trim()) return 'El usuario necesita su número de persona de CiDiTuc';
       if (alta && !body.rol) return 'Elegí el tipo de usuario';
       if (body.rol !== undefined && !ROLES_ASIGNABLES.includes(body.rol)) return `Tipo de usuario inválido: ${body.rol}`;
       return null;
@@ -448,7 +465,7 @@ async function controlarUsuario(req, body, idEditado = null) {
     }
   }
 
-  const legajo = String(body.legajo ?? body.nombre ?? '').trim();
+  const legajo = String(body.legajo ?? '').trim();
   const [repetido] = await consultar('SELECT id_usuario, habilita FROM usuario WHERE id_persona = ? AND id_usuario <> ?', [
     legajo,
     idEditado ?? 0,
@@ -458,8 +475,8 @@ async function controlarUsuario(req, body, idEditado = null) {
       status: 409,
       error:
         Number(repetido.habilita) === 1
-          ? `Ya existe un usuario con el legajo ${legajo}`
-          : `Ya existe un usuario con el legajo ${legajo}, dado de baja: reactivalo desde la lista`,
+          ? 'Ya existe un usuario con ese número de persona'
+          : 'Ya existe un usuario con ese número de persona, dado de baja: reactivalo desde la lista',
     };
   }
   return null;
@@ -475,7 +492,13 @@ router.get('/:catalogo', async (req, res, next) => {
 
     const filtro = cat.incluyeBajas ? '' : 'WHERE habilita = 1';
     const filas = await consultar(`SELECT * FROM ${cat.tabla} ${filtro} ORDER BY ${cat.orden}`);
-    res.json(filas.map(cat.aFront));
+    const lista = filas.map(cat.aFront);
+    // El número de persona solo viaja a quien administra usuarios (Accesos):
+    // al resto le llega la lista sin ese dato, ni siquiera oculto.
+    if (req.params.catalogo === 'usuarios' && !ROLES_QUE_VEN_LEGAJO.includes(req.usuario?.rol)) {
+      return res.json(lista.map(({ legajo: _legajo, ...u }) => u));
+    }
+    res.json(lista);
   } catch (e) {
     next(e);
   }

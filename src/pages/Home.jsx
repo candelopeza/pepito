@@ -102,7 +102,7 @@ function Home() {
   // Quién soy en la tabla de usuarios, igual que en Entregas: las cédulas se
   // asignan por id. Con un agente elegido en "Firmar como" es él; si no, se
   // busca por nombre.
-  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.nombre === usuario.nombre);
+  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.legajo === usuario.nombre);
 
   // Un tipo de usuario apagado desde Accesos entra y no ve nada. Se le avisa
   // en vez de mostrarle un Inicio vacío sin explicación.

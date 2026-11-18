@@ -275,7 +275,7 @@ function Relevar() {
           {gps.estado === 'sin-permiso' && <Badge color="amarillo">Sin permiso de GPS</Badge>}
           {gps.estado === 'no-disponible' && <Badge color="gris">GPS no disponible</Badge>}
         </span>
-        <span className="texto-gris">Releva: {usuario.nombre}</span>
+        <span className="texto-gris">Releva: {usuario.nombreCompleto || 'agente sin nombre'}</span>
       </div>
 
       {!enLinea && (

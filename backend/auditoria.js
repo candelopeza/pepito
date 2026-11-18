@@ -37,6 +37,7 @@ import { consultar, consultarEn, enTransaccion } from './conexion-bd.js';
 import { enFila, localesConEstado, recortarObservacion } from './consultas.js';
 import { tiene } from './capacidades.js';
 import { fechaHora } from './mapeo.js';
+import { nombreDeActor, sinNumerosDePersona } from './personas.js';
 
 export const ACTOR_SISTEMA = 'Sistema';
 
@@ -109,7 +110,7 @@ export async function registrarCambio(cx, req, { idLocal, anterior, nuevo, motiv
     accion,
     idTramite,
     idUsuario: req?.usuario?.id ?? null,
-    actor: req?.usuario?.nombre ?? ACTOR_SISTEMA,
+    actor: req?.usuario?.firma ?? req?.usuario?.nombre ?? ACTOR_SISTEMA,
   });
   return true;
 }
@@ -123,10 +124,10 @@ export async function historialDeLocal(idLocal) {
     localId: f.idLocal,
     anterior: f.estadoAnterior ?? null,
     nuevo: f.estadoNuevo,
-    motivo: f.motivo,
+    motivo: sinNumerosDePersona(f.motivo),
     accion: f.accion ?? null,
     idTramite: f.idTramite ?? null,
-    actor: f.actor,
+    actor: nombreDeActor(f.actor),
     momento: fechaHora(f.momento),
   }));
 }
@@ -155,8 +156,8 @@ export async function solicitudesDeProrrogaPendientes() {
       id: f.idAuditoria,
       localId: f.idLocal,
       dias: partes ? Number(partes[1]) : null,
-      motivo: partes ? partes[2] : f.motivo,
-      actor: f.actor,
+      motivo: sinNumerosDePersona(partes ? partes[2] : f.motivo),
+      actor: nombreDeActor(f.actor),
       momento: fechaHora(f.momento),
     };
   });

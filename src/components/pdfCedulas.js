@@ -35,6 +35,7 @@ import { textoDeCedula } from '../dominio/textoCedula.js';
 import { RESULTADOS_ENTREGA } from '../dominio/actuaciones.js';
 import { fmtFecha, hoyISO } from '../dominio/fechas.js';
 import { ordenarPorProximidad } from '../dominio/geo.js';
+import { ROLES } from '../auth/roles.js';
 import { ESTADOS, etiquetaEstado } from '../dominio/estados.js';
 import { COPIAS_OFICIALES, FORMATO_OFICIAL, LOGOS, PIE_GENERADO_EN_CEDULAS, contenidoCedulaOficial } from '../dominio/cedulaOficial.js';
 import logoMunicipio from '../assets/cedula/logo-municipio.png';
@@ -68,11 +69,12 @@ function apto(texto) {
 
 const nombreDeArchivo = (texto) => apto(texto).replace(/[^\w.-]+/g, '-');
 
-/* El nombre que va en "Generado por": el de la barra de arriba. Si se eligió
-   un agente en "Firmar como", la barra muestra su legajo. */
+/* El nombre que va en "Generado por": el de la barra de arriba. Nunca el
+   número de persona (18/11/2026): si CiDiTuc no dio el nombre, va el rol. */
 export function quienGenera(usuario) {
+  if (usuario?.nombreCompleto) return usuario.nombreCompleto;
   if (!usuario?.nombre) return 'usuario sin identificar';
-  return usuario.deLaBase ? `legajo ${usuario.nombre}` : usuario.nombre;
+  return ROLES[usuario.rol]?.etiqueta ?? 'usuario sin identificar';
 }
 
 /* "Generado el 07/10/2026 a las 10:45 por Mariano Agustín". Se calcula una vez

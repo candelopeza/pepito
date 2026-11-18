@@ -164,6 +164,8 @@ function Grilla({
   sinExportar = false,
   filasPorPagina = 10,
   tituloImpresion,
+  // Columnas (por `field`) que arrancan ocultas: se prenden desde COLUMNAS.
+  columnasOcultas = [],
 }) {
   const apiRef = useGridApiRef();
   const { usuario } = useRol();
@@ -308,6 +310,9 @@ function Grilla({
           initialState={{
             pagination: { paginationModel: { pageSize: filasPorPagina } },
             ...(ordenInicial ? { sorting: { sortModel: ordenInicial } } : {}),
+            ...(columnasOcultas.length
+              ? { columns: { columnVisibilityModel: Object.fromEntries(columnasOcultas.map((f) => [f, false])) } }
+              : {}),
           }}
           pageSizeOptions={[5, 10, 25, 50, 100]}
           onPaginationModelChange={(modelo) => setFilasPorPaginaElegidas(modelo.pageSize)}

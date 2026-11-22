@@ -1300,27 +1300,47 @@ la persona sale de la sesión de CiDiTuc (el inicio de sesión del 12/11).
 
 | Situación | La barra muestra |
 |---|---|
-| Entró por CiDiTuc y se conoce su nombre | el nombre, en mayúsculas, con el ícono |
-| Entró por CiDiTuc pero no hay nombre | "Legajo 151880" (es el número de persona) |
-| Sin sesión (público) | nada |
+| Se está consultando la sesión | Ingresando… |
+| CiDiTuc mandó el nombre | el nombre (en mayúsculas; si es largo se corta con "…" y se lee entero al pasar el mouse) |
+| Entró por CiDiTuc pero el nombre no llegó | Usuario CiDiTuc |
+| Sin token, o CiDiTuc apagado en el servidor | Sin identificar |
 
-En el teléfono queda solo el ícono. En el Inicio, la franja de arriba ya no dice
-"Legajo… / Sin identificar": muestra solo el tipo de usuario.
+**Nunca se muestra el número de persona** (16/11, pedido de cande: no es un dato
+para que lo vea la gente).
 
-**De dónde sale el nombre:** el token de CiDiTuc trae solo el número de persona.
-El backend le pide el nombre a CiDiTuc con la dirección `CIDITUC_URL_PERSONA` del
-`.env` del backend, donde `{id}` es el número de persona:
+En el teléfono queda solo el ícono, como antes.
+
+**De dónde sale el nombre (16/11):** el token de CiDiTuc trae solo `{ id }` y la
+tabla `usuario` no tiene nombre, así que el backend se lo pide a CiDiTuc con el
+mismo token, al mismo servicio que usa el front de CiDiTuc:
 
 ```
-CIDITUC_URL_PERSONA=https://<dirección que pase Sistemas>/{id}
+CIDITUC_URL_PERSONA=https://estadisticas.smt.gob.ar:5000/usuarios/authStatus
 ```
 
-**PENDIENTE:** que Sistemas pase esa dirección. Mientras esté vacía, la barra
-muestra el número de persona. El nombre queda guardado 10 minutos por persona.
+Es un GET con el token en `Authorization` tal cual (sin "Bearer"). Responde
+`usuarioSinContraseña` con `nombre_persona`, `apellido_persona` y
+`documento_persona`: de ahí salen el nombre de la barra, el "Hola, …" del portal
+y el CUIL con el que el portal busca los locales del titular. Lo hace
+`backend/cidituc.js` (`datosDeLaPersona`), con 10 minutos de caché por persona.
+
+Si la barra dice "Usuario CiDiTuc" en vez del nombre, abrir `GET /salud` y mirar
+`ciditucNombre`:
+
+| Lo que dice | Qué pasa |
+|---|---|
+| `configurado: false` | falta `CIDITUC_URL_PERSONA` en el `backend/.env` del servidor (y reiniciar) |
+| no aparece `ciditucNombre` | el servidor corre el `cidituc.js` viejo: falta `git pull` y reiniciar |
+| `ultimoPedido: null` | todavía nadie entró desde que arrancó el backend: entrar y volver a mirar |
+| `CiDiTuc respondió HTTP 401` | CiDiTuc no aceptó el token así: probar `CIDITUC_PERSONA_BEARER=si` |
+| `no se pudo consultar: ...` | el servidor no llega a estadisticas.smt.gob.ar:5000 (red o certificado) |
+| `respondió sin nombre; campos: ...` | CiDiTuc nombra distinto los campos: indicarlo con `CIDITUC_CAMPO_NOMBRE` |
+
+El mismo mensaje sale en la consola del backend con el prefijo `[CiDiTuc]`.
 
 **Dónde está:** `src/components/Navbar.jsx` (lee `usuario.nombreCompleto` de
-`useRol()`), estilos en `src/App.css` sección 2 (`.navbar-usuario`). El nombre lo
-busca `backend/cidituc.js` (`nombreDeLaPersona`).
+`useRol()`), estilos en `src/App.css` sección 2 (`.navbar-usuario`). El dato lo
+arma `src/auth/RolProvider.jsx` con lo que devuelve `GET /sesion`.
 
 ## 28. La foto del local en el relevamiento (22 de noviembre de 2026)
 

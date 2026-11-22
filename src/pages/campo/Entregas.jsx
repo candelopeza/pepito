@@ -67,7 +67,7 @@ function Entregas() {
   // Quién soy en la tabla de usuarios: la asignación se guarda por id. Si se
   // entró con un agente de la base (selector de la barra), es él; si no, se
   // busca por nombre como antes.
-  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.nombre === usuario.nombre);
+  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.legajo === usuario.nombre);
 
   const enCola = (pendientesSinConexion ?? []).filter((p) => p.tipo === 'entrega');
   const idsEnCola = new Set(enCola.filter((p) => !p.rechazado).map((p) => p.referencia));

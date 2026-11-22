@@ -164,44 +164,90 @@ function personaDelCuerpo(cuerpo) {
 }
 
 /* ---------------------------------------------------------------------------
-   4. El nombre de la persona
+   4. El nombre (y el CUIL) de la persona
    ---------------------------------------------------------------------------
-   El token real no trae el nombre, solo el número de persona. Para saludar
-   ("Hola, Candelaria") y mostrarlo en la barra se le pide a CiDiTuc con
-   CIDITUC_URL_PERSONA, una dirección con {id} donde va el número:
-       CIDITUC_URL_PERSONA=https://cidituc.smt.gob.ar/api/persona/{id}
-   Se llama con el mismo Bearer del usuario. Del JSON se toma el nombre
-   (CIDITUC_CAMPO_NOMBRE, o nombre/apellido, name, persona.nombre). Sin la
-   variable, no hay nombre y el front muestra el legajo. */
-const cacheNombres = new Map();
+   El token real solo trae el número de persona, no el nombre ni el CUIL. Para
+   saludar ("Hola, Candelaria"), mostrar el nombre en la barra y dejar que el
+   portal del titular filtre los locales por CUIL, se le piden esos datos a
+   CiDiTuc con CIDITUC_URL_PERSONA.
+
+   >>> EL ENDPOINT REAL (visto en el front de CiDiTuc el 13/11/2026) <<<
+       CIDITUC_URL_PERSONA=https://estadisticas.smt.gob.ar:5000/usuarios/authStatus
+   Así lo hace CiDiTuc: un GET a esa dirección con el token en la cabecera
+   Authorization TAL CUAL, sin la palabra "Bearer" adelante. Devuelve
+       { usuarioSinContraseña: { nombre_persona, apellido_persona,
+                                 documento_persona, id_persona, ... } }
+   De ahí sale el nombre (nombre_persona + apellido_persona) y el CUIL
+   (documento_persona). El número de persona ya lo sabíamos por el token; este
+   pedido es solo para ponerle nombre y CUIL.
+
+   Variantes (por si Sistemas cambia el servicio):
+     - Si la URL lleva {id}, se reemplaza por el número de persona.
+     - CIDITUC_PERSONA_BEARER=si  manda "Bearer <token>" en vez del token crudo
+       (para una API que siga el estándar en vez del estilo de CiDiTuc).
+   Sin CIDITUC_URL_PERSONA no hay nombre ni CUIL: la barra muestra el legajo y
+   el portal pide "Ingresá con CiDiTuc para ver tus locales". */
+const cacheDatos = new Map();
 const DURACION_NOMBRE_MS = 10 * 60_000;
+const VACIO = { nombre: null, cuil: null };
 
-async function nombreDeLaPersona(idPersona, token) {
+async function datosDeLaPersona(idPersona, token) {
   const plantilla = process.env.CIDITUC_URL_PERSONA;
-  if (!plantilla) return null;
-  const guardado = cacheNombres.get(idPersona);
-  if (guardado && Date.now() < guardado.vence) return guardado.nombre;
+  if (!plantilla) return VACIO;
+  const guardado = cacheDatos.get(idPersona);
+  if (guardado && Date.now() < guardado.vence) return guardado.datos;
 
-  let nombre = null;
+  let datosPersona = VACIO;
+  let resultado;
   try {
-    const respuesta = await fetch(plantilla.replace('{id}', encodeURIComponent(idPersona)), {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    const url = plantilla.replace('{id}', encodeURIComponent(idPersona));
+    const conBearer = String(process.env.CIDITUC_PERSONA_BEARER ?? '').toLowerCase() === 'si';
+    const respuesta = await fetch(url, {
+      headers: { Authorization: conBearer ? `Bearer ${token}` : token, Accept: 'application/json' },
       signal: AbortSignal.timeout(8000),
     });
+    if (!respuesta.ok) resultado = `CiDiTuc respondió HTTP ${respuesta.status}`;
     if (respuesta.ok) {
-      const datos = await respuesta.json();
+      const cuerpo = await respuesta.json();
+      // CiDiTuc envuelve a la persona en "usuarioSinContraseña"; otras APIs la
+      // mandan en "usuario", "persona" o "data", o directamente sin envoltura.
+      const p = cuerpo?.usuarioSinContraseña ?? cuerpo?.usuario ?? cuerpo?.persona ?? cuerpo?.data ?? cuerpo;
       const campo = process.env.CIDITUC_CAMPO_NOMBRE;
-      const directo = primero(datos, [campo, 'nombre_completo', 'nombreCompleto', 'name', 'persona.nombre_completo'].filter(Boolean));
-      const partes = [primero(datos, ['nombre', 'nombres', 'persona.nombre']), primero(datos, ['apellido', 'apellidos', 'persona.apellido'])].filter(Boolean);
-      nombre = directo ?? (partes.length ? partes.join(' ') : null);
+      const directo = primero(p, [campo, 'nombre_completo', 'nombreCompleto', 'name'].filter(Boolean));
+      const partes = [
+        primero(p, ['nombre_persona', 'nombre', 'nombres']),
+        primero(p, ['apellido_persona', 'apellido', 'apellidos']),
+      ].filter(Boolean);
+      let nombre = directo ?? (partes.length ? partes.join(' ') : null);
       if (nombre) nombre = String(nombre).trim();
+      const cuil = primero(p, [process.env.CIDITUC_CAMPO_CUIL || 'documento_persona', 'documento_persona', 'cuil', 'cuit']);
+      datosPersona = { nombre, cuil: cuil ? String(cuil).trim() : null };
+      // Sin nombre: se anotan solo los NOMBRES de los campos que vinieron (no
+      // los valores), para ver en /salud cómo llama CiDiTuc a cada dato.
+      resultado = nombre ? 'ok' : `respondió sin nombre; campos: ${Object.keys(p ?? {}).join(', ') || '(ninguno)'}`;
     }
-  } catch {
-    nombre = null;
+  } catch (e) {
+    datosPersona = VACIO;
+    resultado = `no se pudo consultar: ${e?.cause?.code ?? e?.name ?? 'error'} ${e?.message ?? ''}`.trim();
   }
-  if (cacheNombres.size > 2000) cacheNombres.clear();
-  cacheNombres.set(idPersona, { nombre, vence: Date.now() + DURACION_NOMBRE_MS });
-  return nombre;
+  ultimoPedido = { momento: new Date().toISOString(), resultado };
+  if (resultado !== 'ok') console.warn(`[CiDiTuc] nombre de la persona: ${resultado}`);
+  // Un fallo se recuerda solo un minuto, para que al corregirlo se vea enseguida.
+  const duracion = datosPersona.nombre ? DURACION_NOMBRE_MS : 60_000;
+  if (cacheDatos.size > 2000) cacheDatos.clear();
+  cacheDatos.set(idPersona, { datos: datosPersona, vence: Date.now() + duracion });
+  return datosPersona;
+}
+
+/* Para GET /salud: si está configurado y cómo salió el último pedido de
+   nombre. No incluye nombres, CUIL ni tokens. */
+let ultimoPedido = null;
+export function estadoNombres() {
+  return {
+    configurado: Boolean(process.env.CIDITUC_URL_PERSONA),
+    url: process.env.CIDITUC_URL_PERSONA || null,
+    ultimoPedido,
+  };
 }
 
 /* Caché corta por token: en modo API evita preguntarle a CiDiTuc en cada
@@ -224,7 +270,13 @@ export async function personaDelToken(token) {
     cuerpo = null;
   }
   const persona = cuerpo ? personaDelCuerpo(cuerpo) : null;
-  if (persona && !persona.nombre) persona.nombre = await nombreDeLaPersona(persona.idPersona, token);
+  // El token (modo jwt-secreto) solo trae el número de persona. Si falta el
+  // nombre o el CUIL, se los pedimos a CiDiTuc (un solo pedido trae los dos).
+  if (persona && (!persona.nombre || !persona.cuil)) {
+    const extra = await datosDeLaPersona(persona.idPersona, token);
+    if (!persona.nombre) persona.nombre = extra.nombre;
+    if (!persona.cuil) persona.cuil = extra.cuil;
+  }
 
   if (cache.size > 500) cache.clear();
   cache.set(token, { persona, vence: Date.now() + DURACION_CACHE_MS });

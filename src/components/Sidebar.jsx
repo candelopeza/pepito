@@ -122,6 +122,21 @@ function Sidebar({ onNavegar }) {
         {secciones.map((seccion) => {
           const abierta = abiertas.includes(seccion.id);
 
+          /* Una sección con UNA sola pantalla que se llama igual que ella
+             (hoy, Accesos → Accesos) no se despliega: el título es el link
+             directo, como Inicio. Pedido de cande el 17/11/2026: el
+             subítem repetido no aportaba nada. */
+          const unica = seccion.modulos.length === 1 && seccion.modulos.at(0).titulo === seccion.titulo
+            ? seccion.modulos.at(0)
+            : null;
+          if (unica) {
+            return (
+              <NavLink key={seccion.id} to={unica.ruta} className="nav-item" onClick={onNavegar}>
+                {seccion.titulo}
+              </NavLink>
+            );
+          }
+
           return (
             <div className="nav-seccion" key={seccion.id}>
 

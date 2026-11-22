@@ -61,21 +61,10 @@ function SeccionGeocodificacion() {
         renderCell: ({ row }) => row.direccion || <Badge color="rojo">Sin dirección</Badge>,
       },
       { field: 'motivoSinGeo', headerName: 'Por qué no se pudo', flex: 1, minWidth: 200 },
-      {
-        field: 'coordenadaRelevamiento',
-        headerName: 'Coordenada del relevamiento',
-        width: 450,
-        sortable: false,
-        filterable: false,
-        /* Se muestra a propósito, con la advertencia: es el dato que en el
-           sistema viejo se terminaba copiando al padrón. */
-        renderCell: () => (
-          <span className="celda-apilada texto">
-            no se usa para el padrón
-            <small className="celda-sub">aunque exista, no es la ubicación del establecimiento</small>
-          </span>
-        ),
-      },
+      /* La columna "Coordenada del relevamiento" se sacó el 17/11/2026 a pedido
+         de cande: decía lo mismo en todas las filas ("no se usa para el
+         padrón") y no aportaba nada. La regla sigue igual: la coordenada del
+         relevamiento nunca se copia al padrón. */
       {
         field: 'accion',
         headerName: 'Acción',

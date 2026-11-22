@@ -168,7 +168,7 @@ function Bandeja({ bandeja }) {
 function Tablero() {
   const { rol, usuario } = useRol();
   const { bandejasPara, documentosPorVencer, presentacionesPendientes, localesConEstado, usuarios } = useDatos();
-  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.nombre === usuario.nombre);
+  const yo = usuario.id ? usuarios.find((u) => u.id === usuario.id) : usuarios.find((u) => u.legajo === usuario.nombre);
   // Dirección mira, no actúa: para ella el tablero es la situación del área.
   const soloLectura = rol === 'direccion';
 

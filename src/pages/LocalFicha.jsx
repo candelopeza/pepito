@@ -32,6 +32,7 @@ import { Dato } from '../components/ui/Campo';
 import AccionesLocal from '../components/AccionesLocal';
 import HistorialActuaciones from '../components/HistorialActuaciones';
 import HistorialEstados from '../components/HistorialEstados';
+import ArchivoGuardado from '../components/ArchivoGuardado';
 import Modal from '../components/ui/Modal';
 import FormLocal from '../components/FormLocal';
 import ConstanciaArca from '../components/ConstanciaArca';
@@ -281,6 +282,15 @@ function LocalFicha() {
               ? `Controlado el ${fmtFechaHora(relevamientoOrigen.revisadoEn)}`
               : 'pendiente de control'}
           </Dato>
+          {/* La foto que sacó el agente al relevar (opcional, 22/11/2026). Si al
+              corregir sacó otra, están todas: la más nueva primero. */}
+          {relevamientoOrigen.foto && (
+            <Dato etiqueta="Foto del local" ancho={2}>
+              {[...(relevamientoOrigen.fotos ?? [relevamientoOrigen.foto])].reverse().map((f) => (
+                <ArchivoGuardado key={f.id} archivo={f} etiqueta="Ver foto" />
+              ))}
+            </Dato>
+          )}
           {relevamientoOrigen.offline && (
             <Dato etiqueta="Origen de la carga" ancho={2}>
               Cargado sin conexión y sincronizado después. La fecha y la coordenada son las del momento del guardado, no las de la

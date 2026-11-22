@@ -1287,42 +1287,69 @@ el cuadrado azul "GG SMT" (`public/icono-app-*.png`, `manifest.webmanifest`).
 cerrar y volver a abrir la pestaña.
 
 **Para volver atrás:** en `index.html`, borrar la línea nueva y descomentar una
-de las dos de abajo (el `favicon.svg` o el `icono-app-32.png`).
+de las dos de abajo: el `icono-app-32.png` (el `favicon.svg` de Vite ya no
+existe: cande lo borró el 13/11, junto con su línea en el manifest).
 
 ## 27. El nombre de la persona arriba a la derecha (13 de noviembre de 2026)
 
-**Qué cambió:** volvió a la barra azul el bloque de la derecha con el nombre y el
-ícono redondo, como estaba hasta el 06/11. El desplegable "Elegí tu usuario…" no
-vuelve: el nombre sale de la sesión de CiDiTuc (el inicio de sesión que agregó
-cande el 12/11).
+**Qué cambió (lo hizo cande):** volvió a la barra azul el bloque de la derecha
+con el nombre y el ícono redondo. El desplegable "Elegí tu usuario…" no vuelve:
+la persona sale de la sesión de CiDiTuc (el inicio de sesión del 12/11).
 
 **Qué se lee:**
 
-| Situación | La barra dice |
+| Situación | La barra muestra |
 |---|---|
-| Se está consultando la sesión | Ingresando… |
-| CiDiTuc mandó el nombre | el nombre (en mayúsculas; si es largo se corta con "…" y se lee entero al pasar el mouse) |
-| Entró por CiDiTuc pero sin nombre | Persona N.º 151880 (el número de persona) |
-| Sin token, o CiDiTuc apagado en el servidor | Sin identificar |
+| Entró por CiDiTuc y se conoce su nombre | el nombre, en mayúsculas, con el ícono |
+| Entró por CiDiTuc pero no hay nombre | "Legajo 151880" (es el número de persona) |
+| Sin sesión (público) | nada |
 
-En el teléfono queda solo el ícono, como antes.
+En el teléfono queda solo el ícono. En el Inicio, la franja de arriba ya no dice
+"Legajo… / Sin identificar": muestra solo el tipo de usuario.
 
-**OJO, el nombre todavía no llega:** al 13/11 el token real de CiDiTuc trae solo
-`{ id }` (el número de persona) y la tabla `usuario` no tiene columna de nombre.
-Por eso hoy la barra muestra el número. Para que salga el nombre hay que pedirle a
-Sistemas que **sume el nombre al token** (por ejemplo `"nombre": "Juan Pérez"`):
-`backend/cidituc.js` ya lo lee del campo `nombre`, sin tocar código. Si viene con
-otro nombre de campo, se indica en el `.env` del backend:
+**De dónde sale el nombre:** el token de CiDiTuc trae solo el número de persona.
+El backend le pide el nombre a CiDiTuc con la dirección `CIDITUC_URL_PERSONA` del
+`.env` del backend, donde `{id}` es el número de persona:
 
 ```
-CIDITUC_CAMPO_NOMBRE=nombre_completo
+CIDITUC_URL_PERSONA=https://<dirección que pase Sistemas>/{id}
 ```
 
-Si viene en dos campos (nombre y apellido) o hay que pedirlo a otra dirección de
-CiDiTuc, sí hay que tocar `backend/cidituc.js`.
+**PENDIENTE:** que Sistemas pase esa dirección. Mientras esté vacía, la barra
+muestra el número de persona. El nombre queda guardado 10 minutos por persona.
 
 **Dónde está:** `src/components/Navbar.jsx` (lee `usuario.nombreCompleto` de
-`useRol()`), estilos en `src/App.css` sección 2 (`.navbar-usuario`). El dato lo
-arma `src/auth/RolProvider.jsx` con lo que devuelve `GET /sesion`.
+`useRol()`), estilos en `src/App.css` sección 2 (`.navbar-usuario`). El nombre lo
+busca `backend/cidituc.js` (`nombreDeLaPersona`).
 
-**Para sacarlo:** en `src/components/Navbar.jsx`, `MOSTRAR_PERSONA = false`.
+## 28. La foto del local en el relevamiento (22 de noviembre de 2026)
+
+**Qué cambió:** en "Nuevo relevamiento" (la pantalla de campo) aparece el campo
+**Foto del local (opcional)**. El agente saca la foto, se ve en chico antes de
+guardar (con "Quitar" por si salió mal) y queda guardada con el relevamiento.
+
+| Qué | Cómo quedó |
+|---|---|
+| Es obligatoria | No. Sin foto el relevamiento se guarda igual |
+| Cámara o galería | Las dos: el teléfono pregunta. Con `FOTO_SOLO_CAMARA = true` abre solo la cámara, como en la entrega de cédulas |
+| Sin señal | Viaja con la carga: queda en el teléfono y se envía con el relevamiento |
+| Dónde se ve | En la ficha del local, "Relevamiento de origen" → **Ver foto**. En "Mis cargas de hoy" cada carga dice "Con foto" o "Sin foto" |
+| Corregir la carga del día | Se puede sacar otra: se agrega, la anterior no se borra |
+
+**Dónde se guarda:** igual que la foto de una entrega. El archivo va a la
+carpeta de archivos del servidor (`CARPETA_ARCHIVOS`, o `backend/archivos/`) y
+sus datos a la tabla `archivo`, colgada del trámite de relevamiento con el tipo
+`foto-relevamiento`. **No hay que correr ningún SQL nuevo**: usa la tabla de
+`sql/08-tabla-archivo.sql`. Si la base no la tiene, el campo dice "Esta base
+todavía no guarda fotos" y el relevamiento se registra sin foto.
+
+**Dónde está:** `src/pages/campo/Relevar.jsx` (el campo), `src/pages/LocalFicha.jsx`
+(verla), `backend/rutas/relevamientos.js` (guardarla, en el alta y en la
+corrección), `backend/consultas.js` (`conEvidencias` la cuelga del relevamiento
+como `foto` / `fotos`).
+
+**Para publicarlo hay que actualizar las dos partes:** el backend (reiniciarlo)
+y el front (`npm run build` y subir `dist/` completo). Con el front nuevo y el
+backend viejo, la foto se manda pero no se guarda.
+
+**Para apagarlo:** `FOTO_EN_RELEVAMIENTO = false` en `Relevar.jsx`.

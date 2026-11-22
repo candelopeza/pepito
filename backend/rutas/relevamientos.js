@@ -25,6 +25,13 @@
    puede llegar horas después (sección 6.2 y criterio de aceptación de campo).
    Si la misma carga llega dos veces (la cola sin conexión reintenta), la
    segunda se reconoce por momento + dirección y no crea un local repetido.
+
+   LA FOTO DEL LOCAL (22/11/2026) es OPCIONAL. Llega en `foto` (imagen en
+   base64, ya achicada en el celular) con `fotoNombre`, y se guarda con
+   backend/archivos.js colgada del trámite de relevamiento, igual que la foto
+   de una entrega (tipo 'foto-relevamiento'). Necesita la tabla `archivo`
+   (sql/08): sin ella el relevamiento se registra igual, sin foto. Al corregir
+   la carga se puede mandar otra: se AGREGA, la anterior no se borra.
    ============================================================================ */
 
 import { Router } from 'express';
@@ -34,9 +41,19 @@ import { ID_ESTADO, ID_TTRAMITE } from '../mapeo.js';
 import { requiereRol } from '../middlewares/usuario.js';
 import { geocodificarDireccion } from '../geocodificador.js';
 import { ejecutarActo, registrarAlta } from '../actos.js';
+import { archivosDisponibles, existeHash, guardarImagen, leerImagen } from '../archivos.js';
 import { hoyISO } from '../../src/dominio/fechas.js';
 
 const router = Router();
+
+const TIPO_FOTO = 'foto-relevamiento';
+
+/* La foto que vino con la carga, lista para guardar: null si no vino o si la
+   base no guarda archivos, { error } si no es una imagen válida. */
+function fotoDeLaCarga(datos) {
+  if (typeof datos.foto !== 'string' || !datos.foto.startsWith('data:') || !archivosDisponibles()) return null;
+  return leerImagen(datos.foto);
+}
 
 /* Los tres cierres posibles del control administrativo (etapa 2), con el
    estado en que queda el local, el acto de src/dominio/reglas.js que les
@@ -111,6 +128,8 @@ router.post('/', requiereRol('relevador', 'coordinacion'), async (req, res, next
     if (!['GRAN_GENERADOR', 'GENERADOR_MENOR'].includes(datos.clasificacion)) {
       return res.status(400).json({ error: 'La clasificación debe ser GRAN_GENERADOR o GENERADOR_MENOR' });
     }
+    const imagen = fotoDeLaCarga(datos);
+    if (imagen?.error) return res.status(400).json({ error: imagen.error });
 
     const direccion = datos.direccionRelevada.trim();
     const momento = momentoDelGuardado(datos.momento);
@@ -159,7 +178,7 @@ router.post('/', requiereRol('relevador', 'coordinacion'), async (req, res, next
         ],
       );
 
-      await insertarTramite(cx, {
+      const idTramite = await insertarTramite(cx, {
         idLocal: alta.insertId,
         idEstado: esGran ? ID_ESTADO.GRAN_GENERADOR : ID_ESTADO.GENERADOR_MENOR,
         idTtramite: ID_TTRAMITE.RELEVAMIENTO,
@@ -171,6 +190,10 @@ router.post('/', requiereRol('relevador', 'coordinacion'), async (req, res, next
         fechaInicio: momento,
         observaciones: datos.observaciones ?? '',
       });
+
+      if (imagen) {
+        await guardarImagen(cx, req, { idTramite, imagen, tipoArchivo: TIPO_FOTO, nombreOriginal: datos.fotoNombre });
+      }
 
       await registrarAlta(
         cx,
@@ -238,6 +261,8 @@ router.put('/:id', requiereRol('relevador', 'coordinacion'), async (req, res, ne
     if (!['GRAN_GENERADOR', 'GENERADOR_MENOR'].includes(datos.clasificacion)) {
       return res.status(400).json({ error: 'La clasificación debe ser GRAN_GENERADOR o GENERADOR_MENOR' });
     }
+    const imagen = fotoDeLaCarga(datos);
+    if (imagen?.error) return res.status(400).json({ error: imagen.error });
 
     const direccion = datos.direccionRelevada.trim();
     const esGran = datos.clasificacion === 'GRAN_GENERADOR';
@@ -270,6 +295,10 @@ router.put('/:id', requiereRol('relevador', 'coordinacion'), async (req, res, ne
           recortarObservacion(datos.observaciones ?? ''),
           tramite.id,
         ]);
+        // Otra foto se agrega; la misma reenviada no se guarda dos veces.
+        if (imagen && !(await existeHash(cx, tramite.id, imagen.hash))) {
+          await guardarImagen(cx, req, { idTramite: tramite.id, imagen, tipoArchivo: TIPO_FOTO, nombreOriginal: datos.fotoNombre });
+        }
         return { idTramite: tramite.id };
       },
     });

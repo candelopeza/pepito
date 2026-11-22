@@ -166,9 +166,10 @@ const ORDEN_CRONOLOGICO = 'ORDER BY t.fecha_inicio, t.id_tramite';
 /* Los archivos guardados (tabla opcional `archivo`, ver backend/archivos.js)
    se cuelgan de su actuación: en una notificación, la foto de la entrega como
    `evidencia`; en una DDJJ o un contrato, el documento respaldatorio como
-   `archivo`. Siempre el último, con su id para pedirlo. Sin la tabla quedan
-   en null como antes. */
-const TIPOS_CON_ARCHIVO = ['NOTIFICACION', 'DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO'];
+   `archivo`; en un relevamiento, la foto del local como `foto` (y todas en
+   `fotos`, si al corregir se sacó otra). Siempre el último, con su id para
+   pedirlo. Sin la tabla quedan en null como antes. */
+const TIPOS_CON_ARCHIVO = ['NOTIFICACION', 'DDJJ', 'DDJJ_RECICLAJE', 'CONTRATO', 'RELEVAMIENTO'];
 
 async function conEvidencias(actuaciones, cx = null, todas = false) {
   if (!tiene('archivos')) return actuaciones;
@@ -179,7 +180,9 @@ async function conEvidencias(actuaciones, cx = null, todas = false) {
     const lista = porTramite.get(a.id);
     if (!lista?.length) return a;
     const ultimo = lista[lista.length - 1];
-    return a.tipo === 'NOTIFICACION' ? { ...a, evidencia: ultimo, evidencias: lista } : { ...a, archivo: ultimo };
+    if (a.tipo === 'NOTIFICACION') return { ...a, evidencia: ultimo, evidencias: lista };
+    if (a.tipo === 'RELEVAMIENTO') return { ...a, foto: ultimo, fotos: lista };
+    return { ...a, archivo: ultimo };
   });
 }
 

@@ -5,6 +5,8 @@
    concreta. Es la única prueba de que el notificador estuvo en el domicilio.
    Sección 5.1 (entidad `archivo`): ruta, nombre original, hash, quién lo subió
    y cuándo.
+   Desde el 22/11/2026 guarda también la foto del local que el agente saca al
+   relevar (opcional, rutas/relevamientos.js, tipo 'foto-relevamiento').
 
    DÓNDE QUEDAN
      el archivo  en una carpeta del servidor: CARPETA_ARCHIVOS del .env, o

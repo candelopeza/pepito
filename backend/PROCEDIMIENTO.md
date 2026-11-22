@@ -1287,18 +1287,18 @@ el cuadrado azul "GG SMT" (`public/icono-app-*.png`, `manifest.webmanifest`).
 cerrar y volver a abrir la pestaña.
 
 **Para volver atrás:** en `index.html`, borrar la línea nueva y descomentar una
-de las dos de abajo (el `favicon.svg` o el `icono-app-32.png`).
+de las dos de abajo: el `icono-app-32.png` (el `favicon.svg` de Vite ya no
+existe: cande lo borró el 13/11, junto con su línea en el manifest).
 
 ## 27. El nombre de la persona arriba a la derecha (13 de noviembre de 2026)
 
-**Qué cambió:** volvió a la barra azul el bloque de la derecha con el nombre y el
-ícono redondo, como estaba hasta el 06/11. El desplegable "Elegí tu usuario…" no
-vuelve: el nombre sale de la sesión de CiDiTuc (el inicio de sesión que agregó
-cande el 12/11).
+**Qué cambió (lo hizo cande):** volvió a la barra azul el bloque de la derecha
+con el nombre y el ícono redondo. El desplegable "Elegí tu usuario…" no vuelve:
+la persona sale de la sesión de CiDiTuc (el inicio de sesión del 12/11).
 
 **Qué se lee:**
 
-| Situación | La barra dice |
+| Situación | La barra muestra |
 |---|---|
 | Se está consultando la sesión | Ingresando… |
 | CiDiTuc mandó el nombre | el nombre (en mayúsculas; si es largo se corta con "…" y se lee entero al pasar el mouse) |
@@ -1342,4 +1342,34 @@ El mismo mensaje sale en la consola del backend con el prefijo `[CiDiTuc]`.
 `useRol()`), estilos en `src/App.css` sección 2 (`.navbar-usuario`). El dato lo
 arma `src/auth/RolProvider.jsx` con lo que devuelve `GET /sesion`.
 
-**Para sacarlo:** en `src/components/Navbar.jsx`, `MOSTRAR_PERSONA = false`.
+## 28. La foto del local en el relevamiento (22 de noviembre de 2026)
+
+**Qué cambió:** en "Nuevo relevamiento" (la pantalla de campo) aparece el campo
+**Foto del local (opcional)**. El agente saca la foto, se ve en chico antes de
+guardar (con "Quitar" por si salió mal) y queda guardada con el relevamiento.
+
+| Qué | Cómo quedó |
+|---|---|
+| Es obligatoria | No. Sin foto el relevamiento se guarda igual |
+| Cámara o galería | Las dos: el teléfono pregunta. Con `FOTO_SOLO_CAMARA = true` abre solo la cámara, como en la entrega de cédulas |
+| Sin señal | Viaja con la carga: queda en el teléfono y se envía con el relevamiento |
+| Dónde se ve | En la ficha del local, "Relevamiento de origen" → **Ver foto**. En "Mis cargas de hoy" cada carga dice "Con foto" o "Sin foto" |
+| Corregir la carga del día | Se puede sacar otra: se agrega, la anterior no se borra |
+
+**Dónde se guarda:** igual que la foto de una entrega. El archivo va a la
+carpeta de archivos del servidor (`CARPETA_ARCHIVOS`, o `backend/archivos/`) y
+sus datos a la tabla `archivo`, colgada del trámite de relevamiento con el tipo
+`foto-relevamiento`. **No hay que correr ningún SQL nuevo**: usa la tabla de
+`sql/08-tabla-archivo.sql`. Si la base no la tiene, el campo dice "Esta base
+todavía no guarda fotos" y el relevamiento se registra sin foto.
+
+**Dónde está:** `src/pages/campo/Relevar.jsx` (el campo), `src/pages/LocalFicha.jsx`
+(verla), `backend/rutas/relevamientos.js` (guardarla, en el alta y en la
+corrección), `backend/consultas.js` (`conEvidencias` la cuelga del relevamiento
+como `foto` / `fotos`).
+
+**Para publicarlo hay que actualizar las dos partes:** el backend (reiniciarlo)
+y el front (`npm run build` y subir `dist/` completo). Con el front nuevo y el
+backend viejo, la foto se manda pero no se guarda.
+
+**Para apagarlo:** `FOTO_EN_RELEVAMIENTO = false` en `Relevar.jsx`.

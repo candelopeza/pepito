@@ -37,6 +37,64 @@
    ============================================================================ */
 
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+
+/* Las librerías que leen los archivos se cargan recién cuando se sube uno.
+   Si en el servidor no están instaladas (falta correr `npm install` en la
+   carpeta backend), antes explotaba con un "Error interno del servidor" sin
+   explicación (24/11/2026). Ahora el mensaje dice qué falta y qué hacer. */
+/* >>> DOMMatrix, LA PIEZA QUE FALTABA EN EL SERVIDOR (24/11/2026) <<<
+   La librería de PDF (pdfjs-dist, adentro de pdf-parse) crea un DOMMatrix
+   apenas se carga. En Node no existe: lo toma de @napi-rs/canvas, que es una
+   pieza compilada para cada sistema operativo. En el servidor (Linux) esa
+   pieza no cargaba —probablemente se copió node_modules desde Windows— y la
+   lectura de cualquier PDF terminaba en "DOMMatrix is not defined".
+   Para LEER TEXTO el DOMMatrix no se usa (solo para dibujar páginas), así
+   que si no hay uno de verdad alcanza con uno mínimo. La solución de fondo
+   igual es reinstalar node_modules en el servidor (PROCEDIMIENTO.md). */
+function asegurarDOMMatrix() {
+  if (globalThis.DOMMatrix) return;
+  try {
+    const requerir = createRequire(import.meta.url);
+    const canvas = requerir('@napi-rs/canvas');
+    if (canvas?.DOMMatrix) {
+      globalThis.DOMMatrix = canvas.DOMMatrix;
+      return;
+    }
+  } catch {
+    // No está la pieza para este sistema: sigue con la mínima.
+  }
+  globalThis.DOMMatrix = class DOMMatrixMinimo {
+    constructor(m = [1, 0, 0, 1, 0, 0]) {
+      const [a = 1, b = 0, c = 0, d = 1, e = 0, f = 0] = Array.isArray(m) ? m : [];
+      Object.assign(this, { a, b, c, d, e, f });
+    }
+  };
+}
+
+async function importarLibreria(nombre, ruta = nombre) {
+  if (nombre === 'pdf-parse') asegurarDOMMatrix();
+  try {
+    return await import(ruta);
+  } catch (e) {
+    if (e?.code === 'ERR_MODULE_NOT_FOUND' || /Cannot find (package|module)/i.test(String(e?.message))) {
+      throw new ErrorDeLectura(
+        `En el servidor falta instalar la librería "${nombre}", que lee este tipo de archivo. ` +
+          'Hay que correr "npm install" en la carpeta backend del servidor y reiniciar el backend.',
+      );
+    }
+    /* Instalada pero no carga: casi siempre es la versión de Node. Las de PDF
+       (pdf-parse y pdfjs-dist) piden Node 20.16 o más nuevo, o 22.3 o más
+       nuevo (no la 21); exceljs anda con versiones más viejas. Por eso el
+       Excel podía andar y el PDF no. */
+    throw new ErrorDeLectura(
+      `El servidor no pudo cargar la librería "${nombre}" con Node ${process.version} (${String(e?.message ?? e).slice(0, 150)}). ` +
+        (nombre === 'pdf-parse'
+          ? 'Para leer PDF hace falta Node 20.16 o más nuevo (o 22.3 o más nuevo; la 21 no sirve). Mientras tanto, el informe en Excel se puede cargar.'
+          : 'Revisar la instalación del backend en el servidor.'),
+    );
+  }
+}
 
 /* ---------------------------------------------------------------------------
    1. EL CUIT Y SU DÍGITO VERIFICADOR
@@ -297,7 +355,7 @@ function leerCsv(buffer) {
    6. XLSX
    --------------------------------------------------------------------------- */
 async function leerXlsx(buffer) {
-  const { default: ExcelJS } = await import('exceljs');
+  const { default: ExcelJS } = await importarLibreria('exceljs');
   const libro = new ExcelJS.Workbook();
   await libro.xlsx.load(buffer);
 
@@ -480,7 +538,7 @@ function camposDeTitulos(celdas) {
 }
 
 async function lineasDelPdf(buffer) {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjs = await importarLibreria('pdf-parse', 'pdfjs-dist/legacy/build/pdf.mjs');
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), isEvalSupported: false, disableFontFace: true, verbosity: 0 })
     .promise;
   const lineas = [];
@@ -652,7 +710,7 @@ async function leerPdf(buffer) {
     };
   }
 
-  const { PDFParse } = await import('pdf-parse');
+  const { PDFParse } = await importarLibreria('pdf-parse');
   let text;
   try {
     const analizador = new PDFParse({ data: new Uint8Array(buffer) });

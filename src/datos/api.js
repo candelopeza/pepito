@@ -117,7 +117,13 @@ async function pedir(ruta, { comoUsuario, ...opciones } = {}) {
   }
 
   if (!respuesta.ok) {
-    throw new ErrorApi(cuerpo?.error ?? `Error ${respuesta.status} en ${ruta}`, respuesta.status, cuerpo);
+    /* Un error interno (500) trae, para el personal del área, el detalle
+       técnico (servidor.js): se muestra en el aviso para poder pasárselo a
+       quien lo arregla sin tener que entrar a la consola del servidor
+       (24/11/2026: el lector del informe 9DJ fallaba solo en el servidor). */
+    const mensaje = cuerpo?.error ?? `Error ${respuesta.status} en ${ruta}`;
+    const conDetalle = respuesta.status >= 500 && cuerpo?.detalle ? `${mensaje} Detalle técnico: ${cuerpo.detalle}` : mensaje;
+    throw new ErrorApi(conDetalle, respuesta.status, cuerpo);
   }
   return cuerpo;
 }

@@ -98,6 +98,14 @@ const normalizarTexto = (t) =>
 
 /* El archivo del input a base64, leyéndolo como data URL: es binario-seguro
    (una planilla .xlsx o un PDF no sobreviven a pasar por texto). */
+/* El mes que cubre el informe se guarda como 'AAAA-MM' (24/11/2026) y se
+   muestra como "Octubre 2026". Las cargas viejas tienen texto libre: va tal cual. */
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+function textoPeriodo(periodo) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(periodo ?? ''));
+  return m ? `${MESES[Number(m[2]) - 1]} ${m[1]}` : (periodo ?? '');
+}
+
 function archivoABase64(archivo) {
   return new Promise((resolver, rechazar) => {
     const lector = new FileReader();
@@ -183,7 +191,7 @@ function Informe9DJ() {
         const detalle = await api.informe9djSubir({
           nombreArchivo: archivo.name,
           contenidoBase64: await archivoABase64(archivo),
-          periodo: periodo || undefined,
+          periodo,
         });
         setCarga(detalle);
         setHistorial(await api.informe9djCargas());
@@ -405,28 +413,9 @@ function Informe9DJ() {
       { field: 'razonSocial', headerName: 'Razón social', flex: 1, minWidth: 180 },
       { field: 'direccion', headerName: 'Dirección', flex: 1, minWidth: 170 },
       { field: 'numeroContrato', headerName: 'Contrato', width: 110 },
-      {
-        field: 'vencimiento',
-        headerName: 'Vencimiento',
-        width: 175,
-        renderCell: ({ row }) => {
-          if (!row.vencimiento) return <span className="texto-gris">—</span>;
-          // Un contrato que YA viene vencido no se puede cargar (lo rechaza el
-          // backend): se marca para que el agente lo vea antes de intentarlo.
-          if (row.vencimiento < hoyISO()) {
-            return (
-              <span
-                className="celda-advertencia"
-                title="Este contrato ya viene vencido: no se puede confirmar, vincular ni dar de alta. Rechazalo o dejalo pendiente y pedí la aclaración a la prestataria."
-              >
-                <strong>⚠ {fmtFecha(row.vencimiento)}</strong>
-                <small>ya venció: no se carga</small>
-              </span>
-            );
-          }
-          return fmtFecha(row.vencimiento);
-        },
-      },
+      /* Sin columna de vencimiento desde el 24/11/2026: las fechas que manda
+         la prestataria no son confiables y no se usan (rutas/informe-9dj.js,
+         USAR_VENCIMIENTO_DEL_ARCHIVO). Lo que vale es el mes que cubre. */
       {
         field: 'idLocal',
         headerName: 'Local del padrón',
@@ -537,7 +526,7 @@ function Informe9DJ() {
     () => [
       { field: 'id', headerName: 'N°', width: 70 },
       { field: 'nombreArchivo', headerName: 'Archivo', flex: 1, minWidth: 180 },
-      { field: 'periodo', headerName: 'Período', width: 130 },
+      { field: 'periodo', headerName: 'Mes que cubre', width: 150, valueGetter: (_v, row) => textoPeriodo(row.periodo) },
       { field: 'filas', headerName: 'Filas', width: 80 },
       {
         field: 'estado',
@@ -680,7 +669,8 @@ function Informe9DJ() {
 
       {resultado && (
         <Aviso tipo="ok" titulo="Informe aplicado">
-          {resultado.confirmados + resultado.completados} contrato(s) confirmado(s) · {resultado.creados} contrato(s) nuevo(s) ·{' '}
+          {resultado.confirmados + resultado.completados + (resultado.renovados ?? 0)} contrato(s) confirmado(s) o renovado(s) ·{' '}
+          {resultado.creados} contrato(s) nuevo(s) ·{' '}
           {resultado.altas} alta(s) de local · {resultado.retirados} baja(s) · {resultado.pendientes} pendiente(s) para la próxima.
         </Aviso>
       )}
@@ -689,30 +679,38 @@ function Informe9DJ() {
       {!carga && (
         <>
           <Aviso tipo="info" titulo="Cómo funciona">
-            Subí el archivo que mandó la prestataria (planilla Excel o CSV; también PDF con capa de texto). El sistema lo lee, verifica
-            cada CUIT por su dígito y lo cruza contra el padrón. <strong>Nada cambia hasta que revises y apliques.</strong> Si el
-            archivo es una foto o un escaneo, pedí el informe en planilla.
+            Primero elegí <strong>el mes que cubre el informe</strong>, y después subí el archivo que mandó la prestataria
+            (planilla Excel o CSV; también PDF con capa de texto). El sistema lo lee, verifica cada CUIT por su dígito y lo cruza
+            contra el padrón. <strong>Nada cambia hasta que revises y apliques.</strong> Las fechas de vencimiento que trae el
+            archivo no se usan: <strong>cada contrato del informe queda vigente un mes desde el día en que se carga</strong> (si
+            se carga el 15 de octubre, hasta el 15 de noviembre). Si en ese mes no se carga el informe siguiente, los contratos
+            vencen y los locales vuelven al circuito. Si el archivo es una foto o un escaneo, pedí el informe en planilla.
           </Aviso>
 
+          {/* El mes es OBLIGATORIO (24/11/2026): sin él no se puede subir. */}
           <div className="barra-lote">
             <label className="campo" htmlFor="periodo-9dj">
-              <span>Período que cubre (opcional)</span>
+              <span>1. Mes que cubre el informe</span>
               <input
                 id="periodo-9dj"
-                type="text"
+                type="month"
                 value={periodo}
+                max={hoyISO().slice(0, 7)}
                 onChange={(e) => setPeriodo(e.target.value)}
-                placeholder="ej.: octubre 2026"
-                maxLength={30}
+                required
               />
             </label>
-            <label className="btn-primario" style={{ cursor: 'pointer' }}>
-              {ocupado ? 'Leyendo…' : 'Subir el informe'}
+            <label
+              className="btn-primario"
+              style={periodo ? { cursor: 'pointer' } : { cursor: 'not-allowed', opacity: 0.5 }}
+              title={periodo ? undefined : 'Primero elegí el mes que cubre el informe'}
+            >
+              {ocupado ? 'Leyendo…' : '2. Subir el informe'}
               <input
                 type="file"
                 accept=".csv,.tsv,.txt,.xlsx,.pdf"
                 style={{ display: 'none' }}
-                disabled={ocupado}
+                disabled={ocupado || !periodo}
                 onChange={(e) => {
                   subir(e.target.files?.[0]);
                   e.target.value = '';
@@ -726,7 +724,19 @@ function Informe9DJ() {
       {/* ================= CON CARGA ABIERTA: la revisión ================= */}
       {carga && (
         <>
-
+          {carga.periodo && (
+            <p className="texto-explicacion">
+              Informe de <strong>{textoPeriodo(carga.periodo)}</strong> · archivo {carga.nombreArchivo} · {filas.length} fila(s)
+              {filas[0]?.vencimiento && (
+                <>
+                  {' '}
+                  · al aplicarlo, sus contratos quedan vigentes hasta el <strong>{fmtFecha(filas[0].vencimiento)}</strong> (un mes
+                  desde la carga)
+                </>
+              )}
+              .
+            </p>
+          )}
 
           {carga.advertencia && (
             <Aviso tipo="alerta" titulo="El archivo vino en PDF">
@@ -848,7 +858,7 @@ function Informe9DJ() {
             {sinFrecuencia === 0 ? 'todos con frecuencia cargada' : `${sinFrecuencia} sin frecuencia`}. Son los del último
             informe aplicado
             {contratos.informe
-              ? ` (N° ${contratos.informe.id}${contratos.informe.periodo ? `, ${contratos.informe.periodo}` : ''}, aplicado el ${fmtFecha(String(contratos.informe.fechaAplicacion ?? '').slice(0, 10))})`
+              ? ` (N° ${contratos.informe.id}${contratos.informe.periodo ? `, ${textoPeriodo(contratos.informe.periodo)}` : ''}, aplicado el ${fmtFecha(String(contratos.informe.fechaAplicacion ?? '').slice(0, 10))})`
               : ' (todavía ninguno)'}
             , más los contratos presentados por los titulares y aprobados, y los cargados por la oficina. La frecuencia es la
             cantidad de veces por semana que pasa la prestataria; se guarda al elegirla.

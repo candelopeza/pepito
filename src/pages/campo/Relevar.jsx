@@ -28,6 +28,14 @@
    carga sale SIN coordenada, no con una vieja. La hora la pone el store al
    guardar (datos/DatosProvider.jsx → crearRelevamiento).
 
+   >>> LA FOTO DEL LOCAL (22/11/2026) <<<
+   El agente puede sacarle una foto al local y queda guardada con el
+   relevamiento (se ve en la ficha, en "Relevamiento de origen"). Es OPCIONAL:
+   no traba la carga. Viaja con el relevamiento, también sin señal. Se guarda
+   si la base tiene la tabla `archivo` (backend/sql/08); si no, el campo lo
+   avisa. Al corregir una carga del día se puede sacar otra: se agrega, la
+   anterior no se borra. Se apaga con FOTO_EN_RELEVAMIENTO = false.
+
    TRABAJO SIN CONEXIÓN (requisito no negociable): si no hay señal, la carga
    queda guardada en el teléfono (datos/colaSinConexion.js) y se envía sola al
    volver la conexión, con la fecha y la coordenada del momento del guardado.
@@ -37,7 +45,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
-import Campo, { CampoSelect, CampoTexto } from '../../components/ui/Campo';
+import Campo, { CampoFoto, CampoSelect, CampoTexto } from '../../components/ui/Campo';
 import Aviso from '../../components/ui/Aviso';
 import Badge from '../../components/ui/Badge';
 import Grilla from '../../components/ui/Grilla';
@@ -86,6 +94,15 @@ const POSICION_RECIENTE_MS = 2 * 60 * 1000;
 
 const VACIO = { direccionRelevada: '', nombreLocal: '', rubro: '', clasificacion: '', observaciones: '' };
 
+/* La foto del local en el relevamiento. En false el campo no aparece. */
+const FOTO_EN_RELEVAMIENTO = true;
+/* true: en el teléfono abre directo la cámara y no deja elegir una foto de la
+   galería (como en la entrega de cédulas). Va en false porque en la práctica
+   la carga a veces se completa después de salir del local (ver arriba): con la
+   cámara obligatoria, la foto sacada en el lugar no se podría adjuntar. */
+const FOTO_SOLO_CAMARA = false;
+const SIN_FOTO = { imagen: '', nombre: '' };
+
 function Relevar() {
   const navegar = useNavigate();
   const { usuario, rol } = useRol();
@@ -99,11 +116,15 @@ function Relevar() {
     editarRelevamiento,
     pendientesSinConexion = [],
     descartarPendiente,
+    capacidades,
   } = useDatos();
+  // La foto se guarda si la base tiene la tabla `archivo` (backend/sql/08).
+  const fotoSeGuarda = Boolean(capacidades?.archivos);
   // El relevamiento que se está corrigiendo (sus cargas del día). null = carga nueva.
   const [corrigiendo, setCorrigiendo] = useState(null);
 
   const [datos, setDatos] = useState(VACIO);
+  const [foto, setFoto] = useState(SIN_FOTO);
   const [errores, setErrores] = useState({});
   const [guardando, setGuardando] = useState(false);
   // El estado arranca resuelto si el navegador no tiene geolocalización: así
@@ -187,19 +208,24 @@ function Relevar() {
     setGuardando(true);
     // El rubro va con su número de catálogo (y el nombre, por las dudas).
     const rubroId = rubros.find((r) => r.nombre === datos.rubro)?.id ?? null;
+    // La foto va solo si se puede guardar: si no, el servidor la ignoraría y
+    // en la cola sin conexión ocuparía lugar para nada.
+    const conFoto = fotoSeGuarda && foto.imagen ? { foto: foto.imagen, fotoNombre: foto.nombre || null } : {};
     if (corrigiendo) {
       // Corregir una carga del día no cambia la coordenada ni la hora: esas
       // son las del momento en que se hizo el relevamiento.
-      const ok = await editarRelevamiento(corrigiendo.id, { ...datos, rubroId });
+      const ok = await editarRelevamiento(corrigiendo.id, { ...datos, rubroId, ...conFoto });
       setGuardando(false);
       if (!ok) return;
       setCorrigiendo(null);
       setDatos(VACIO);
+      setFoto(SIN_FOTO);
       return;
     }
     const resultado = await crearRelevamiento({
       ...datos,
       rubroId,
+      ...conFoto,
       latitud: reciente ? pos.latitud : null,
       longitud: reciente ? pos.longitud : null,
       offline: !enLinea,
@@ -217,6 +243,7 @@ function Relevar() {
 
     // Se limpia para el siguiente: en la calle se cargan varios seguidos.
     setDatos(VACIO);
+    setFoto(SIN_FOTO);
   }
 
   const clasificacionElegida = CLASIFICACIONES.find((c) => c.id === datos.clasificacion);
@@ -261,6 +288,7 @@ function Relevar() {
     const local = localPorId(r.localId);
     setErrores({});
     setCorrigiendo(r);
+    setFoto(SIN_FOTO);
     setDatos({
       direccionRelevada: r.direccionRelevada ?? '',
       nombreLocal: local?.nombreLocal ?? '',
@@ -356,6 +384,22 @@ function Relevar() {
           error={errores.clasificacion}
           ayuda={clasificacionElegida?.descripcion}
         />
+        {FOTO_EN_RELEVAMIENTO && (
+          <CampoFoto
+            id="rel-foto"
+            etiqueta="Foto del local (opcional)"
+            soloCamara={FOTO_SOLO_CAMARA}
+            valor={foto.imagen}
+            onChange={(imagen, nombre) => setFoto({ imagen, nombre })}
+            ayuda={
+              !fotoSeGuarda
+                ? 'Esta base todavía no guarda fotos.'
+                : corrigiendo?.foto
+                  ? 'Este relevamiento ya tiene una foto. Si sacás otra, se agrega: la anterior no se borra.'
+                  : 'El frente del local. Queda guardada con el relevamiento.'
+            }
+          />
+        )}
         <CampoTexto
           id="rel-obs"
           etiqueta="Observaciones"
@@ -374,6 +418,7 @@ function Relevar() {
               onClick={() => {
                 setCorrigiendo(null);
                 setDatos(VACIO);
+                setFoto(SIN_FOTO);
               }}
             >
               Cancelar la corrección
@@ -404,6 +449,9 @@ function Relevar() {
               <li key={r.id}>
                 <strong>{localPorId(r.localId)?.nombreLocal ?? r.direccionRelevada}</strong>
                 <span>{fmtFechaHora(r.fechaHora)}</span>
+                {FOTO_EN_RELEVAMIENTO && fotoSeGuarda && (
+                  <Badge color={r.foto ? 'verde' : 'gris'}>{r.foto ? 'Con foto' : 'Sin foto'}</Badge>
+                )}
                 {!ventanaCerrada && (
                   <button type="button" className="btn-tabla" onClick={() => corregir(r)}>
                     Corregir

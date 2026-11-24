@@ -41,7 +41,8 @@ import { cicloActual, insertarTramite, recortarObservacion } from '../consultas.
 import { ID_ESTADO, ID_TDOC, ID_TTRAMITE } from '../mapeo.js';
 import { hoyISO } from '../../src/dominio/fechas.js';
 import { ErrorDeLectura, huellaDeArchivo, leerInforme } from '../lector-informe-9dj.js';
-import { requiereRol } from '../middlewares/usuario.js';
+import { firmante, requiereRol } from '../middlewares/usuario.js';
+import { nombreDeActor } from '../personas.js';
 
 const router = Router();
 
@@ -286,11 +287,11 @@ async function detalleDeCarga(informe) {
     formato: informe.formato,
     advertencia: informe.advertencia,
     estado: informe.estado,
-    usuarioCarga: informe.usuarioCarga,
+    usuarioCarga: nombreDeActor(informe.usuarioCarga),
     fechaCarga: informe.fechaCarga,
-    usuarioAplicacion: informe.usuarioAplicacion,
+    usuarioAplicacion: nombreDeActor(informe.usuarioAplicacion),
     fechaAplicacion: informe.fechaAplicacion,
-    usuarioAnulacion: informe.usuarioAnulacion,
+    usuarioAnulacion: nombreDeActor(informe.usuarioAnulacion),
     motivoAnulacion: informe.motivoAnulacion,
     cuentas,
     /* La alarma de informe incompleto, con sus números a la vista. */
@@ -319,7 +320,7 @@ function aFilaFront(f) {
     idLocal: f.idLocal,
     candidatos: f.candidatos ? f.candidatos.split(',').map(Number) : [],
     decision: f.decision,
-    usuarioDecision: f.usuarioDecision,
+    usuarioDecision: nombreDeActor(f.usuarioDecision),
     datosAlta: f.datosAlta ? JSON.parse(f.datosAlta) : null,
     efecto: f.efecto,
   };
@@ -340,7 +341,7 @@ router.get('/cargas', async (_req, res, next) => {
         LEFT JOIN informe_9dj_fila f ON f.id_informe = i.id_informe AND f.habilita = 1 AND f.cruce <> 'BAJA'
        WHERE i.habilita = 1
        GROUP BY i.id_informe ORDER BY i.fecha_carga DESC`);
-    res.json(cargas.map((c) => ({ ...c, filas: Number(c.filas) })));
+    res.json(cargas.map((c) => ({ ...c, usuarioCarga: nombreDeActor(c.usuarioCarga), usuarioAplicacion: nombreDeActor(c.usuarioAplicacion), filas: Number(c.filas) })));
   } catch (e) {
     next(e);
   }
@@ -469,7 +470,7 @@ router.post('/cargas', async (req, res, next) => {
     if (repetida) {
       return res.status(409).json({
         error:
-          `Este archivo ya se cargó: es "${repetida.nombreArchivo}", subido por ${repetida.usuarioCarga} ` +
+          `Este archivo ya se cargó: es "${repetida.nombreArchivo}", subido por ${nombreDeActor(repetida.usuarioCarga)} ` +
           `(carga N° ${repetida.idInforme}, estado ${repetida.estado}).`,
       });
     }
@@ -528,7 +529,7 @@ router.post('/cargas', async (req, res, next) => {
           periodo ? String(periodo).slice(0, 30) : null,
           lectura.formato,
           lectura.advertencia ?? null,
-          req.usuario.nombre,
+          firmante(req),
         ],
       );
       for (const fila of lectura.filas) {
@@ -673,7 +674,7 @@ router.put('/cargas/:id/filas/:idFila', async (req, res, next) => {
       `UPDATE informe_9dj_fila
           SET decision = ?, id_local = ?, datos_alta = ?, usuario_decision = ?, fecha_decision = NOW()
         WHERE id_fila = ?`,
-      [decision, idLocal, datosAlta, req.usuario.nombre, fila.idFila],
+      [decision, idLocal, datosAlta, firmante(req), fila.idFila],
     );
     res.json({ ok: true, id: fila.idFila, decision, idLocal, datosAlta: datosAlta ? JSON.parse(datosAlta) : null });
   } catch (e) {
@@ -896,7 +897,7 @@ router.post('/cargas/:id/aplicar', async (req, res, next) => {
             baja.nombreLocal,
             baja.direccion,
             idLocal,
-            req.usuario.nombre,
+            firmante(req),
             baja.idTramite,
           ],
         );
@@ -905,7 +906,7 @@ router.post('/cargas/:id/aplicar', async (req, res, next) => {
 
       await cx.execute(
         "UPDATE informe_9dj SET estado = 'APLICADO', usuario_aplicacion = ?, fecha_aplicacion = NOW() WHERE id_informe = ?",
-        [req.usuario.nombre, informe.idInforme],
+        [firmante(req), informe.idInforme],
       );
     });
 
@@ -991,7 +992,7 @@ router.post('/cargas/:id/anular', requiereRol('coordinacion', 'direccion'), asyn
       await cx.execute(
         `UPDATE informe_9dj SET estado = 'ANULADO', usuario_anulacion = ?, fecha_anulacion = NOW(), motivo_anulacion = ?
           WHERE id_informe = ?`,
-        [req.usuario.nombre, motivo.slice(0, 255), informe.idInforme],
+        [firmante(req), motivo.slice(0, 255), informe.idInforme],
       );
     });
 

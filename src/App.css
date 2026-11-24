@@ -2226,3 +2226,16 @@
   .cedula-oficial-documentacion { font-size: 11px; }
   .cedula-oficial-qr img { width: 64px; height: 64px; }
 }
+
+/* Notificaciones: la lista de cédulas que no entran en el lote (19/11/2026). */
+.lista-faltantes {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+.lista-faltantes li {
+  margin: 2px 0;
+}
+
+/* Un párrafo que explica qué hace un formulario: tamaño y contraste de texto
+   normal (el gris claro de .texto-chico no se leía en los modales). */
+.texto-explicacion { font-size: 14px; color: #37474f; line-height: 1.5; margin: 0 0 16px; }

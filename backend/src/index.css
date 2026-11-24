@@ -1,0 +1,27 @@
+/* ============================================================================
+   index.css  —  ESTILOS GLOBALES (se cargan una sola vez, desde main.jsx)
+   ----------------------------------------------------------------------------
+   QUÉ VA ACÁ:      reset, body, tipografía y colores base de toda la app.
+   QUÉ *NO* VA ACÁ: estilos de componentes o páginas -> esos van en App.css.
+   SE CARGA EN:     src/main.jsx  (antes que App.css)
+   ============================================================================ */
+
+
+/* ========== 1. RESET ==========
+   Si algo aparece con márgenes o padding raros, revisá acá primero. */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+
+/* ========== 2. BODY / BASE ==========
+   Fuente y color de fondo de toda la app.
+   Si cambia el look general de golpe, el problema está en este bloque. */
+body {
+  /* Poppins viene empaquetada (main.jsx). Lo que sigue es respaldo si no cargó. */
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f0f4f8;
+  color: #333;
+}

@@ -24,11 +24,11 @@
    podría mandar el legajo de un administrador en una cabecera.
    ============================================================================ */
 
-import { consultar } from '../conexion-bd.js';
+import { consultar, ejecutar } from '../conexion-bd.js';
 import { ROL_POR_TUSUARIO } from '../mapeo.js';
 import { personaDelToken, tokenDelPedido } from '../cidituc.js';
 import { tiene } from '../capacidades.js';
-import { asegurarPersonas, etiquetaRol, nombreVisible, olvidarPersonas } from '../personas.js';
+import { asegurarPersonas, etiquetaRol, mismaPersona, nombreVisible, olvidarPersonas } from '../personas.js';
 
 /* 'administrador' se sumó: es el perfil de control total que ya existía en el
    front (src/auth/roles.js) y que el backend no reconocía, así que toda
@@ -53,7 +53,7 @@ export function aceptaRolDeclarado() {
 /* Caché de los usuarios de la base. Son tres filas hoy y no cambian entre
    pedido y pedido: consultarlas en cada request es latencia regalada. Se
    vence sola para que un alta nueva no obligue a reiniciar el servidor. */
-let cache = { usuarios: null, vence: 0 };
+let cache = { usuarios: null, pendientes: [], vence: 0 };
 const DURACION_CACHE_MS = 60_000;
 
 /* `fresco`: ignorar la caché y leer la tabla ahora. Lo pide GET /sesion, que
@@ -62,18 +62,48 @@ const DURACION_CACHE_MS = 60_000;
    ni reiniciar. La lectura fresca renueva la caché para los demás pedidos. */
 async function usuariosDeLaBase(fresco = false) {
   if (!fresco && cache.usuarios && Date.now() < cache.vence) return cache.usuarios;
-  const columnas = tiene('nombreUsuario') ? 'id_usuario, id_persona, id_tusuario, nombre_completo' : 'id_usuario, id_persona, id_tusuario';
-  const filas = await consultar(`SELECT ${columnas} FROM usuario WHERE habilita = 1`);
-  const mapa = new Map(filas.map((u) => [String(u.idPersona).toLowerCase(), u]));
-  cache = { usuarios: mapa, vence: Date.now() + DURACION_CACHE_MS };
+  const columnas = ['id_usuario', 'id_persona', 'id_tusuario'];
+  if (tiene('nombreUsuario')) columnas.push('nombre_completo');
+  if (tiene('cuilUsuario')) columnas.push('cuil');
+  const filas = await consultar(`SELECT ${columnas.join(', ')} FROM usuario WHERE habilita = 1`);
+  const conPersona = filas.filter((u) => String(u.idPersona ?? '').trim());
+  const mapa = new Map(conPersona.map((u) => [String(u.idPersona).trim().toLowerCase(), u]));
+  // Los dados de alta por CUIL que todavía no entraron nunca (personas.js).
+  const pendientes = filas.filter((u) => !String(u.idPersona ?? '').trim() && u.cuil);
+  cache = { usuarios: mapa, pendientes, vence: Date.now() + DURACION_CACHE_MS };
   return mapa;
+}
+
+/* >>> EL PRIMER INGRESO DE UN AGENTE DADO DE ALTA POR CUIL (19/11/2026) <<<
+   Si el número de persona del token no está en `usuario`, puede ser alguien
+   que dieron de alta en Accesos con su CUIL y entra por primera vez. Si el
+   documento que devuelve CiDiTuc corresponde al CUIL de una fila pendiente,
+   esa fila queda vinculada a su número de persona para siempre. La condición
+   `id_persona IS NULL` del UPDATE evita vincular dos veces la misma fila. */
+async function vincularPorCuil(persona) {
+  if (!tiene('cuilUsuario') || !persona.cuil) return null;
+  const candidata = cache.pendientes.find((u) => mismaPersona(persona.cuil, u.cuil));
+  if (!candidata) return null;
+  try {
+    const resultado = await ejecutar(
+      "UPDATE usuario SET id_persona = ? WHERE id_usuario = ? AND (id_persona IS NULL OR id_persona = '')",
+      [persona.idPersona, candidata.idUsuario],
+    );
+    olvidarUsuarios();
+    if (!resultado.affectedRows) return null;
+    console.log(`[usuarios] primer ingreso: el usuario ${candidata.idUsuario} quedó vinculado a su cuenta de CiDiTuc`);
+    return { ...candidata, idPersona: persona.idPersona };
+  } catch (e) {
+    console.warn(`[usuarios] no se pudo vincular por CUIL al usuario ${candidata.idUsuario}: ${e.message}`);
+    return null;
+  }
 }
 
 /* Se llama después de dar de alta, editar o dar de baja un usuario desde
    Accesos → Usuarios: el cambio vale en el próximo pedido, sin esperar el
    minuto de la caché. */
 export function olvidarUsuarios() {
-  cache = { usuarios: null, vence: 0 };
+  cache = { usuarios: null, pendientes: [], vence: 0 };
   olvidarPersonas();
 }
 
@@ -114,7 +144,9 @@ export async function identificarUsuario(req, _res, next) {
     if (token) {
       const persona = await personaDelToken(token);
       if (persona) {
-        const registrado = (await usuariosDeLaBase(req.path === '/sesion')).get(persona.idPersona.toLowerCase());
+        const registrado =
+          (await usuariosDeLaBase(req.path === '/sesion')).get(persona.idPersona.toLowerCase()) ??
+          (await vincularPorCuil(persona));
         if (registrado) await guardarNombre(registrado, persona.nombre);
         const rol = registrado ? rolDe(registrado) : 'titular';
         req.usuario = {

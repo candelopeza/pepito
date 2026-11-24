@@ -19,6 +19,7 @@ import {
   filasDesdeTexto,
   huellaDeArchivo,
   leerInforme,
+  motivoDeFecha,
   normalizarFecha,
   validarCuit,
 } from '../backend/lector-informe-9dj.js';
@@ -139,6 +140,8 @@ const csv = (texto) => Buffer.from(texto);
     direccion: 'SAN MARTIN 450',
     numeroContrato: 'CON-0012',
     vencimiento: '2026-12-31',
+    // Desde el 04/11/2026 cada fila dice si el vencimiento se pudo leer.
+    motivoVencimiento: null,
     crudo: '20-12345678-6 | ALMACEN DON PEDRO | SAN MARTIN 450 | CON-0012 | 31/12/2026',
   });
   verificar('el formato que informa es planilla', formato, 'planilla');
@@ -239,6 +242,18 @@ await verificarRechazo(
   leerInforme(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), 'foto-informe.jpg'),
   'formatos aceptados',
 );
+
+/* ===========================================================================
+   VENCIMIENTOS QUE DICEN "NO HAY FECHA" (20/11/2026)
+   El PDF real de la prestataria trae "SIN CONTRATO" en la columna del
+   vencimiento: es una respuesta, no un error. Una barra doble ("25//08/26")
+   tampoco cambia la fecha. Un año de tres cifras sí es un error.
+   =========================================================================== */
+seccion('Vencimiento: marcas de "sin fecha" y barras dobles');
+verificar('"SIN CONTRATO" es vencimiento no informado, sin error', [normalizarFecha('SIN CONTRATO'), motivoDeFecha('SIN CONTRATO')], [null, null]);
+verificar('"S/C" también', motivoDeFecha('S/C'), null);
+verificar('una barra doble no cambia la fecha', normalizarFecha('25//08/26'), '2026-08-25');
+verificar('un año de tres cifras sigue siendo un error', motivoDeFecha('09/08/207') !== null, true);
 
 /* ===========================================================================
    RESULTADO

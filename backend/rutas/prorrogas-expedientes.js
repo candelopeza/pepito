@@ -27,7 +27,8 @@ import { Router } from 'express';
 import { consultarEn, ejecutar, enTransaccion } from '../conexion-bd.js';
 import { insertarTramite, localPorId, parametros, prorrogasDelCiclo, recortarObservacion, tramitePorId } from '../consultas.js';
 import { ID_ESTADO, ID_TTRAMITE, datosRegistralesCompletos, faltantesRegistrales } from '../mapeo.js';
-import { requiereRol } from '../middlewares/usuario.js';
+import { firmante, requiereRol } from '../middlewares/usuario.js';
+import { nombreDeActor } from '../personas.js';
 import { ErrorActo, ejecutarActo } from '../actos.js';
 import { auditoriaDisponible } from '../auditoria.js';
 import { hoyISO, sumarDias } from '../../src/dominio/fechas.js';
@@ -429,7 +430,7 @@ async function insertarNovedad(cx, req, { idTramite, detalle, idEstadoNuevo = nu
     VALUES (?, ?, ?, ?, ?, ?)`;
   const parametrosSql = [
     idTramite,
-    req.usuario?.nombre ?? 'sistema',
+    firmante(req),
     req.usuario?.id ?? null,
     String(detalle).slice(0, 500),
     idEstadoNuevo,
@@ -530,7 +531,7 @@ router.get('/expedientes/novedades', async (req, res, next) => {
         idEstadoNuevo: n.idEstadoNuevo,
         publica: Boolean(n.publica),
         // El autor es dato interno de la oficina.
-        ...(esTitular ? {} : { usuario: n.usuario }),
+        ...(esTitular ? {} : { usuario: nombreDeActor(n.usuario) }),
       })),
     );
   } catch (e) {

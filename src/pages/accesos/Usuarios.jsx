@@ -21,11 +21,10 @@
    aplicación no administra contraseñas propias.
 
    >>> LO QUE GUARDA LA BASE DEL ÁREA <<<
-   La tabla `usuario` tiene el LEGAJO de la persona (id_persona, el mismo que
-   va a usar CiDiTuc), su tipo de usuario y si está activa. No tiene nombre ni
-   correo: hasta que esté CiDiTuc, la persona se identifica por el legajo. El
-   campo de correo sigue acá y aparece solo si el backend lo devuelve, para el
-   día que la base lo tenga.
+   La tabla `usuario` tiene el número de persona de CiDiTuc (id_persona), el
+   CUIL, el nombre, su tipo de usuario y si está activa. El campo de correo
+   sigue acá y aparece solo si el backend lo devuelve, para el día que la base
+   lo tenga.
 
    >>> POR QUÉ SE DA DE BAJA Y NO SE BORRA <<<
    Porque el usuario firmó actuaciones (tramite.id_usuario apunta a él). La
@@ -54,13 +53,23 @@ import { LISTA_ROLES, ROLES } from '../../auth/roles';
 import { useDatos } from '../../datos/datosContexto';
 import { ROL_ADMINISTRADOR, puedeEditar, puedeVerRuta, rolHabilitado } from '../../config/modulos';
 
-/* >>> EL NÚMERO DE PERSONA NO SE MUESTRA (18/11/2026) <<<
-   La grilla muestra el NOMBRE. El número de persona de CiDiTuc (`legajo`)
-   aparece solo dentro de este formulario, porque hace falta para dar de alta
-   a alguien, y el backend se lo manda solo a quien administra usuarios. El
-   nombre se completa solo cuando la persona entra por CiDiTuc, o se escribe
-   acá para quien todavía no entró. */
-const USUARIO_VACIO = { legajo: '', nombreCompleto: '', email: '', rol: '', activo: true };
+/* >>> EL ALTA ES CON EL CUIL (19/11/2026) <<<
+   El número de persona de CiDiTuc no se muestra ni se pide: nadie lo conoce
+   y es un dato sensible. Se da de alta a la persona con su CUIL y queda
+   "esperando el primer ingreso"; la primera vez que entra por CiDiTuc el
+   backend la reconoce por su documento y la vincula sola
+   (backend/middlewares/usuario.js, vincularPorCuil). El nombre también se
+   completa solo al entrar, o se escribe acá. */
+const USUARIO_VACIO = { cuil: '', nombreCompleto: '', email: '', rol: '', activo: true };
+
+/* El CUIL se escribe de corrido y los guiones se ponen solos (como en el
+   formulario del local, components/FormLocal.jsx). */
+function formatearCuil(valor) {
+  const d = String(valor ?? '').replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 10) return `${d.slice(0, 2)}-${d.slice(2)}`;
+  return `${d.slice(0, 2)}-${d.slice(2, 10)}-${d.slice(10)}`;
+}
 
 function Usuarios() {
   const { rol, usuario } = useRol();
@@ -89,7 +98,7 @@ function Usuarios() {
   const [editando, setEditando] = useState(null);
   const [errores, setErrores] = useState({});
 
-  // ¿La base guarda correo? La del área no: entonces la persona es su legajo.
+  // ¿La base guarda correo? La del área no: entonces la columna no aparece.
   const hayCorreo = usuarios.some((u) => u.email);
   const esElPropio = useCallback(
     (u) => Boolean((usuario.id && u.id === usuario.id) || (u.email && u.email === usuario.email)),
@@ -108,11 +117,14 @@ function Usuarios() {
   /* ---------- Alta / edición ---------- */
   async function guardar() {
     const e = {};
-    const legajo = String(editando.legajo ?? '').trim();
+    const cuil = String(editando.cuil ?? '').trim();
     const nombreCompleto = String(editando.nombreCompleto ?? '').trim();
     const email = String(editando.email ?? '').trim();
-    if (!legajo) e.legajo = 'El número de persona es obligatorio.';
-    else if (!/^\d+$/.test(legajo)) e.legajo = 'Son solo números.';
+    const digitosCuil = cuil.replace(/\D/g, '');
+    // Obligatorio en el alta. Los usuarios viejos (de antes del 19/11/2026)
+    // no lo tienen y se pueden editar igual.
+    if (!editando.id && !digitosCuil) e.cuil = 'El CUIL es obligatorio.';
+    else if (digitosCuil && digitosCuil.length !== 11) e.cuil = 'El CUIL tiene 11 números.';
     if (hayCorreo) {
       if (!email) e.email = 'El correo es obligatorio.';
       else if (editando.rol !== 'titular' && !email.toLowerCase().endsWith('@smt.gob.ar')) {
@@ -123,9 +135,9 @@ function Usuarios() {
     setErrores(e);
     if (Object.keys(e).length) return;
 
-    // Se cierra solo si se guardó: si el servidor lo rechaza (número de
-    // persona repetido, por ejemplo), el formulario queda abierto con lo escrito.
-    if (await guardarEnCatalogo('usuarios', { ...editando, legajo, nombreCompleto, email })) setEditando(null);
+    // Se cierra solo si se guardó: si el servidor lo rechaza (CUIL repetido,
+    // por ejemplo), el formulario queda abierto con lo escrito.
+    if (await guardarEnCatalogo('usuarios', { ...editando, cuil, nombreCompleto, email })) setEditando(null);
   }
 
   /* ---------- Las columnas ---------- */
@@ -139,8 +151,15 @@ function Usuarios() {
         minWidth: 200,
         // Sin nombre todavía: se ve su tipo y su número interno, en gris, para
         // que se note que falta cargarlo.
-        renderCell: ({ row }) => (row.sinNombre ? <span className="texto-gris">{row.nombre}</span> : row.nombre),
+        renderCell: ({ row }) => (
+          <span className="celda-estado">
+            {row.sinNombre ? <span className="texto-gris">{row.nombre}</span> : row.nombre}
+            {/* Dado de alta por CUIL y todavía no entró nunca por CiDiTuc. */}
+            {row.pendiente && <Badge color="amarillo">esperando el primer ingreso</Badge>}
+          </span>
+        ),
       },
+      { field: 'cuil', headerName: 'CUIL', width: 140 },
       ...(hayCorreo ? [{ field: 'email', headerName: 'Correo', flex: 1, minWidth: 220 }] : []),
       {
         field: 'rolEtiqueta',
@@ -192,7 +211,7 @@ function Usuarios() {
                   setErrores({});
                   setEditando({
                     id: row.id,
-                    legajo: row.legajo ?? '',
+                    cuil: row.cuil ?? '',
                     nombreCompleto: row.nombreCompleto ?? '',
                     email: row.email,
                     rol: row.rol,
@@ -274,13 +293,17 @@ function Usuarios() {
               ayuda="Se completa solo cuando la persona entra por CiDiTuc. Cargalo si todavía no entró."
             />
             <Campo
-              id="usr-legajo"
-              etiqueta="Número de persona de CiDiTuc"
-              valor={editando.legajo}
-              onChange={(v) => setEditando({ ...editando, legajo: v })}
-              error={errores.legajo}
+              id="usr-cuil"
+              etiqueta="CUIL"
+              valor={editando.cuil}
+              onChange={(v) => setEditando({ ...editando, cuil: formatearCuil(v) })}
+              error={errores.cuil}
               teclado="numeric"
-              ayuda="Solo sirve para reconocerla cuando entra. No se muestra en ninguna otra parte del sistema."
+              ayuda={
+                editando.id
+                  ? 'El de la persona, el mismo con el que entra a CiDiTuc.'
+                  : 'Escribilo de corrido. La primera vez que la persona entre por CiDiTuc, el sistema la reconoce por su CUIL y le da este tipo de usuario.'
+              }
             />
             {hayCorreo && (
               <Campo

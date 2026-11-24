@@ -93,3 +93,40 @@ export function sinNumerosDePersona(texto) {
     .replace(/\b(por) (\d{5,})\b/gi, (_m, por, numero) => `${por} ${nombreDeActor(numero)}`)
     .replace(/\((\d{5,}), (\d{4}-\d{2}-\d{2})\)/g, (_m, numero, fecha) => `(${nombreDeActor(numero)}, ${fecha})`);
 }
+
+/* ============================================================================
+   ALTA POR CUIL (19/11/2026)
+   ----------------------------------------------------------------------------
+   Quien da de alta a un agente en Accesos no conoce su número de persona de
+   CiDiTuc (ni tiene por qué). Lo da de alta con su CUIL: la fila queda en
+   `usuario` con id_persona vacío ("esperando el primer ingreso"). La primera
+   vez que esa persona entra por CiDiTuc, CiDiTuc nos dice su documento
+   (documento_persona, en cidituc.js) y el número de persona (el token): si el
+   documento corresponde al CUIL de una fila pendiente, se completa el
+   id_persona y desde ahí entra con su rol (middlewares/usuario.js).
+
+   CiDiTuc puede devolver el CUIL entero o solo el DNI. Los dos sirven: el DNI
+   son los 8 números del medio del CUIL (20-12345678-9 -> 12345678).
+   ============================================================================ */
+
+/* Solo los números. "20-12.345.678-9" -> "20123456789". */
+export function soloDigitos(texto) {
+  return String(texto ?? '').replace(/\D/g, '');
+}
+
+/* Un CUIL escrito de cualquier forma -> "20-12345678-9", o null si no tiene
+   11 números. */
+export function formatoCuil(texto) {
+  const d = soloDigitos(texto);
+  return d.length === 11 ? `${d.slice(0, 2)}-${d.slice(2, 10)}-${d.slice(10)}` : null;
+}
+
+/* ¿El documento que devolvió CiDiTuc es de la persona de este CUIL? */
+export function mismaPersona(documento, cuil) {
+  const doc = soloDigitos(documento);
+  const c = soloDigitos(cuil);
+  if (c.length !== 11 || !doc) return false;
+  if (doc.length === 11) return doc === c;
+  if (doc.length >= 6 && doc.length <= 8) return c.slice(2, 10).replace(/^0+/, '') === doc.replace(/^0+/, '');
+  return false;
+}

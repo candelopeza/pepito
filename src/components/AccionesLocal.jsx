@@ -198,8 +198,10 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
     opciones.push(...disponibles);
   }
   /* Ver la cédula emitida, desde cualquier pantalla. Requisito válido para las
-     dos alternativas de emisión (sección 9.6). */
-  if (cedulaPendiente) opciones.push({ id: 'ver-cedula', etiqueta: 'Ver cédula' });
+     dos alternativas de emisión (sección 9.6). El relevador no: la cédula
+     lleva razón social y CUIT, y él solo consulta (config/modulos.js,
+     ROLES_SOLO_CONSULTA). El notificador sí, porque es lo que entrega. */
+  if (cedulaPendiente && rol !== 'relevador') opciones.push({ id: 'ver-cedula', etiqueta: 'Ver cédula' });
   // "Completar datos" ya abre el mismo formulario: no se repite.
   if (
     (compacto || conPadron) &&
@@ -660,7 +662,9 @@ function AccionesLocal({ local, compacto = false, alTerminar, conPadron = false 
             </span>
           </div>
 
-          <p className="texto-chico">
+          {/* Texto legible, no .texto-chico (gris claro de 12px): es la
+              explicación de qué hace el botón y no se leía (19/11/2026). */}
+          <p className="texto-explicacion">
             El pedido a la dependencia se hace por fuera del sistema
             {parametros.correoSolicitudExpedientes ? (
               <>

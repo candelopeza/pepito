@@ -57,17 +57,20 @@ function vence(local) {
   return vigencia ? { fecha: vigencia, vencido: false } : null;
 }
 
-function ListaTarjetasLocales({ locales, alAbrir, alEditar = null, alNuevo = null }) {
+/* sinDatosRegistrales: relevador y notificador (config/modulos.js,
+   ROLES_SOLO_CONSULTA). Sin razón social, CUIT ni vencimiento, y la búsqueda
+   tampoco busca por esos datos. */
+function ListaTarjetasLocales({ locales, alAbrir, alEditar = null, alNuevo = null, sinDatosRegistrales = false }) {
   const [busqueda, setBusqueda] = useState('');
   const [cuantos, setCuantos] = useState(POR_TANDA);
 
   const encontrados = useMemo(() => {
     const q = normalizar(busqueda.trim());
     if (!q) return locales;
-    return locales.filter((l) =>
-      [l.id, l.nombreLocal, l.razonSocial, l.cuit, l.direccion, l.rubro].some((v) => normalizar(v).includes(q)),
-    );
-  }, [locales, busqueda]);
+    const campos = (l) =>
+      sinDatosRegistrales ? [l.id, l.nombreLocal, l.direccion, l.rubro] : [l.id, l.nombreLocal, l.razonSocial, l.cuit, l.direccion, l.rubro];
+    return locales.filter((l) => campos(l).some((v) => normalizar(v).includes(q)));
+  }, [locales, busqueda, sinDatosRegistrales]);
 
   const visibles = encontrados.slice(0, cuantos);
   const quedan = encontrados.length - visibles.length;
@@ -78,7 +81,7 @@ function ListaTarjetasLocales({ locales, alAbrir, alEditar = null, alNuevo = nul
         <input
           className="buscador"
           type="search"
-          placeholder="Buscar nombre, dirección, CUIT…"
+          placeholder={sinDatosRegistrales ? 'Buscar nombre o dirección…' : 'Buscar nombre, dirección, CUIT…'}
           aria-label="Buscar en el padrón"
           value={busqueda}
           onChange={(e) => {
@@ -98,7 +101,7 @@ function ListaTarjetasLocales({ locales, alAbrir, alEditar = null, alNuevo = nul
       ) : (
         <ul className="tarjetas-locales-lista">
           {visibles.map((l) => {
-            const v = vence(l);
+            const v = sinDatosRegistrales ? null : vence(l);
             return (
               <li key={l.id} className="tarjeta-local">
                 <div className="tarjeta-local-titulo">
@@ -108,7 +111,7 @@ function ListaTarjetasLocales({ locales, alAbrir, alEditar = null, alNuevo = nul
                   <span className="texto-chico">N° {l.id}</span>
                 </div>
                 <div className="tarjeta-local-direccion">{l.direccion || 'Sin dirección'}</div>
-                {(l.razonSocial || l.cuit) && (
+                {!sinDatosRegistrales && (l.razonSocial || l.cuit) && (
                   <div className="texto-chico">{[l.razonSocial, l.cuit].filter(Boolean).join(' · ')}</div>
                 )}
                 <div className="tarjeta-local-estado">

@@ -42,7 +42,7 @@
    La lista de abajo muestra qué pasó con cada carga.
    ============================================================================ */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader';
 import Campo, { CampoFoto, CampoSelect, CampoTexto } from '../../components/ui/Campo';
@@ -55,6 +55,8 @@ import { useRol } from '../../auth/rolContexto';
 import { CLASIFICACIONES } from '../../config/catalogos';
 import { fmtFecha, fmtFechaHora, hoyISO } from '../../dominio/fechas';
 import { quienLaCargo } from '../../datos/colaSinConexion';
+import { localesParecidos } from '../../dominio/duplicados';
+import { etiquetaEstado } from '../../dominio/estados';
 
 /* Las columnas del historial del agente. El estado de revisión es el dato
    que cierra el circuito: el relevamiento vale cuando coordinación lo revisó. */
@@ -109,6 +111,7 @@ function Relevar() {
     rubros,
     relevamientos,
     localPorId,
+    localesConEstado = [],
     crearRelevamiento,
     editarRelevamiento,
     pendientesSinConexion = [],
@@ -245,6 +248,18 @@ function Relevar() {
 
   const clasificacionElegida = CLASIFICACIONES.find((c) => c.id === datos.clasificacion);
 
+  /* ¿YA ESTÁ EN EL PADRÓN? (20/11/2026) Mientras escribe, se buscan locales
+     con ese nombre (dominio/duplicados.js, localesParecidos). Mismo nombre en
+     OTRA dirección es normal (sucursales): se informa y nada más. Mismo nombre
+     en la MISMA calle y altura es el aviso fuerte: probablemente se está por
+     cargar otra vez un local que ya existe. No frena el guardado: el agente
+     puede estar viendo un local nuevo en el lugar de uno cerrado. Al corregir
+     una carga del día no se cuenta el propio local. */
+  const parecidos = useMemo(() => {
+    const otros = corrigiendo ? localesConEstado.filter((l) => l.id !== corrigiendo.localId) : localesConEstado;
+    return localesParecidos(otros, datos.nombreLocal, datos.direccionRelevada);
+  }, [localesConEstado, corrigiendo, datos.nombreLocal, datos.direccionRelevada]);
+
   /* MIS CARGAS DE HOY (sección 6.2): las propias, del día y todavía sin
      control de coordinación. Son las únicas que el agente puede corregir; el
      servidor controla lo mismo. Hace falta haber entrado como un agente de la
@@ -328,6 +343,30 @@ function Relevar() {
           onChange={(v) => cambiar('nombreLocal', v)}
           error={errores.nombreLocal}
         />
+        {parecidos.mismoLugar.length > 0 && (
+          <Aviso tipo="alerta" titulo="Este local ya parece estar en el padrón">
+            Hay {parecidos.mismoLugar.length === 1 ? 'un local' : 'locales'} con el mismo nombre en la misma dirección:
+            <ul className="lista-faltantes">
+              {parecidos.mismoLugar.map((l) => (
+                <li key={l.id}>
+                  <EnlaceFicha id={l.id}>{l.nombreLocal}</EnlaceFicha> — {l.direccion} ({etiquetaEstado(l.estado)})
+                </li>
+              ))}
+            </ul>
+            Si es el mismo local, no hace falta cargarlo otra vez. Si lo guardás igual, queda como posible duplicado para que
+            lo revise la oficina.
+          </Aviso>
+        )}
+        {parecidos.mismoLugar.length === 0 && parecidos.totalSucursales > 0 && (
+          <Aviso tipo="info" titulo={`Ya hay ${parecidos.totalSucursales} local(es) con este nombre, en otra dirección`}>
+            Puede ser otra sucursal: si la dirección es distinta, cargalo tranquilo.
+            <ul className="lista-faltantes">
+              {parecidos.sucursales.map((l) => (
+                <li key={l.id}>{l.direccion}</li>
+              ))}
+            </ul>
+          </Aviso>
+        )}
         <CampoSelect
           id="rel-rubro"
           etiqueta="Rubro"

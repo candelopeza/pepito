@@ -35,7 +35,7 @@
 USE smt_grandes_generadores;
 
 -- >>> COMPLETAR: el CUIL de quien va a entrar como titular, con guiones. <<<
-SET @cuil = '27-00000000-0';
+SET @cuil = '27-45517392-8';
 
 INSERT INTO local
   (cuit, id_usuario, id_rubro, id_estado, razon_social, nombre_local,

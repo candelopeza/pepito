@@ -191,11 +191,28 @@ const cacheDatos = new Map();
 const DURACION_NOMBRE_MS = 10 * 60_000;
 const VACIO = { nombre: null, cuil: null };
 
+/* >>> NUNCA SE CAMBIA UN DATO BUENO POR UNO VACÍO (19/11/2026) <<<
+   Al abrir la app salen 15 pedidos juntos y cada uno le preguntaba a CiDiTuc
+   por la misma persona. Si uno fallaba (CiDiTuc lento, demasiados pedidos a
+   la vez), su respuesta vacía pisaba a la buena y la persona quedaba sin
+   nombre ni CUIL: el titular perdía sus locales al recargar. Ahora:
+     - los pedidos simultáneos por la misma persona esperan UNA sola consulta;
+     - lo último bueno de cada persona se guarda y se usa si CiDiTuc falla. */
+const enCurso = new Map();
+const ultimoBueno = new Map();
+
 async function datosDeLaPersona(idPersona, token) {
-  const plantilla = process.env.CIDITUC_URL_PERSONA;
-  if (!plantilla) return VACIO;
+  if (!process.env.CIDITUC_URL_PERSONA) return VACIO;
   const guardado = cacheDatos.get(idPersona);
   if (guardado && Date.now() < guardado.vence) return guardado.datos;
+  if (enCurso.has(idPersona)) return enCurso.get(idPersona);
+  const pedido = consultarPersona(idPersona, token).finally(() => enCurso.delete(idPersona));
+  enCurso.set(idPersona, pedido);
+  return pedido;
+}
+
+async function consultarPersona(idPersona, token) {
+  const plantilla = process.env.CIDITUC_URL_PERSONA;
 
   let datosPersona = VACIO;
   let resultado;
@@ -231,9 +248,20 @@ async function datosDeLaPersona(idPersona, token) {
     resultado = `no se pudo consultar: ${e?.cause?.code ?? e?.name ?? 'error'} ${e?.message ?? ''}`.trim();
   }
   ultimoPedido = { momento: new Date().toISOString(), resultado };
-  if (resultado !== 'ok') console.warn(`[CiDiTuc] nombre de la persona: ${resultado}`);
-  // Un fallo se recuerda solo un minuto, para que al corregirlo se vea enseguida.
-  const duracion = datosPersona.nombre ? DURACION_NOMBRE_MS : 60_000;
+  if (resultado !== 'ok') {
+    ultimoError = ultimoPedido;
+    console.warn(`[CiDiTuc] nombre de la persona: ${resultado}`);
+  }
+  if (datosPersona.nombre || datosPersona.cuil) {
+    if (ultimoBueno.size > 5000) ultimoBueno.clear();
+    ultimoBueno.set(idPersona, datosPersona);
+  } else if (ultimoBueno.has(idPersona)) {
+    // CiDiTuc falló, pero ya sabíamos quién es: se usa lo último bueno.
+    datosPersona = ultimoBueno.get(idPersona);
+  }
+  // Un fallo se recuerda solo 5 segundos: el front vuelve a preguntar a los 6
+  // (auth/RolProvider.jsx) y para entonces se intenta de nuevo.
+  const duracion = resultado === 'ok' ? DURACION_NOMBRE_MS : 5_000;
   if (cacheDatos.size > 2000) cacheDatos.clear();
   cacheDatos.set(idPersona, { datos: datosPersona, vence: Date.now() + duracion });
   return datosPersona;
@@ -242,11 +270,14 @@ async function datosDeLaPersona(idPersona, token) {
 /* Para GET /salud: si está configurado y cómo salió el último pedido de
    nombre. No incluye nombres, CUIL ni tokens. */
 let ultimoPedido = null;
+let ultimoError = null;
 export function estadoNombres() {
   return {
     configurado: Boolean(process.env.CIDITUC_URL_PERSONA),
     url: process.env.CIDITUC_URL_PERSONA || null,
     ultimoPedido,
+    // El último que NO salió bien, aunque después hayan salido otros bien.
+    ultimoError,
   };
 }
 
@@ -272,14 +303,19 @@ export async function personaDelToken(token) {
   const persona = cuerpo ? personaDelCuerpo(cuerpo) : null;
   // El token (modo jwt-secreto) solo trae el número de persona. Si falta el
   // nombre o el CUIL, se los pedimos a CiDiTuc (un solo pedido trae los dos).
+  let completa = true;
   if (persona && (!persona.nombre || !persona.cuil)) {
     const extra = await datosDeLaPersona(persona.idPersona, token);
     if (!persona.nombre) persona.nombre = extra.nombre;
     if (!persona.cuil) persona.cuil = extra.cuil;
+    completa = Boolean(persona.nombre || persona.cuil);
   }
 
-  if (cache.size > 500) cache.clear();
-  cache.set(token, { persona, vence: Date.now() + DURACION_CACHE_MS });
+  // Si quedó sin nombre ni CUIL no se guarda: el próximo pedido reintenta.
+  if (completa) {
+    if (cache.size > 500) cache.clear();
+    cache.set(token, { persona, vence: Date.now() + DURACION_CACHE_MS });
+  }
   return persona;
 }
 

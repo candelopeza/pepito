@@ -18,6 +18,7 @@
      titularCuil columna local.titular_cuil   sql/12-titular-cuil.sql
      frecuencia  columna documentacion.frecuencia_semanal   sql/13-frecuencia-recoleccion.sql
      nombreUsuario columna usuario.nombre_completo         sql/16-nombre-usuario.sql
+     cuilUsuario   columna usuario.cuil (alta por CUIL)    sql/17-correcciones-19-11.sql
 
    >>> POR QUÉ ASÍ Y NO "QUE FALLE SI FALTA" <<<
    Si el backend diera por hecho que la tabla existe, una base sin el script
@@ -38,6 +39,7 @@ const VACIO = {
   titularCuil: false,
   frecuencia: false,
   nombreUsuario: false,
+  cuilUsuario: false,
   revisadoEn: null,
   error: null,
 };
@@ -56,7 +58,8 @@ export async function revisarCapacidades() {
                OR (table_name = 'tramite' AND column_name IN ('impresa_por', 'impresa_en'))
                OR (table_name = 'local' AND column_name = 'titular_cuil')
                OR (table_name = 'documentacion' AND column_name = 'frecuencia_semanal')
-               OR (table_name = 'usuario' AND column_name = 'nombre_completo'))`,
+               OR (table_name = 'usuario' AND column_name = 'nombre_completo')
+               OR (table_name = 'usuario' AND column_name = 'cuil'))`,
     );
     const hay = (tabla, columna) =>
       filas.some((f) => String(f.tabla).toLowerCase() === tabla && (!columna || String(f.columna).toLowerCase() === columna));
@@ -70,6 +73,7 @@ export async function revisarCapacidades() {
       titularCuil: hay('local', 'titular_cuil'),
       frecuencia: hay('documentacion', 'frecuencia_semanal'),
       nombreUsuario: hay('usuario', 'nombre_completo'),
+      cuilUsuario: hay('usuario', 'cuil'),
       revisadoEn: new Date().toISOString(),
       error: null,
     };

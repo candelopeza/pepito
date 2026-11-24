@@ -21,6 +21,14 @@
    EDITAR DATOS (2026-10-02): quien edita el padrón corrige el teléfono o el
    correo desde acá, sin volver al listado. El acto "Completar datos" sigue
    igual: ese es el paso del circuito; esto es mantener el padrón al día.
+
+   >>> FICHA DE CONSULTA PARA RELEVADOR Y NOTIFICADOR (20/11/2026) <<<
+   Pedido de cande: los agentes de calle consultan el local pero no ven los
+   datos sensibles ni el historial (config/modulos.js, ROLES_SOLO_CONSULTA).
+   Ven: nombre, dirección, rubro, ubicación, estado y las acciones de SU rol
+   (el notificador registra entregas desde acá). No ven: razón social, CUIT,
+   domicilio fiscal, correo, teléfono, CUIL del titular, observaciones,
+   plazos, avisos del circuito, relevamiento de origen ni historiales.
    ============================================================================ */
 
 import { useEffect, useState } from 'react';
@@ -37,7 +45,7 @@ import FormLocal from '../components/FormLocal';
 import ConstanciaArca from '../components/ConstanciaArca';
 import { useDatos } from '../datos/datosContexto';
 import { useRol } from '../auth/rolContexto';
-import { puedeEditar, puedeVerRuta } from '../config/modulos';
+import { esSoloConsulta, puedeEditar, puedeVerRuta } from '../config/modulos';
 
 import { ETIQUETA_DOCUMENTO, textoFrecuencia } from '../dominio/actuaciones';
 import { fmtFecha, fmtFechaHora } from '../dominio/fechas';
@@ -64,13 +72,15 @@ function LocalFicha() {
   const [editando, setEditando] = useState(false);
 
   const local = localPorId(id);
+  const soloConsulta = esSoloConsulta(rol);
 
   // El historial de estados se pide al abrir la ficha, y otra vez cada vez
-  // que llegan datos nuevos (después de un acto, por ejemplo).
+  // que llegan datos nuevos (después de un acto, por ejemplo). En la ficha de
+  // consulta no se muestra, así que ni se pide.
   const idLocal = local?.id;
   useEffect(() => {
-    if (idLocal) cargarAuditoria(idLocal);
-  }, [idLocal, versionDatos, cargarAuditoria]);
+    if (idLocal && !soloConsulta) cargarAuditoria(idLocal);
+  }, [idLocal, versionDatos, cargarAuditoria, soloConsulta]);
 
   // Puede pasar: alguien guardó el link de un local que después se fusionó o
   // se eliminó. Mejor decirlo que mostrar una pantalla vacía.
@@ -104,9 +114,9 @@ function LocalFicha() {
   return (
     <>
       <PageHeader
-        etiqueta={`LOCAL N° ${local.id}${local.idLegacy ? ` · ${local.idLegacy}` : ''}`}
+        etiqueta={`LOCAL N° ${local.id}${local.idLegacy && !soloConsulta ? ` · ${local.idLegacy}` : ''}`}
         titulo={local.nombreLocal}
-        subtitulo={`${local.razonSocial || 'Sin razón social'} · ${local.direccion}`}
+        subtitulo={soloConsulta ? local.direccion : `${local.razonSocial || 'Sin razón social'} · ${local.direccion}`}
         botonVolver
         volverA="/locales"
         volverTexto="VOLVER AL PADRÓN"
@@ -142,7 +152,7 @@ function LocalFicha() {
           <BadgeEstado codigo={local.estado} />
         </div>
 
-        {local.plazo && (
+        {local.plazo && !soloConsulta && (
           <div className={`ficha-plazo ${local.plazo.vencido ? 'ficha-plazo-vencido' : ''}`}>
             <strong>
               {local.plazo.tipo === 'PRORROGA' ? 'Prórroga' : `Plazo de la ${local.plazo.instancia === 1 ? 'primera' : 'segunda'} notificación`}
@@ -156,7 +166,10 @@ function LocalFicha() {
       </div>
 
       {/* ---------- Avisos de contexto ----------
-          Lo que la persona necesita saber ANTES de apretar un botón. */}
+          Lo que la persona necesita saber ANTES de apretar un botón. En la
+          ficha de consulta no van: son del circuito administrativo. */}
+      {!soloConsulta && (
+        <>
       {local.bloqueado && (
         <Aviso tipo="bloqueo" titulo="Bloqueo manual activo">
           Este local está excluido del cálculo automático de estado. Bloqueado por {nombreDe(local.bloqueadoPor)}
@@ -211,6 +224,8 @@ function LocalFicha() {
           )}
         </Aviso>
       )}
+        </>
+      )}
 
       {/* ---------- Las acciones ---------- */}
       <div className="accesos-header">
@@ -225,6 +240,19 @@ function LocalFicha() {
       <div className="accesos-header">
         <span>Datos del padrón</span>
       </div>
+      {soloConsulta ? (
+        <>
+          <div className="ficha-datos">
+            <Dato etiqueta="Rubro">{local.rubro}</Dato>
+            <Dato etiqueta="Dirección del local">{local.direccion}</Dato>
+            <Dato etiqueta="Ubicación del padrón (geocodificada)">
+              {local.sinGeo ? 'sin ubicación' : `${local.latitud}, ${local.longitud}`}
+            </Dato>
+          </div>
+          <p className="texto-explicacion">Los datos del titular y el historial del local los consulta la oficina.</p>
+        </>
+      ) : (
+        <>
       <div className="ficha-datos">
         <Dato etiqueta="Razón social">{local.razonSocial}</Dato>
         <Dato etiqueta="CUIT">{local.cuit}</Dato>
@@ -292,22 +320,28 @@ function LocalFicha() {
         <Vacio titulo="Sin relevamiento asociado">
         </Vacio>
       )}
+        </>
+      )}
 
       {/* ================= 3. HISTORIAL DE ACTUACIONES ================= */}
-      <div className="accesos-header">
-        <span>Historial de actuaciones ({actuaciones.length})</span>
-      </div>
-      <HistorialActuaciones
-        actuaciones={actuaciones}
-        usuarios={usuarios}
-        local={local}
-        ediciones={auditoriaDeLocal(local.id).filter((h) => h.accion === 'editar-observaciones')}
-      />
+      {!soloConsulta && (
+        <>
+          <div className="accesos-header">
+            <span>Historial de actuaciones ({actuaciones.length})</span>
+          </div>
+          <HistorialActuaciones
+            actuaciones={actuaciones}
+            usuarios={usuarios}
+            local={local}
+            ediciones={auditoriaDeLocal(local.id).filter((h) => h.accion === 'editar-observaciones')}
+          />
+        </>
+      )}
 
       {/* LA AUDITORÍA DE ESTADOS aparece solo si la base tiene la tabla
           `auditoria` (backend/sql/05-tabla-auditoria.sql). Sin ella no se
           muestra: una sección vacía permanente sugería que faltaba cargar algo. */}
-      {capacidades?.auditoria && (
+      {capacidades?.auditoria && !soloConsulta && (
         <>
           <div className="accesos-header">
             <span>Historial de estados</span>

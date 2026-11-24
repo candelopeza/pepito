@@ -48,6 +48,7 @@ import { esES } from '@mui/x-data-grid/locales';
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import { useRol } from '../../auth/rolContexto';
+import { esSoloConsulta } from '../../config/modulos';
 import { imprimirPdf, pdfDeTabla, quienGenera, textoParaPdf } from '../pdfCedulas';
 
 /* El botón verde "Imprimir" arma un PDF con lo que muestra la grilla (ver
@@ -168,7 +169,11 @@ function Grilla({
   columnasOcultas = [],
 }) {
   const apiRef = useGridApiRef();
-  const { usuario } = useRol();
+  const { usuario, rol } = useRol();
+  /* El relevador y el notificador no imprimen ni descargan ninguna tabla
+     (config/modulos.js, ROLES_SOLO_CONSULTA): ni los botones de arriba ni el
+     "Exportar" de la barra de la grilla. */
+  const sinExportarNada = sinExportar || esSoloConsulta(rol);
 
   /* El PDF lleva las filas que quedaron después de buscar y filtrar, en el
      orden de la grilla, y las columnas visibles menos los botones. */
@@ -259,7 +264,7 @@ function Grilla({
   return (
     <>
       {/* ---------- Barra de acciones: buscadores + botones ---------- */}
-      {(buscadores.length > 0 || botones || !sinExportar) && (
+      {(buscadores.length > 0 || botones || !sinExportarNada) && (
         <div className="tabla-acciones" style={{ maxWidth: anchoMaximo }}>
           <div className="tabla-buscadores">
             {buscadores.map((b) => (
@@ -275,7 +280,7 @@ function Grilla({
           </div>
           <div className="tabla-botones">
             {botones}
-            {!sinExportar && (
+            {!sinExportarNada && (
               <>
                 <button type="button" className="btn-icono btn-icono-verde" title="Imprimir" onClick={imprimir}>
                   <PrintIcon fontSize="small" />
@@ -300,7 +305,11 @@ function Grilla({
           showToolbar
           slots={{ toolbar: GridToolbar }}
           slotProps={{
-            toolbar: { showQuickFilter: true, csvOptions: { fileName: nombreArchivo, utf8WithBom: true } },
+            toolbar: {
+              showQuickFilter: true,
+              csvOptions: { fileName: nombreArchivo, utf8WithBom: true, disableToolbarButton: sinExportarNada },
+              printOptions: { disableToolbarButton: sinExportarNada },
+            },
           }}
           localeText={{
             ...esES.components.MuiDataGrid.defaultProps.localeText,

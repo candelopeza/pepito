@@ -202,3 +202,38 @@ function amplio(locales, umbralNombre) {
   const orden = { alta: 0, media: 1, baja: 2 };
   return pares.sort((x, y) => orden[x.nivel] - orden[y.nivel] || y.parecido - x.parecido);
 }
+
+/* ============================================================================
+   ¿ESTE LOCAL YA ESTÁ EN EL PADRÓN?  (formulario de campo, 20/11/2026)
+   ----------------------------------------------------------------------------
+   Mientras el relevador escribe el nombre y la dirección, el formulario le
+   avisa si ya hay locales con ese nombre. Que el nombre se repita NO es un
+   problema: una misma cadena tiene varias sucursales. El problema es que se
+   repitan nombre Y dirección (calle y altura): eso es cargar otra vez un
+   local que ya está, y después hay que unificarlo en Duplicados.
+
+   Devuelve:
+     mismoLugar   locales con nombre parecido en la MISMA calle y altura
+                  (el aviso fuerte: probablemente ya está cargado);
+     sucursales   locales con nombre parecido en OTRA dirección
+                  (solo informativo).
+   Mismo criterio que buscarDuplicados(): nombre parecido (umbralNombre),
+   calle y altura. La calle se compara también por parecido, para que
+   "Av. Mitre 450" y "Mitre 450" cuenten como la misma. */
+export function localesParecidos(locales, nombre, direccion, { umbralNombre = 0.6, maximo = 5 } = {}) {
+  const vacio = { mismoLugar: [], sucursales: [], totalSucursales: 0 };
+  if (normalizarNombre(nombre).length < 3) return vacio;
+  const dir = partirDireccion(direccion);
+
+  const conNombre = locales.filter((l) => similitud(l.nombreLocal, nombre) >= umbralNombre);
+  const mismoLugar = [];
+  const sucursales = [];
+  for (const local of conNombre) {
+    const otra = partirDireccion(local.direccion);
+    const mismaAltura = Boolean(dir.altura) && dir.altura === otra.altura;
+    const mismaCalle = Boolean(dir.calle) && (dir.calle === otra.calle || similitud(dir.calle, otra.calle) >= 0.5);
+    if (mismaAltura && mismaCalle) mismoLugar.push(local);
+    else sucursales.push(local);
+  }
+  return { mismoLugar: mismoLugar.slice(0, maximo), sucursales: sucursales.slice(0, maximo), totalSucursales: sucursales.length };
+}

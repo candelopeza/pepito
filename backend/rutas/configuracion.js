@@ -39,7 +39,7 @@ import { CODIGOS_ESTADO } from '../../src/dominio/estados.js';
 import { consultar, ejecutar } from '../conexion-bd.js';
 import { CLAVES_PARAMETRO, feriados, parametros } from '../consultas.js';
 import { aceptaRolDeclarado, firmante, olvidarUsuarios, requiereRol } from '../middlewares/usuario.js';
-import { nombreVisible } from '../personas.js';
+import { formatoCuil, nombreVisible, soloDigitos } from '../personas.js';
 import { ROL_POR_TUSUARIO, TUSUARIO_POR_ROL } from '../mapeo.js';
 import { capacidades, tiene } from '../capacidades.js';
 import { modoGeocodificador } from '../geocodificador.js';
@@ -307,10 +307,10 @@ router.put('/permisos/:modulo/:rol', requiereRol('administrador'), async (req, r
    baja, marcados con `activo: false`: la pantalla de Usuarios los muestra con
    su llave apagada para poder reactivarlos.
    --------------------------------------------------------------------------- */
-/* Quién recibe el número de persona en la lista de usuarios: los que dan de
-   alta y editan usuarios en Accesos (los mismos `roles` del catálogo, más el
-   administrador). */
-const ROLES_QUE_VEN_LEGAJO = ['administrador', 'direccion', 'administrativo'];
+/* Quién recibe el CUIL de los agentes en la lista de usuarios: los que dan
+   de alta y editan usuarios en Accesos (los mismos `roles` del catálogo, más
+   el administrador). Al resto la lista le llega sin ese dato. */
+const ROLES_QUE_VEN_CUIL = ['administrador', 'direccion', 'administrativo'];
 
 const CATALOGOS = {
   rubros: {
@@ -330,13 +330,15 @@ const CATALOGOS = {
      CiDiTuc) y su tipo. Desde el 18/11/2026 también el nombre
      (nombre_completo, sql/16-nombre-usuario.sql).
 
-     >>> EL NÚMERO DE PERSONA NO SE MUESTRA <<<
+     >>> EL NÚMERO DE PERSONA NO SE MUESTRA NI SE PIDE (19/11/2026) <<<
      `nombre` es el nombre visible (backend/personas.js): el nombre real, o
-     "Relevador N° 3, sin nombre" si todavía no tiene. `legajo` es el número
-     de persona y solo lo usa el formulario de alta y edición de Accesos, que
-     lo necesita para dar de alta a alguien. El rol se recibe como texto
-     ('notificador') y se traduce con TUSUARIO_POR_ROL; la llave "activo" es
-     `habilita`. */
+     "Relevador N° 3, sin nombre" si todavía no tiene. El número de persona
+     no viaja al front: nadie lo conoce y es un dato sensible. El alta se hace
+     con el CUIL (usuario.cuil, sql/17): la fila queda con id_persona vacío
+     (`pendiente`) hasta que la persona entra por primera vez por CiDiTuc, y
+     ahí se vincula sola (middlewares/usuario.js, vincularPorCuil). El rol se
+     recibe como texto ('notificador') y se traduce con TUSUARIO_POR_ROL; la
+     llave "activo" es `habilita`. */
   usuarios: {
     tabla: 'usuario',
     pk: 'id_usuario',
@@ -351,13 +353,16 @@ const CATALOGOS = {
       nombre: nombreVisible(f),
       nombreCompleto: String(f.nombreCompleto ?? '').trim(),
       sinNombre: !String(f.nombreCompleto ?? '').trim(),
-      legajo: String(f.idPersona ?? ''),
+      cuil: f.cuil ?? '',
+      // Dado de alta por CUIL y todavía no entró nunca por CiDiTuc.
+      pendiente: !String(f.idPersona ?? '').trim(),
       tipoId: f.idTusuario,
       rol: ROL_POR_TUSUARIO[f.idTusuario] ?? 'sistema',
       activo: Number(f.habilita) === 1,
     }),
     aBase: (body, { alta }) => {
-      const datos = { id_persona: String(body.legajo ?? '').trim() };
+      const datos = {};
+      if (tiene('cuilUsuario') && body.cuil !== undefined) datos.cuil = formatoCuil(body.cuil);
       if (tiene('nombreUsuario') && body.nombreCompleto !== undefined) {
         datos.nombre_completo = String(body.nombreCompleto ?? '').trim().slice(0, 150) || null;
       }
@@ -367,7 +372,10 @@ const CATALOGOS = {
       return datos;
     },
     valida: (body, { alta }) => {
-      if (!String(body.legajo ?? '').trim()) return 'El usuario necesita su número de persona de CiDiTuc';
+      const digitos = soloDigitos(body.cuil);
+      if (alta && !digitos) return 'El usuario necesita su CUIL';
+      if (digitos && digitos.length !== 11) return 'El CUIL tiene 11 números';
+      if (alta && !tiene('cuilUsuario')) return 'Esta base todavía no guarda el CUIL de los usuarios: falta correr backend/sql/17-correcciones-19-11.sql en HeidiSQL.';
       if (alta && !body.rol) return 'Elegí el tipo de usuario';
       if (body.rol !== undefined && !ROLES_ASIGNABLES.includes(body.rol)) return `Tipo de usuario inválido: ${body.rol}`;
       return null;
@@ -448,7 +456,7 @@ function autorizarEscritura(req, res, next) {
 /* Reglas propias de los usuarios, que no son de forma sino de seguridad:
    - el rol administrador solo lo da (o lo toca) otro administrador;
    - nadie se da de baja a sí mismo (quedaría afuera sin poder volver);
-   - el legajo no se repite: dos usuarios con el mismo legajo serían la misma
+   - el CUIL no se repite: dos usuarios con el mismo CUIL serían la misma
      persona con dos roles, y el middleware no sabría cuál usar. */
 async function controlarUsuario(req, body, idEditado = null) {
   const pideAdmin = body.rol === 'administrador';
@@ -465,9 +473,10 @@ async function controlarUsuario(req, body, idEditado = null) {
     }
   }
 
-  const legajo = String(body.legajo ?? '').trim();
-  const [repetido] = await consultar('SELECT id_usuario, habilita FROM usuario WHERE id_persona = ? AND id_usuario <> ?', [
-    legajo,
+  const cuil = formatoCuil(body.cuil);
+  if (!cuil || !tiene('cuilUsuario')) return null;
+  const [repetido] = await consultar('SELECT id_usuario, habilita FROM usuario WHERE cuil = ? AND id_usuario <> ?', [
+    cuil,
     idEditado ?? 0,
   ]);
   if (repetido) {
@@ -475,8 +484,8 @@ async function controlarUsuario(req, body, idEditado = null) {
       status: 409,
       error:
         Number(repetido.habilita) === 1
-          ? 'Ya existe un usuario con ese número de persona'
-          : 'Ya existe un usuario con ese número de persona, dado de baja: reactivalo desde la lista',
+          ? 'Ya existe un usuario con ese CUIL'
+          : 'Ya existe un usuario con ese CUIL, dado de baja: reactivalo desde la lista',
     };
   }
   return null;
@@ -493,10 +502,10 @@ router.get('/:catalogo', async (req, res, next) => {
     const filtro = cat.incluyeBajas ? '' : 'WHERE habilita = 1';
     const filas = await consultar(`SELECT * FROM ${cat.tabla} ${filtro} ORDER BY ${cat.orden}`);
     const lista = filas.map(cat.aFront);
-    // El número de persona solo viaja a quien administra usuarios (Accesos):
-    // al resto le llega la lista sin ese dato, ni siquiera oculto.
-    if (req.params.catalogo === 'usuarios' && !ROLES_QUE_VEN_LEGAJO.includes(req.usuario?.rol)) {
-      return res.json(lista.map(({ legajo: _legajo, ...u }) => u));
+    // El CUIL solo viaja a quien administra usuarios (Accesos): al resto le
+    // llega la lista sin ese dato, ni siquiera oculto.
+    if (req.params.catalogo === 'usuarios' && !ROLES_QUE_VEN_CUIL.includes(req.usuario?.rol)) {
+      return res.json(lista.map(({ cuil: _cuil, ...u }) => u));
     }
     res.json(lista);
   } catch (e) {

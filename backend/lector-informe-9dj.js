@@ -87,6 +87,14 @@ export function huellaDeArchivo(buffer) {
    y lo vuelvan a subir. Pedido del 4/11/2026: antes quedaba vacío y nadie se
    enteraba, o la base lo rechazaba al guardar con un error incomprensible.
    --------------------------------------------------------------------------- */
+/* Lo que en la celda del vencimiento quiere decir "no hay fecha": el PDF real
+   de la prestataria (20/11/2026) trae "SIN CONTRATO" en 51 filas. Es una
+   respuesta, no un error de tipeo: cuenta como vencimiento no informado. */
+const SIN_FECHA = /^(sin\s.*|s\s*\/\s*[cfv]|-+|n\s*\/\s*a|no informad[oa])$/i;
+
+/* "25//08/26" -> "25/08/26": una barra o un guion repetido no cambia la fecha. */
+const textoDeFecha = (valor) => String(valor).trim().replace(/([/-])[/-]+/g, '$1');
+
 export function normalizarFecha(valor) {
   if (valor === null || valor === undefined || valor === '') return null;
 
@@ -95,7 +103,8 @@ export function normalizarFecha(valor) {
     return valor.toISOString().slice(0, 10);
   }
 
-  const texto = String(valor).trim();
+  const texto = textoDeFecha(valor);
+  if (SIN_FECHA.test(texto)) return null;
 
   let m = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return componerFecha(m[1], m[2], m[3]);
@@ -116,7 +125,8 @@ export function motivoDeFecha(valor) {
   if (valor === null || valor === undefined || valor === '') return null;
   if (valor instanceof Date) return Number.isNaN(valor.getTime()) ? 'la celda tiene una fecha inválida de Excel' : null;
   if (normalizarFecha(valor) !== null) return null;
-  const texto = String(valor).trim();
+  const texto = textoDeFecha(valor);
+  if (!texto || SIN_FECHA.test(texto)) return null;
   const m = texto.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/) ?? texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (m) {
     const esISO = texto.match(/^\d{4}-/);
@@ -376,7 +386,272 @@ export function filasDesdeTexto(texto) {
   return filas;
 }
 
+/* ---------------------------------------------------------------------------
+   7.b PDF CON COLUMNAS: LEÍDO POR LA POSICIÓN DE CADA TEXTO (20/11/2026)
+   ---------------------------------------------------------------------------
+   Lo de arriba (filasDesdeTexto) trabaja con el texto plano y adivina dónde
+   termina la razón social y empieza la dirección. Con una planilla de Excel
+   pasada a PDF eso fallaba (prueba del 19/11/2026):
+     - las columnas salían mezcladas ("dhgdb alem" | "100");
+     - Excel imprime en OTRA página las columnas que no entran a lo ancho
+       (contrato y vencimiento), y se perdían;
+     - se leían también las filas de otras hojas del libro.
+   Acá cada texto del PDF viene con su posición (pdfjs-dist, que ya instala
+   pdf-parse: no hay que instalar nada nuevo). Se busca la fila de títulos
+   con el mismo criterio que la planilla (mapearEncabezados), y cada fila de
+   datos se reparte en esas columnas por posición. Si este camino no encuentra
+   una fila de títulos con CUIT, se usa filasDesdeTexto como antes. */
+
+// Un texto que es solo un número (CUIT, altura, importe): en Excel va
+// alineado a la derecha y puede quedar pegado al texto de la columna de al lado.
+const ES_NUMERO = /^[\d.\-/]+$/;
+const PARECE_CUIT = /^\d{2}-?\d{8}-?\d$/;
+
+/* Los textos de una línea, de izquierda a derecha, agrupados en celdas: un
+   hueco más ancho que un espacio, o el paso de un número a un texto, corta. */
+function celdasDeLinea(items) {
+  const celdas = [];
+  for (const it of items) {
+    const ultima = celdas.at(-1);
+    const hueco = ultima ? it.x - ultima.fin : Infinity;
+    const cambiaTipo = ultima && ES_NUMERO.test(ultima.texto) !== ES_NUMERO.test(it.texto);
+    if (!ultima || hueco > it.alto * 0.35 || (cambiaTipo && hueco > 0.5)) {
+      celdas.push({ texto: it.texto, x: it.x, fin: it.fin });
+    } else {
+      ultima.texto += (hueco > 0.5 ? ' ' : '') + it.texto;
+      ultima.fin = it.fin;
+    }
+  }
+  return celdas.map((c) => ({ ...c, centro: (c.x + c.fin) / 2 }));
+}
+
+/* A qué columna va cada celda. Si hay tantas celdas como títulos, en orden.
+   Si hay menos (una celda vacía) o más (un texto partido), se elige el
+   reparto en orden que deja cada celda más cerca de su título, y un CUIT solo
+   puede ir a la columna CUIT. Devuelve un índice de columna por celda. */
+function repartirEnColumnas(celdas, columnas, iCuit) {
+  if (celdas.length === columnas.length) return celdas.map((_c, i) => i);
+  const costo = (celda, j) =>
+    Math.abs(celda.centro - columnas[j].centro) + ((j === iCuit) !== PARECE_CUIT.test(celda.texto.trim()) ? 1000 : 0);
+  // Programación dinámica: celda i en la columna j, con columnas que no bajan
+  // (y que no se repiten si sobran columnas).
+  const repetir = celdas.length > columnas.length;
+  const k = celdas.length;
+  const h = columnas.length;
+  const mejor = Array.from({ length: k }, () => new Array(h).fill(Infinity));
+  const desde = Array.from({ length: k }, () => new Array(h).fill(-1));
+  for (let j = 0; j < h; j += 1) mejor[0][j] = costo(celdas[0], j);
+  for (let i = 1; i < k; i += 1) {
+    for (let j = 0; j < h; j += 1) {
+      for (let p = 0; p <= j; p += 1) {
+        if (!repetir && p === j) continue;
+        const total = mejor[i - 1][p] + costo(celdas[i], j);
+        if (total < mejor[i][j]) {
+          mejor[i][j] = total;
+          desde[i][j] = p;
+        }
+      }
+    }
+  }
+  let j = mejor[k - 1].indexOf(Math.min(...mejor[k - 1]));
+  const reparto = new Array(k);
+  for (let i = k - 1; i >= 0; i -= 1) {
+    reparto[i] = j;
+    j = desde[i][j];
+  }
+  return reparto;
+}
+
+/* Los campos que reconoce una línea de títulos SIN exigir el CUIT: sirve para
+   las columnas que Excel manda a otra página ("NRO CONTRATO | VENCIMIENTO").
+   Devuelve { campo: índice de columna } si reconoce al menos la mitad de las
+   celdas (puede haber columnas que el sistema no usa, como "VIGENTE/SUSP"),
+   o null. */
+function camposDeTitulos(celdas) {
+  if (celdas.some((c) => /\d/.test(c.texto))) return null;
+  const mapa = {};
+  celdas.forEach((celda, i) => {
+    const nombre = sinTildes(celda.texto);
+    const par = COLUMNAS.find(([campo, patron]) => patron.test(nombre) && mapa[campo] === undefined);
+    if (par) mapa[par[0]] = i;
+  });
+  const cuantos = Object.keys(mapa).length;
+  return cuantos && cuantos * 2 >= celdas.length ? mapa : null;
+}
+
+async function lineasDelPdf(buffer) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), isEvalSupported: false, disableFontFace: true, verbosity: 0 })
+    .promise;
+  const lineas = [];
+  try {
+    for (let n = 1; n <= doc.numPages; n += 1) {
+      const pagina = await doc.getPage(n);
+      const contenido = await pagina.getTextContent();
+      const items = contenido.items
+        .filter((it) => it.str?.trim())
+        .map((it) => ({
+          texto: it.str.trim(),
+          x: it.transform[4],
+          y: it.transform[5],
+          fin: it.transform[4] + it.width,
+          alto: Math.max(Math.abs(it.height || it.transform[3]) || 10, 4),
+        }))
+        .sort((a, b) => b.y - a.y || a.x - b.x);
+      const dePagina = [];
+      for (const it of items) {
+        const linea = dePagina.find((l) => Math.abs(l.y - it.y) <= it.alto * 0.5);
+        if (linea) linea.items.push(it);
+        else dePagina.push({ y: it.y, alto: it.alto, pagina: n, items: [it] });
+      }
+      for (const l of dePagina) {
+        l.items.sort((a, b) => a.x - b.x);
+        l.celdas = celdasDeLinea(l.items);
+      }
+      lineas.push(...dePagina.sort((a, b) => b.y - a.y));
+    }
+  } finally {
+    await doc.destroy();
+  }
+  return lineas;
+}
+
+export async function leerPdfPorColumnas(buffer) {
+  const lineas = await lineasDelPdf(buffer);
+  let tabla = null; // la primera tabla con CUIT: { campos, columnas, iCuit, filas }
+  let actual = null; // el tramo que se está leyendo: 'tabla' | 'otra' | 'continuacion'
+  const continuacion = { campos: null, mapa: null, columnas: null, filas: [] };
+  let ignoradas = 0;
+  let previa = null; // la línea de la última fila, para unir textos partidos
+
+  for (const linea of lineas) {
+    const textos = linea.celdas.map((c) => c.texto);
+    const mapa = mapearEncabezados(textos);
+
+    // ¿Es una fila de títulos con CUIT?
+    if (mapa) {
+      const campos = Object.keys(mapa).sort();
+      const columnas = linea.celdas;
+      if (!tabla) {
+        tabla = { campos, columnas, mapa, iCuit: mapa.cuit, filas: [] };
+        actual = 'tabla';
+      } else if (campos.join() === tabla.campos.join()) {
+        // Los títulos repetidos en cada página: misma tabla, posiciones de esta página.
+        tabla.columnas = columnas;
+        tabla.mapa = mapa;
+        tabla.iCuit = mapa.cuit;
+        actual = 'tabla';
+      } else {
+        actual = 'otra'; // otra tabla del PDF (otra hoja del libro): no se lee
+      }
+      previa = null;
+      continue;
+    }
+
+    // ¿Son los títulos de las columnas que Excel mandó a otra página?
+    // Una vez encontrados, solo cuenta como título una línea con EXACTAMENTE
+    // los mismos campos (repetidos en cada página): un valor como "SIN
+    // CONTRATO" (PDF real de la prestataria, 20/11/2026) parece un título y
+    // es un dato.
+    const mapaCont = tabla && actual !== 'otra' ? camposDeTitulos(linea.celdas) : null;
+    const camposCont = mapaCont ? Object.keys(mapaCont).sort() : null;
+    const esTituloCont =
+      camposCont &&
+      camposCont.every((c) => !tabla.campos.includes(c)) &&
+      (!continuacion.campos || camposCont.join() === continuacion.campos.join());
+    if (esTituloCont) {
+      if (!continuacion.campos) continuacion.campos = camposCont;
+      continuacion.mapa = mapaCont;
+      continuacion.columnas = linea.celdas;
+      actual = 'continuacion';
+      previa = null;
+      continue;
+    }
+
+    if (!tabla || !actual) continue; // el membrete de arriba de la tabla
+    const tieneCuit = linea.celdas.some((c) => PARECE_CUIT.test(c.texto));
+    if (actual === 'otra') {
+      if (tieneCuit) ignoradas += 1;
+      continue;
+    }
+    // Una fila con CUIT dentro del tramo de continuación es de la tabla
+    // principal (por ejemplo, un título de página que se confundió).
+    if (actual === 'continuacion' && tieneCuit) actual = 'tabla';
+
+    const destino = actual === 'tabla' ? tabla : continuacion;
+    const reparto = repartirEnColumnas(linea.celdas, destino.columnas, actual === 'tabla' ? destino.iCuit : -1);
+    const valores = destino.columnas.map(() => '');
+    linea.celdas.forEach((c, i) => {
+      valores[reparto[i]] = valores[reparto[i]] ? `${valores[reparto[i]]} ${c.texto}` : c.texto;
+    });
+
+    // Sin CUIT: es la segunda línea de un texto largo que no entró en la celda
+    // (se suma a la fila de arriba) o algo suelto, como un pie de página.
+    if (actual === 'tabla' && !valores[destino.iCuit]) {
+      const cerca = previa && previa.pagina === linea.pagina && previa.y - linea.y <= linea.alto * 2.2;
+      const filaAnterior = tabla.filas.at(-1);
+      if (cerca && filaAnterior) {
+        valores.forEach((v, i) => {
+          if (v) filaAnterior[i] = filaAnterior[i] ? `${filaAnterior[i]} ${v}` : v;
+        });
+        previa = linea;
+      }
+      continue;
+    }
+    // La continuación se guarda ya por campo: sus columnas pueden cambiar de
+    // posición de una página a otra.
+    destino.filas.push(
+      actual === 'tabla' ? valores : Object.fromEntries(continuacion.campos.map((c) => [c, valores[continuacion.mapa[c]] ?? ''])),
+    );
+    previa = linea;
+  }
+
+  if (!tabla || !tabla.filas.length) return null;
+
+  // Los campos de la tabla, más los de la continuación si tiene las mismas filas.
+  const avisos = [];
+  const camposTabla = Object.entries(tabla.mapa).sort((a, b) => a[1] - b[1]);
+  const usaContinuacion = continuacion.filas.length > 0 && continuacion.filas.length === tabla.filas.length;
+  if (continuacion.filas.length && !usaContinuacion) {
+    avisos.push(
+      `Las columnas ${continuacion.campos.join(', ')} vienen en páginas aparte y no tienen la misma cantidad de filas: no se usaron.`,
+    );
+  }
+  if (ignoradas) avisos.push(`Se dejaron afuera ${ignoradas} fila(s) de otra tabla del PDF (otra hoja del libro).`);
+
+  const orden = [...camposTabla.map(([campo]) => campo), ...(usaContinuacion ? continuacion.campos : [])];
+  const mapaFinal = Object.fromEntries(orden.map((campo, i) => [campo, i]));
+  const filas = tabla.filas
+    .map((valores, i) => {
+      const celdas = [
+        ...camposTabla.map(([, col]) => valores[col] ?? ''),
+        ...(usaContinuacion ? continuacion.campos.map((c) => continuacion.filas[i][c] ?? '') : []),
+      ];
+      return armarFila(celdas, mapaFinal, i + 2);
+    })
+    .filter(tieneDatos);
+  return { filas, avisos };
+}
+
 async function leerPdf(buffer) {
+  // Primero por columnas; si no hay una fila de títulos con CUIT, como antes.
+  let porColumnas = null;
+  try {
+    porColumnas = await leerPdfPorColumnas(buffer);
+  } catch {
+    porColumnas = null;
+  }
+  if (porColumnas?.filas.length) {
+    return {
+      filas: porColumnas.filas,
+      formato: 'pdf',
+      advertencia: [
+        'El archivo vino en PDF: las columnas se leyeron por su posición en la página. Cotejar cada fila contra el texto original antes de confirmar.',
+        ...porColumnas.avisos,
+      ].join(' '),
+    };
+  }
+
   const { PDFParse } = await import('pdf-parse');
   let text;
   try {

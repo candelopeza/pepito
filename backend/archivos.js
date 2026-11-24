@@ -29,6 +29,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { consultar, consultarEn } from './conexion-bd.js';
 import { tiene } from './capacidades.js';
+import { firmante } from './middlewares/usuario.js';
+import { nombreDeActor } from './personas.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 export const CARPETA = path.resolve(process.env.CARPETA_ARCHIVOS || path.join(AQUI, 'archivos'));
@@ -87,7 +89,7 @@ export async function guardarImagen(cx, req, { idTramite, imagen, tipoArchivo, n
       imagen.tipo,
       imagen.contenido.length,
       imagen.hash,
-      String(req.usuario?.nombre ?? 'Sistema').slice(0, 120),
+      String(firmante(req)).slice(0, 120),
       req.usuario?.id ?? null,
     ],
   );
@@ -126,7 +128,7 @@ export async function archivosPorTramite(idsTramite = null, cx = null) {
       id: f.idArchivo,
       tipo: f.tipoArchivo,
       nombre: f.nombreOriginal,
-      subidoPor: f.subidoPor,
+      subidoPor: nombreDeActor(f.subidoPor),
       subidoEn: f.subidoEn ? String(f.subidoEn).replace(' ', 'T') : null,
     });
   }

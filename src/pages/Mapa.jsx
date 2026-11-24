@@ -52,6 +52,7 @@ import { CampoSelect } from '../components/ui/Campo';
 import SeccionGeocodificacion from '../components/SeccionGeocodificacion';
 import { EnlaceFicha } from '../components/RutaProtegida';
 import { useRol } from '../auth/rolContexto';
+import { esSoloConsulta } from '../config/modulos';
 import { useDatos } from '../datos/datosContexto';
 import { LISTA_ESTADOS, colorEstado, etiquetaEstado, grupoEstado } from '../dominio/estados';
 
@@ -87,9 +88,59 @@ const CAPAS = {
 };
 
 /* ---------------------------------------------------------------- los pines
-   El color sale del estado, igual que la pastilla de la grilla: si el mapa y
-   el padrón usaran colores distintos para lo mismo, el mapa dejaría de ser
-   legible. Son los mismos tonos de los badges (App.css). */
+   >>> EL MAPA TIENE SU PROPIA PALETA, POR ETAPA (19/11/2026) <<<
+   Antes el pin usaba los 6 tonos de las pastillas de la grilla, y en el mapa
+   casi todo se veía igual: las entregas, lo documental y el exento eran todos
+   verdes; la revisión y la prórroga, amarillas. Pedido de cande: que las
+   etapas se distingan de un vistazo. Cada etapa tiene un color bien distinto
+   de los demás; dentro de la misma etapa, la letra del pin dice el detalle.
+   La leyenda de abajo del mapa usa el mismo color, así que se lee igual. */
+const COLOR_ETAPA = {
+  cumplio: '#2e7d32', //    verde: contrato, DDJJ, exento confirmado
+  revision: '#7b1fa2', //   violeta: la oficina tiene que revisar algo
+  notif1: '#ef6c00', //     naranja: falta emitir la 1° notificación
+  notif1Curso: '#1565c0', // azul: 1° notificación emitida o entregada
+  notif2: '#d81b60', //     rosa: falta emitir la 2° notificación
+  notif2Curso: '#00acc1', // celeste: 2° notificación emitida o entregada
+  prorroga: '#f2b705', //   amarillo: prórroga vigente
+  expediente: '#c62828', // rojo: camino al expediente o expediente
+  problema: '#212121', //   negro: no se pudo entregar o faltan datos
+  inactivo: '#90a4ae', //   gris: cerrado o en un paso intermedio
+};
+
+const ETAPA_DEL_ESTADO = {
+  CONTRATO_VIGENTE: 'cumplio',
+  CONTRATO_9DJ: 'cumplio',
+  DDJJ_VIGENTE: 'cumplio',
+  DDJJ_RECICLAJE: 'cumplio',
+  EXENTO_CONFIRMADO: 'cumplio',
+  REVISION_DATOS: 'revision',
+  EXENTO_REVISION: 'revision',
+  PRESENTACION_EN_REVISION: 'revision',
+  NOTIF1_PENDIENTE: 'notif1',
+  NOTIF1_GENERADA: 'notif1Curso',
+  NOTIF1_ENTREGADA: 'notif1Curso',
+  NOTIF1_SIN_FIRMA: 'notif1Curso',
+  NOTIF1_FIJADA: 'notif1Curso',
+  NOTIF2_PENDIENTE: 'notif2',
+  NOTIF2_GENERADA: 'notif2Curso',
+  NOTIF2_ENTREGADA: 'notif2Curso',
+  NOTIF2_SIN_FIRMA: 'notif2Curso',
+  NOTIF2_FIJADA: 'notif2Curso',
+  PRORROGA_VIGENTE: 'prorroga',
+  GENERAR_EXPEDIENTE: 'expediente',
+  EXPEDIENTE_SOLICITADO: 'expediente',
+  EXPEDIENTE: 'expediente',
+  NOTIF1_NO_ENTREGADA: 'problema',
+  NOTIF2_NO_ENTREGADA: 'problema',
+  COMPLETAR_DATOS: 'problema',
+  INACTIVO_CERRADO: 'inactivo',
+  NOTIF1_GENERANDO: 'inactivo',
+  NOTIF2_GENERANDO: 'inactivo',
+};
+
+/* Respaldo para un estado nuevo que todavía no esté en ETAPA_DEL_ESTADO: el
+   tono de su pastilla. */
 const COLOR_HEX = {
   verde: '#2e7d32',
   naranja: '#ef6c00',
@@ -128,7 +179,7 @@ function glifoDe(codigo) {
 }
 
 function colorDe(codigo) {
-  return COLOR_HEX[colorEstado(codigo)] ?? COLOR_HEX.gris;
+  return COLOR_ETAPA[ETAPA_DEL_ESTADO[codigo]] ?? COLOR_HEX[colorEstado(codigo)] ?? COLOR_HEX.gris;
 }
 
 /* Tamaño del pin en píxeles. Con casi dos mil locales, uno grande tapa el
@@ -255,7 +306,12 @@ function Mapa() {
   const sinUbicacion = useMemo(() => filtrados.filter((l) => l.sinGeo), [filtrados]);
 
   // Solo los estados que están en pantalla: una leyenda con los 24 no se lee.
-  const estadosPresentes = [...new Set(conUbicacion.map((l) => l.estado))];
+  // En la leyenda, los del mismo color juntos y en el orden del circuito.
+  const ordenEtapa = (codigo) => {
+    const i = Object.keys(COLOR_ETAPA).indexOf(ETAPA_DEL_ESTADO[codigo]);
+    return i === -1 ? 99 : i;
+  };
+  const estadosPresentes = [...new Set(conUbicacion.map((l) => l.estado))].sort((a, b) => ordenEtapa(a) - ordenEtapa(b));
 
   return (
     <>
@@ -351,7 +407,8 @@ function Mapa() {
               <Popup>
                 <div className="mapa-popup">
                   <strong>{local.nombreLocal}</strong>
-                  <span>{local.razonSocial || 'Sin razón social'}</span>
+                  {/* Relevador y notificador no ven la razón social (config/modulos.js). */}
+                  {!esSoloConsulta(rol) && <span>{local.razonSocial || 'Sin razón social'}</span>}
                   <span>{local.direccion}</span>
                   <BadgeEstado codigo={local.estado} />
                   {local.plazo && (

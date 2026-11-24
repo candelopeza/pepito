@@ -1,0 +1,2224 @@
+/* ============================================================================
+   App.css  —  ESTILOS DE COMPONENTES Y PÁGINAS
+   ----------------------------------------------------------------------------
+   QUÉ VA ACÁ:  todo lo que tenga que ver con un componente o una página.
+   GLOBALES:    reset / body / fuente -> src/index.css
+   SE CARGA EN: src/App.jsx
+
+   ÍNDICE (buscá el número para saltar de sección)
+     1. LAYOUT ................. components/Layout.jsx
+     2. NAVBAR ................. components/Navbar.jsx
+     3. SIDEBAR ................ components/Sidebar.jsx
+     4. MAIN CONTENT + TÍTULOS . components/Layout.jsx + ui/PageHeader.jsx
+     5. INFO BAR + BTN VOLVER .. ui/PageHeader.jsx + pages/Home.jsx
+     6. SEPARADOR DE SECCIÓN ... todas las páginas (.accesos-header)
+     7. TARJETAS (GRID) ........ ui/Card.jsx (Home, Relevamiento, Documentacion)
+    7.b TARJETAS DE ACCIÓN .... pages/Home.jsx (acciones rápidas)
+     8. STAT CARDS ............. pages/Home.jsx, pages/Reportes.jsx
+     9. TABLAS + BADGES ........ pages/Local.jsx, pages/Expediente.jsx
+    10. FORMULARIOS ............ components/FormLocal.jsx
+    11. RESPONSIVE ............. móvil / pantalla chica
+    12. MODAL ................. components/ui/Modal.jsx
+    13. DOCUMENTACIÓN ......... pages/Documentacion.jsx
+   ============================================================================ */
+
+
+/* ========== 1. LAYOUT ==========
+   Estructura: navbar arriba, y abajo sidebar + contenido en fila.
+   Usado en: components/Layout.jsx
+   Si se descuadra TODA la pantalla, el problema está acá. */
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-body {
+  display: flex;
+  flex: 1;
+}
+
+
+/* ========== 2. NAVBAR (barra azul de arriba) ==========
+   Usado en: components/Navbar.jsx
+   De izquierda a derecha: botón ☰, logo "CIUDAD / SMT", y pegado al borde
+   derecho los avisos de conexión (normalmente vacío).
+
+   El `margin-left: auto` de .navbar-derecha es lo que empuja ese bloque al
+   extremo (aprovecha que .navbar ya es flex). Si el nombre aparece pegado al
+   logo, es esa línea. */
+/* QUEDA PEGADA ARRIBA AL BAJAR (sticky, 03/11/2026). Antes se iba con la
+   página, y el menú lateral (fixed, top: 64px) quedaba con un hueco arriba
+   por donde se veía pasar el contenido. El z-index 100 la deja sobre el
+   contenido y el menú, y debajo de los modales (200). */
+.navbar {
+  position: sticky;
+  top: 0;
+  background-color: #1976d2;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 100;
+}
+
+/* Botón ☰: muestra y esconde el menú lateral.
+   La lógica no está acá ni en el Navbar: el estado vive en Layout.jsx. */
+.btn-hamburguesa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: white;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-hamburguesa:hover { background: rgba(255,255,255,0.18); }
+.btn-hamburguesa:focus-visible { outline: 2px solid white; outline-offset: 1px; }
+
+.logo-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+/* El símbolo de Ciudad SMT, sin fondo: se ve el azul de la barra detrás. */
+.logo-icon img { display: block; }
+
+.logo-text { display: flex; flex-direction: column; line-height: 1.1; }
+
+.ciudad { color: white; font-size: 11px; font-weight: 600; letter-spacing: 1px; }
+.smt { color: white; font-size: 24px; font-weight: 800; letter-spacing: 1px; }
+
+/* --- Bloque de la derecha: solo los avisos de conexión (06/11/2026: sin
+   usuario ni selector hasta CiDiTuc) --- */
+.navbar-derecha {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+/* La persona que entró por CiDiTuc: nombre en mayúsculas + ícono (13/11/2026).
+   Todavía no despliega ningún menú; por eso no lleva cursor: pointer. */
+.navbar-usuario {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+}
+
+.navbar-usuario-nombre {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+
+
+/* ========== 3. SIDEBAR (menú lateral izquierdo) ==========
+   Usado en: components/Sidebar.jsx
+
+   FORMA DEL MENÚ: "Inicio" suelto arriba, y debajo las secciones plegables
+   (título en MAYÚSCULA + flechita) con sus ítems indentados.
+
+   OJO: la clase .active la pone react-router solo (NavLink). Si el ítem
+   activo no se resalta, revisá el to= del NavLink, no el CSS.
+
+   LOS PADDINGS RAROS DE .active (17px, 37px) NO SON UN ERROR: el resaltado
+   agrega un borde de 3px a la izquierda, así que se le restan esos 3px al
+   padding. Sin eso, el texto se corre 3px cuando el ítem queda seleccionado. */
+/* EL MENÚ SE SUPERPONE, NO EMPUJA: es `fixed`, o sea que queda FUERA del
+   flujo de la página. Por eso, al abrirlo y cerrarlo, el contenido de atrás no
+   se mueve ni se re-acomoda; el menú se dibuja arriba, como un cajón.
+   Si algún día se le saca el position: fixed, vuelve a empujar todo.
+
+   El top: 64px es la altura de la navbar (sección 2). Si cambia una, cambia la
+   otra: si no, el menú arranca tapado por la barra azul o queda un hueco. */
+.sidebar {
+  position: fixed;
+  top: 64px;
+  left: 0;
+  bottom: 0;
+  z-index: 90;
+  width: 260px;
+  background: white;
+  border-right: 1px solid #e0e0e0;
+  padding: 8px 0;
+  overflow-y: auto;
+  /* Al llegar al final del menú, el dedo no sigue arrastrando la página de atrás. */
+  overscroll-behavior: contain;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.18);
+}
+
+/* Con el menú abierto en el teléfono, la página de atrás no se mueve: se
+   desliza solo el menú. En la PC no se toca, para que no salte el ancho al
+   desaparecer la barra de desplazamiento. */
+@media (pointer: coarse) {
+  html:has(.sidebar-fondo) { overflow: hidden; }
+}
+
+/* El gris de atrás. Hace dos cosas: deja claro que lo de atrás pasó a segundo
+   plano, y un clic ahí cierra el menú (lo maneja Layout.jsx).
+   z-index 89 = justo DEBAJO del menú (90) y encima de todo lo demás.
+   Es un <button>, así que hay que apagarle los estilos que traen los botones
+   por defecto (borde y padding). */
+.sidebar-fondo {
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 89;
+  background: rgba(0,0,0,0.35);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.sidebar-nav { display: flex; flex-direction: column; }
+
+/* --- "Inicio": link suelto, con el mismo aspecto que un título de sección
+       (pero sin flechita, porque no despliega nada). --- */
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  color: #263238;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-item:hover { background: #f5f7fa; color: #1976d2; }
+
+.nav-item.active {
+  background: #e3f2fd;
+  color: #1976d2;
+  border-left: 3px solid #1976d2;
+  padding-left: 17px;
+}
+
+/* --- Título de una sección plegable (es un <button>, ver Sidebar.jsx) --- */
+.nav-seccion-boton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 20px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #263238;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-seccion-boton:hover { background: #f5f7fa; color: #1976d2; }
+
+.nav-seccion-flecha { display: flex; color: #78909c; }
+
+/* --- Los ítems de adentro de una sección --- */
+.nav-sublista { display: flex; flex-direction: column; padding-bottom: 6px; }
+
+.nav-subitem {
+  padding: 10px 20px 10px 40px;
+  color: #546e7a;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-subitem:hover { background: #f5f7fa; color: #1976d2; }
+
+.nav-subitem.active {
+  background: #e3f2fd;
+  color: #1976d2;
+  font-weight: 600;
+  border-left: 3px solid #1976d2;
+  padding-left: 37px;
+}
+
+
+/* ========== 4. MAIN CONTENT + TÍTULOS DE PÁGINA ==========
+   .main-content -> components/Layout.jsx (el <main> donde entra cada página)
+   .inicio-tag / .sistema-titulo -> components/ui/PageHeader.jsx
+   Si el contenido queda muy angosto o pegado al borde, es .main-content.
+
+   POR QUÉ EL `margin: 0 auto`: el max-width limita el ancho de la columna,
+   pero por sí solo la deja pegada a la izquierda y en una pantalla ancha todo
+   queda corrido a un costado. El margen automático reparte el espacio sobrante
+   en partes iguales a los dos lados, o sea que la centra.
+   El `width: 100%` es para que en pantallas angostas siga ocupando todo.
+
+   >>> POR QUÉ 1800 Y NO 1200 <<<
+   Las tablas del sistema tienen entre seis y nueve columnas, y la última es la
+   de ACCIONES: los botones con los que se trabaja. Con 1200px esa columna
+   quedaba fuera de la pantalla y había que descubrir la barra de scroll
+   horizontal para llegar a ella, que es justo lo que no puede pasar con la
+   columna que contiene el trabajo.
+
+   Los formularios NO se estiran con esto: tienen su propio max-width (ver
+   .formulario, 600px), así que un campo de texto sigue teniendo un ancho que
+   se puede leer. */
+.main-content {
+  flex: 1;
+  width: 100%;
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 32px 40px;
+}
+
+.inicio-tag { color: #14599e; font-size: 14px; font-weight: 600; margin-bottom: 24px; letter-spacing: 0.5px; }
+.sistema-titulo { color: #1a1a1a; font-size: 22px; font-weight: 700; margin-bottom: 24px; }
+
+
+/* ========== 5. INFO BAR + BADGE + BOTÓN VOLVER ==========
+   .info-bar / .admin-badge / .fecha -> pages/Home.jsx (usuario + fecha)
+   .btn-volver -> components/ui/PageHeader.jsx (prop botonVolver) */
+.info-bar { display: flex; align-items: center; gap: 24px; margin-bottom: 40px; flex-wrap: wrap; }
+
+.admin-badge {
+  display: flex; align-items: center; gap: 8px;
+  background: white; padding: 8px 16px; border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  color: #1976d2; font-size: 13px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  text-decoration: none;
+}
+
+.btn-volver { color: #666; transition: all 0.2s; }
+.btn-volver:hover { color: #1976d2; box-shadow: 0 2px 8px rgba(25,118,210,0.15); }
+
+.fecha { color: #9e9e9e; font-size: 14px; font-weight: 500; }
+
+
+/* ========== 6. SEPARADOR DE SECCIÓN ==========
+   Es la línea gris con el texto chico ("LISTADO", "OPCIONES", etc.).
+   Usado en TODAS las páginas: si lo tocás, cambia en todas. */
+.accesos-header { border-bottom: 1px solid #e0e0e0; padding-bottom: 12px; margin-bottom: 24px; }
+.accesos-header span { color: #9e9e9e; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+
+/* Variante con un control a la derecha del título (el orden de las bandejas
+   del Tablero). El separador sigue siendo el mismo: solo se vuelve flex. */
+.accesos-header-accion { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+/* Selector segmentado: un rótulo chico y dos pastillas dentro de un mismo
+   marco gris. La activa se pinta de blanco con sombra suave y texto azul, la
+   otra queda gris y se aclara al pasar el mouse. */
+.selector-orden {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 3px; background: #f1f3f5; border: 1px solid #e0e0e0; border-radius: 999px;
+}
+.selector-orden-rotulo {
+  padding: 0 8px 0 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: #9e9e9e;
+}
+.selector-orden-opcion {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border: none; border-radius: 999px; background: transparent;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: #757575;
+  cursor: pointer; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.selector-orden-opcion:hover { color: #424242; }
+.selector-orden-opcion.activa {
+  background: #fff; color: #1976d2; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.selector-orden-opcion:focus-visible { outline: 2px solid #1976d2; outline-offset: 1px; }
+.selector-orden-icono { font-size: 12px; line-height: 1; }
+
+/* Link a la derecha del separador (el "Abrir el tablero de trabajo →" del
+   Inicio). Va acá, en la cabecera de la sección, y no como una tarjeta más:
+   una tarjeta al lado de los pendientes se lee como otro pendiente. */
+.accesos-header-link {
+  color: #1976d2;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.accesos-header-link:hover { text-decoration: underline; }
+
+
+/* ========== 7. TARJETAS (GRID DE ACCESOS) ==========
+   Componente: components/ui/Card.jsx
+   Usado en:   Home, Relevamiento, Tramite, Documentacion
+   Si en pantalla grande queda una sola columna, mirá el minmax() de acá
+   y también la sección 11 (RESPONSIVE). */
+.grid-accesos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.card-acceso {
+  background: white; border-radius: 12px; padding: 28px 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e8ecf1;
+  cursor: pointer; transition: all 0.2s ease; min-height: 140px;
+  /* Arriba y no al centro: las tarjetas de una fila miden todas lo mismo, pero
+     su contenido no (una descripción puede ocupar una línea o tres, y el pie de
+     plazos aparece solo si hay vencimientos). Centrando verticalmente, cada
+     número caía a una altura distinta según cuánto texto tuviera debajo. Con
+     flex-start todos arrancan en el mismo punto y la fila se lee de un vistazo;
+     el pie se va abajo solo, con el margin-top: auto de .card-pie. */
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  text-decoration: none; color: inherit; text-align: center;
+}
+
+.card-acceso:hover {
+  box-shadow: 0 4px 16px rgba(25, 118, 210, 0.15);
+  border-color: #1976d2;
+  transform: translateY(-2px);
+}
+
+.card-titulo { color: #333; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.card-descripcion { color: #888; font-size: 13px; font-weight: 400; line-height: 1.4; }
+
+/* ========== 7.b TARJETAS DE ACCIÓN (ACCIONES RÁPIDAS DEL INICIO) ==========
+   Usado en: pages/Home.jsx, franja de arriba.
+
+   >>> POR QUÉ NO SON .card-acceso <<<
+   Porque dicen otra cosa. Una .card-acceso de la sección 7 es un pendiente:
+   está centrada y su protagonista es el número (cuántos casos esperan). Estas
+   arrancan algo nuevo, no cuentan nada, y si se vieran iguales el Inicio
+   volvería a ser una grilla uniforme donde todo pesa lo mismo.
+
+   La diferencia es deliberadamente chica —la misma base blanca, el mismo radio
+   de 12px, la misma sombra y el mismo borde #e8ecf1 que TODAS las tarjetas del
+   sistema— y se apoya en tres cosas: el "+" azul, el texto alineado a la
+   izquierda y menos altura. Alcanza para que se lean como otra familia sin
+   romper la estética institucional. */
+.grid-acciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.card-accion {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e8ecf1;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Mismo hover que .card-acceso: que el sistema entero responda igual al mouse. */
+.card-accion:hover {
+  box-shadow: 0 4px 16px rgba(25, 118, 210, 0.15);
+  border-color: #1976d2;
+  transform: translateY(-2px);
+}
+
+/* El "+" es la marca de "esto crea algo". Va en un círculo azul lleno porque
+   es el único elemento de la pantalla que inicia una operación.
+
+   NO se dibuja con la tipografía. El glifo "+" se apoya en el eje matemático de
+   la fuente, que no es el centro del cuadratín: por eso con `align-items:
+   center` queda uno o dos píxeles corrido, y cuánto se corre depende de qué
+   fuente resolvió el sistema. Las dos barras van con ::before/::after al 50%,
+   que es centrado geométrico exacto y no depende de la fuente. El "+" de
+   Home.jsx sigue en el HTML (ya está aria-hidden), solo se oculta con
+   font-size: 0. */
+.card-accion-signo {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #1976d2;
+  color: white;
+  font-size: 0;
+  margin: 0;
+}
+
+/* Las barras de la cruz: 16px de largo y 2px de grosor sobre un círculo de 40. */
+.card-accion-signo::before,
+.card-accion-signo::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background: currentColor;
+  border-radius: 1px;
+}
+.card-accion-signo::before { width: 12px; height: 2px; transform: translate(-50%, -50%); }
+.card-accion-signo::after { width: 2px; height: 12px; transform: translate(-50%, -50%); }
+
+.card-accion:hover .card-accion-signo { background: #1565c0; }
+
+/* En vez del "+", las acciones que llevan a una página de afuera muestran su
+   nombre en un cuadrado con el color de esa página (ARCA, 30/10/2026). */
+.card-accion-logo {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #232c55;
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.card-accion-texto { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.card-accion-texto strong { color: #333; font-size: 15px; font-weight: 700; }
+.card-accion-texto small { color: #888; font-size: 12px; line-height: 1.4; }
+
+
+/* ========== 8. STAT CARDS (números grandes) ==========
+   Usado en: pages/Home.jsx (indicadores del mes), pages/Reportes.jsx
+   El color se elige en la página, agregando .stat-card-azul / -verde /
+   -naranja / -amarillo / -rojo al lado de .stat-card.
+   Si un número sale negro, esa clase de color no existe acá.
+
+   OJO, NO CONFUNDIR CON LA SECCIÓN 7: una stat card es un dato (no se puede
+   tocar, no lleva a ningún lado) y una .card-acceso es un pendiente (se toca y
+   navega). En el Inicio conviven las dos y la diferencia importa: si el número
+   del mes se pudiera clickear, parecería una tarea. */
+.grid-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px;
+}
+
+.stat-card {
+  background: white; border-radius: 12px; padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e8ecf1;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+
+.stat-numero { font-size: 36px; font-weight: 800; margin-bottom: 8px; }
+.stat-label { font-size: 13px; color: #666; font-weight: 500; }
+
+/* Renglón debajo de la franja de indicadores del Inicio, que manda a Reportes
+   para el detalle. Es una nota al pie, no un botón: el peso visual tiene que
+   quedar en los pendientes de arriba. */
+.inicio-pie-indicadores {
+  margin-top: 16px;
+  color: #9e9e9e;
+  font-size: 13px;
+}
+.inicio-pie-indicadores a { color: #1976d2; font-weight: 600; text-decoration: none; }
+.inicio-pie-indicadores a:hover { text-decoration: underline; }
+
+.stat-card-azul .stat-numero { color: #1976d2; }
+.stat-card-verde .stat-numero { color: #2e7d32; }
+.stat-card-naranja .stat-numero { color: #ef6c00; }
+.stat-card-amarillo .stat-numero { color: #f9a825; }
+.stat-card-rojo .stat-numero { color: #c62828; }
+
+
+/* ========== 9. TABLAS + BADGES DE ESTADO ==========
+   Usado en: pages/Local.jsx y pages/Expediente.jsx
+
+   BADGES: existen verde, naranja y gris. El color de cada estado sale de
+   src/config/catalogos.js, no de un if adentro de la página. Un estado que no
+   esté en esa lista cae en .badge-gris (antes quedaba sin color y parecía un
+   error de la pantalla). Para sumar un color nuevo: agregarlo acá Y en
+   catalogos.js, los dos nombres tienen que coincidir. */
+.tabla-contenedor {
+  background: white; border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e8ecf1;
+  overflow: hidden;
+}
+
+/* >>> MISMO ENCABEZADO QUE LA GRILLA DE MUI <<<
+   El sistema tiene dos clases de tabla: esta (HTML plano, para las bandejas
+   con botones de acción) y la grilla de ui/Grilla.jsx (MUI, para los listados
+   grandes con exportar y paginar). Tienen que verse de la misma familia: el
+   mismo azul institucional en el encabezado, texto blanco, filas que se marcan
+   al pasar el mouse. Antes esta era gris y la otra azul, y en una pantalla con
+   las dos —Notificaciones, Relevamiento— parecían de dos sistemas distintos.
+   Si se cambia un color acá, cambiarlo también en ESTILO de Grilla.jsx.
+
+   border-collapse: separate (y no collapse) es lo que permite que el radio de
+   12px recorte el encabezado azul: con collapse el navegador ignora el
+   overflow: hidden de la tabla. */
+.tabla-datos {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  background: white; border-radius: 12px; overflow: hidden;
+  border: 1px solid #e8ecf1; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.tabla-datos th {
+  background: #1976d2; color: white; font-size: 14px; font-weight: 700;
+  padding: 14px 16px; text-align: left;
+  border-right: 1px solid rgba(255, 255, 255, 0.35);
+}
+.tabla-datos th:last-child { border-right: none; }
+.tabla-datos td { padding: 16px; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #444; }
+.tabla-datos tbody tr:last-child td { border-bottom: none; }
+.tabla-datos tbody tr:hover { background: #f8fafc; }
+
+/* Existe solo en el papel. Lo usa la hoja de ruta de Notificaciones: en
+   pantalla esas mismas cédulas ya están en la grilla de emitidas, así que
+   mostrar la tabla también sería el mismo dato dos veces. Al imprimir aparece
+   con las columnas Resultado y Firma vacías, para completar en el recorrido. */
+@media screen { .solo-papel { display: none; } }
+
+.btn-tabla {
+  background: #e3f2fd; color: #1976d2; border: none;
+  padding: 6px 14px; border-radius: 6px; font-size: 13px;
+  font-weight: 600; cursor: pointer; transition: 0.2s;
+}
+.btn-tabla:hover { background: #1976d2; color: white; }
+
+/* Botón "Editar": contorno en vez de fondo lleno, para que se distinga de
+   "Ver" de un vistazo sin gritar más que él. */
+.btn-tabla-editar { background: transparent; border: 1px solid #90caf9; }
+.btn-tabla-editar:hover { background: #1976d2; border-color: #1976d2; color: white; }
+
+/* Contenedor de los botones de la columna Acciones. Con flex quedan alineados
+   y separados aunque un rol vea solo uno de los dos. */
+.celda-acciones { display: flex; gap: 8px; align-items: center; }
+
+.badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.badge-verde { background: #e8f5e9; color: #2e7d32; }
+.badge-naranja { background: #fff3e0; color: #ef6c00; }
+.badge-azul { background: #e3f2fd; color: #1565c0; }
+.badge-amarillo { background: #fffde7; color: #f57f17; }
+
+/* Agregado en la rama de cande. Todavia no lo usa ningun estado: ver la nota
+   de COLOR_ESTADO en pages/Tramite.jsx. */
+.badge-rojo { background: #ffebee; color: #c62828; }
+.badge-gris { background: #eceff1; color: #607d8b; }
+/* Sin color: el estado en las grillas se lee como texto común (ver ui/Badge.jsx). */
+.badge-neutro { background: transparent; color: #37474f; font-weight: 500; padding-left: 0; padding-right: 0; }
+
+/* ========== 10. FORMULARIOS ==========
+   Usado en: components/FormLocal.jsx (adentro del modal de Locales).
+   Sirve igual para las pantallas de Rubros y Sedes cuando se hagan. */
+.formulario { background: white; padding: 32px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e8ecf1; max-width: 600px; }
+
+/* Cuando el formulario ya está adentro de un modal, el modal aporta el fondo
+   y el recuadro. Sin esto quedaría una caja blanca dentro de otra. */
+.formulario-modal { box-shadow: none; border: none; padding: 0; max-width: none; }
+
+.form-grupo { margin-bottom: 20px; }
+.form-grupo label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #555; }
+.form-grupo input, .form-grupo select {
+  width: 100%; padding: 12px 16px; border: 1px solid #ddd;
+  border-radius: 8px; font-size: 15px; font-family: inherit;
+}
+.form-grupo input:focus, .form-grupo select:focus { outline: none; border-color: #1976d2; }
+
+/* Campo bloqueado: modo "Ver", y también el N° de local, que nunca se edita.
+   Se usa un gris bien marcado para que se note que no es un campo roto. */
+.form-grupo input:disabled, .form-grupo select:disabled {
+  background: #f5f7fa; color: #78909c; cursor: not-allowed;
+}
+
+/* Campo con error de validación */
+.form-grupo input.con-error { border-color: #c62828; }
+.form-grupo input.con-error:focus { border-color: #c62828; }
+.form-error { display: block; margin-top: 6px; font-size: 13px; color: #c62828; font-weight: 500; }
+
+/* Aclaración gris debajo de un campo (no es un error) */
+.form-ayuda { display: block; margin-top: 6px; font-size: 12px; color: #90a4ae; }
+
+/* Fila de botones del final. Alineados a la derecha, que es donde se los
+   busca en un formulario. */
+.form-acciones {
+  display: flex; justify-content: flex-end; gap: 12px;
+  margin-top: 28px; padding-top: 20px; border-top: 1px solid #eceff1;
+}
+
+.btn-primario {
+  background: #1976d2; color: white; border: none;
+  padding: 14px 32px; border-radius: 8px; font-size: 15px;
+  font-weight: 600; cursor: pointer; transition: 0.2s;
+}
+.btn-primario:hover { background: #1565c0; }
+
+
+/* ========== BARRA DE ACCIONES DE TABLA ========== */
+.tabla-acciones {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+  /* Centrada igual que la grilla: la barra lleva el mismo maxWidth que la
+     tabla, así los botones quedan alineados con su borde derecho. */
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.tabla-buscadores { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.buscador {
+  background: white; border: 1px solid #ddd; border-radius: 8px;
+  padding: 12px 16px; font-size: 14px; font-family: inherit;
+  min-width: 220px; color: #333;
+}
+.buscador::placeholder { color: #999; }
+.buscador:focus { outline: none; border-color: #1976d2; }
+
+.tabla-botones { display: flex; gap: 12px; }
+
+.btn-icono {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 38px; border: none; border-radius: 6px;
+  color: white; cursor: pointer; transition: 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.btn-icono-azul { background: #1976d2; }
+.btn-icono-azul:hover { background: #1565c0; }
+.btn-icono-verde { background: #2e7d32; }
+.btn-icono-verde:hover { background: #1b5e20; }
+
+/* ========== GRILLA (MUI DATA GRID) ========== */
+.grilla-contenedor {
+  background: white; border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e8ecf1;
+  overflow: hidden;
+  /* CENTRADA. Cada tabla mide lo que necesitan sus columnas (ver
+     anchoDeColumnas en ui/Grilla.jsx), así que casi ninguna ocupa todo el ancho
+     disponible. Sin el margen automático todas quedaban pegadas a la izquierda
+     con un vacío grande a la derecha. */
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ========== FORMULARIO EN LINEA ========== */
+.formulario-nuevo { margin-bottom: 24px; }
+.formulario-titulo {
+  color: #9e9e9e; font-size: 12px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; margin-bottom: 20px;
+}
+.form-acciones { display: flex; gap: 12px; align-items: center; }
+
+/* Botón de descarte (Cancelar / Cerrar). Deliberadamente más apagado que el
+   primario, para que no compitan por la atención. */
+.btn-secundario {
+  background: white; color: #555; border: 1px solid #ddd;
+  padding: 14px 24px; border-radius: 8px; font-size: 15px;
+  font-weight: 600; cursor: pointer; transition: 0.2s; font-family: inherit;
+}
+.btn-secundario:hover { background: #f5f7fa; border-color: #bbb; }
+
+
+/* ========== 11. RESPONSIVE (pantallas <= 768px) ==========
+   El menú lateral YA NO depende del tamaño de pantalla: se superpone al
+   contenido siempre y arranca cerrado (ver sección 3 y Layout.jsx). Así que
+   acá no hace falta ninguna regla para él.
+   Queda solo el espaciado, y el nombre del usuario, que no entra al lado del
+   logo en pantalla chica. */
+@media (max-width: 768px) {
+  .main-content { padding: 20px; }
+  .grid-accesos { grid-template-columns: 1fr; }
+
+  /* Las dos grillas nuevas del Inicio. Las acciones a una columna por el mismo
+     motivo que .grid-accesos; los indicadores a DOS y no a una porque son
+     números cortos: apilados de a uno obligarían a scrollear seis pantallas de
+     información que nadie tiene que accionar. */
+  .grid-acciones { grid-template-columns: 1fr; }
+  .grid-stats { grid-template-columns: repeat(2, 1fr); }
+
+  /* En pantalla angosta la acción del aviso no entra al lado del texto: baja
+     y se alinea a la izquierda, debajo del título. */
+  .aviso { flex-wrap: wrap; }
+  .aviso-accion { margin-left: 0; }
+
+  /* Lo de abajo viene de la rama de cande.
+     En celular el modal ocupa toda la pantalla: una ventanita centrada con
+     margenes desperdicia ancho justo donde menos hay. */
+  .modal-fondo { padding: 0; }
+  .modal-caja { max-height: 100%; border-radius: 0; }
+
+  /* Botones del formulario apilados y a lo ancho: mas faciles de tocar.
+     Es column-reverse y no column para que el principal (Guardar) quede
+     ARRIBA, que es donde llega el pulgar primero. */
+  .form-acciones { flex-direction: column-reverse; }
+  .form-acciones button { width: 100%; }
+}
+
+
+/* ========== 12. MODAL ==========
+   Usado en: components/ui/Modal.jsx  +  components/FormLocal.jsx adentro.
+
+   >>> ESTA SECCIÓN NO EXISTÍA <<<
+   El índice de arriba la nombraba desde el principio, pero nunca se había
+   escrito: el modal se dibujaba sin ningún estilo (sin fondo oscuro, sin
+   recuadro, sin centrar) y parecía que el formulario no aparecía.
+
+   ESTRUCTURA (los nombres salen de Modal.jsx):
+       .modal-fondo        el velo oscuro que ocupa toda la pantalla
+         .modal-caja       la ventana blanca, centrada
+           .modal-encabezado   título + X
+           .modal-cuerpo       lo que le pasa la pantalla (el formulario)
+
+   SI HAY PROBLEMA ACÁ:
+     - "El modal queda debajo del menú lateral": z-index. El menú está en 90
+       (sección 3), así que el modal tiene que estar por encima.
+     - "En un formulario largo no llego a los botones": el que scrollea es
+       .modal-cuerpo, y los botones quedan pegados abajo con position:sticky.
+       Si se le saca el sticky, hay que bajar scrolleando hasta el final.
+     - "Se ve una caja blanca dentro de otra": el formulario de adentro tiene
+       que llevar la clase .formulario-modal (sección 10). */
+.modal-fondo {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 200;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal-caja {
+  width: 100%;
+  max-width: 620px;
+  /* No más alto que la pantalla: lo que sobra scrollea adentro del cuerpo,
+     no en la página de atrás. */
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+
+.modal-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 28px 6px;
+}
+
+.modal-titulo { margin: 0; font-size: 20px; font-weight: 600; color: #212121; }
+
+.modal-cerrar {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 26px;
+  line-height: 1;
+  color: #90a4ae;
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.modal-cerrar:hover { color: #37474f; background: #eceff1; }
+
+/* Lo único que scrollea. El encabezado queda fijo arriba. */
+.modal-cuerpo { padding: 18px 28px 20px; overflow-y: auto; }
+
+
+/* ---------- Los campos del formulario cuando está adentro de un modal ----------
+   Recuadro tipo "outlined": la etiqueta arranca DENTRO de la caja y sube
+   achicándose cuando el campo toma foco o ya tiene algo escrito.
+
+   Va acá y no en la sección 10 porque es solo para el modal: el formulario
+   en línea de Trámites sigue con las etiquetas arriba, como estaba.
+
+   OJO: depende de que los inputs tengan placeholder=" " (un espacio). Está
+   explicado en el encabezado de FormLocal.jsx. */
+.formulario-modal .form-grupo { position: relative; margin-bottom: 22px; }
+
+.formulario-modal .form-grupo label {
+  position: absolute;
+  top: 17px;
+  left: 12px;
+  margin: 0;
+  padding: 0 4px;
+  /* El fondo blanco es lo que "corta" el borde del recuadro cuando la
+     etiqueta sube y queda montada encima de la línea. */
+  background: white;
+  color: #757575;
+  font-size: 16px;
+  font-weight: 400;
+  /* Sin esto, un clic sobre la etiqueta no llega al campo de abajo. */
+  pointer-events: none;
+  transition: top 0.15s, font-size 0.15s, color 0.15s;
+}
+
+/* Sube y se achica en 3 casos: el campo tiene foco, ya tiene algo escrito, o
+   es un <select> (un select SIEMPRE tiene un valor elegido, así que su
+   etiqueta no tiene por qué estar nunca abajo). */
+.formulario-modal .form-grupo:focus-within label,
+.formulario-modal .form-grupo:has(input:not(:placeholder-shown)) label,
+.formulario-modal .form-grupo:has(select) label {
+  top: -9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.formulario-modal .form-grupo:focus-within label { color: #1976d2; }
+
+.formulario-modal .form-grupo input,
+.formulario-modal .form-grupo select {
+  padding: 16px 14px;
+  border: 1px solid #c4c4c4;
+  border-radius: 4px;
+  font-size: 16px;
+  color: #212121;
+  background: white;
+}
+
+/* El borde de foco se hace con un box-shadow por dentro en vez de subir el
+   border a 2px: si cambiara el grosor del borde, el texto se movería 1px. */
+.formulario-modal .form-grupo input:focus,
+.formulario-modal .form-grupo select:focus {
+  border-color: #1976d2;
+  box-shadow: inset 0 0 0 1px #1976d2;
+}
+
+.formulario-modal .form-grupo input.con-error { border-color: #c62828; }
+.formulario-modal .form-grupo input.con-error:focus {
+  border-color: #c62828;
+  box-shadow: inset 0 0 0 1px #c62828;
+}
+.formulario-modal .form-grupo:has(input.con-error) label { color: #c62828; }
+
+/* Campo bloqueado (modo "Ver", y el N° de local). */
+.formulario-modal .form-grupo input:disabled,
+.formulario-modal .form-grupo select:disabled { background: #f5f7fa; }
+
+
+/* ---------- Botones del modal ----------
+   Quedan pegados abajo mientras el resto scrollea (position: sticky), como en
+   el diseño. El fondo blanco es necesario: sin él se ven pasar los campos por
+   detrás al scrollear. */
+.formulario-modal .form-acciones {
+  position: sticky;
+  bottom: 0;
+  background: white;
+  margin-top: 24px;
+  padding: 16px 0 4px;
+  border-top: 1px solid #eceff1;
+}
+
+.formulario-modal .form-acciones button {
+  padding: 11px 24px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+/* Rojo del botón Cancelar del modal.
+   OJO: acá el rojo NO quiere decir "esto borra algo", es solo el color que
+   pide el diseño. Si más adelante se agrega un botón de eliminar de verdad,
+   conviene que se distinga de este. */
+/* Mismo tamaño y forma que el primario: solo cambia el color. Antes no
+   tenía padding ni radio y, fuera de un .formulario-modal (que se los
+   agrega a todos sus botones), "Dar de baja" salía como un texto rojo
+   chiquito sin marco. Dentro del modal, la regla de arriba sigue mandando. */
+.btn-peligro {
+  background: #f44336;
+  color: white;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: 0.2s;
+}
+.btn-peligro:hover { background: #d32f2f; }
+
+/* Un botón deshabilitado tiene que verse deshabilitado (confirmar sin
+   motivo, generar sin datos): atenuado y sin mano. */
+.btn-primario:disabled,
+.btn-secundario:disabled,
+.btn-peligro:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primario:disabled:hover { background: #1976d2; }
+.btn-peligro:disabled:hover { background: #f44336; }
+
+
+/* ========== 13. DOCUMENTACIÓN — ALTA GUIADA ==========
+   Usado en: pages/Documentacion.jsx
+   Viene de la rama de cande, junto con esa pantalla. Se trajo tal cual: sin
+   estas reglas la pantalla se ve sin ningún estilo.
+
+   OJO: varias reglas pisan clases internas de MUI (.MuiStepIcon-root y
+   compañía). Si una actualización de MUI les cambia el nombre, el stepper
+   pierde los colores y NO va a haber ningún error en consola. */
+
+.modal-documentacion {
+  max-width: 760px;
+}
+
+
+/* Stepper de Material UI */
+.documentacion-stepper {
+  margin-bottom: 36px;
+}
+
+
+/* Cambia el color del círculo activo/completado de MUI */
+.documentacion-stepper .MuiStepIcon-root.Mui-active {
+  color: #1976d2;
+}
+
+.documentacion-stepper .MuiStepIcon-root.Mui-completed {
+  color: #2e7d32;
+}
+
+
+/* Texto de los pasos */
+.documentacion-stepper .MuiStepLabel-label {
+  font-family: inherit;
+  font-size: 13px;
+  color: #78909c;
+}
+
+.documentacion-stepper .MuiStepLabel-label.Mui-active {
+  color: #1976d2;
+  font-weight: 700;
+}
+
+.documentacion-stepper .MuiStepLabel-label.Mui-completed {
+  color: #455a64;
+  font-weight: 600;
+}
+
+
+/* Contenido de cada paso */
+.paso-documentacion {
+  margin-top: 12px;
+}
+
+
+/* Título + explicación de cada paso */
+.paso-encabezado {
+  margin-bottom: 28px;
+}
+
+.paso-encabezado h3 {
+  color: #1a1a1a;
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.paso-encabezado p {
+  color: #78909c;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+
+/* Local seleccionado */
+.local-seleccionado {
+  background: #f5f9fd;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.local-seleccionado-label {
+  color: #90a4ae;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.local-seleccionado strong {
+  color: #263238;
+  font-size: 15px;
+}
+
+
+/* Historial del proceso */
+.historial-proceso {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 24px;
+}
+
+
+/* Una etapa */
+.historial-item {
+  position: relative;
+
+  display: flex;
+  gap: 14px;
+
+  padding: 8px 0 20px 0;
+}
+
+
+/* Línea vertical entre etapas */
+.historial-item:not(:last-child)::after {
+  content: '';
+
+  position: absolute;
+
+  left: 12px;
+  top: 32px;
+
+  width: 2px;
+  height: calc(100% - 18px);
+
+  background: #e0e0e0;
+}
+
+
+/* Círculo de cada etapa */
+.historial-icono {
+  width: 26px;
+  height: 26px;
+
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  z-index: 1;
+}
+
+
+/* Etapa ya realizada */
+.historial-completado .historial-icono {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+
+
+/* Etapa actual */
+.historial-actual .historial-icono {
+  background: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #90caf9;
+}
+
+
+/* Texto de la etapa */
+.historial-etapa {
+  display: block;
+
+  color: #37474f;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  margin-bottom: 3px;
+}
+
+
+/* Estado de la etapa */
+.historial-estado {
+  display: block;
+
+  color: #78909c;
+
+  font-size: 13px;
+}
+
+
+/* Mensaje cuando se permite avanzar */
+.mensaje-habilitado {
+  background: #f1f8e9;
+
+  border: 1px solid #c5e1a5;
+
+  border-radius: 8px;
+
+  padding: 14px 18px;
+
+  margin: 22px 0;
+}
+
+.mensaje-habilitado strong {
+  display: block;
+
+  color: #2e7d32;
+
+  font-size: 14px;
+
+  margin-bottom: 4px;
+}
+
+.mensaje-habilitado span {
+  color: #558b2f;
+
+  font-size: 13px;
+}
+
+
+/* Mensaje cuando NO se puede avanzar */
+.mensaje-bloqueado {
+  background: #fff8e1;
+
+  border: 1px solid #ffe082;
+
+  border-radius: 8px;
+
+  padding: 14px 18px;
+
+  margin: 22px 0;
+}
+
+.mensaje-bloqueado strong {
+  display: block;
+
+  color: #ef6c00;
+
+  font-size: 14px;
+
+  margin-bottom: 4px;
+}
+
+.mensaje-bloqueado span {
+  color: #8d6e63;
+
+  font-size: 13px;
+}
+
+
+/* Dos fechas en una misma fila */
+.documentacion-fechas {
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 16px;
+}
+
+
+/* Textarea igual que inputs */
+.textarea-formulario {
+  width: 100%;
+
+  padding: 12px 16px;
+
+  border: 1px solid #ddd;
+
+  border-radius: 8px;
+
+  font-size: 15px;
+
+  font-family: inherit;
+
+  resize: vertical;
+}
+
+.textarea-formulario:focus {
+  outline: none;
+
+  border-color: #1976d2;
+}
+
+
+/* ============================================================================
+   ==========================================================================
+   14. LO QUE SE AGREGÓ AL CRECER EL SISTEMA
+   --------------------------------------------------------------------------
+   Todo lo de abajo entró junto con los módulos nuevos (tablero, ficha del
+   local, campo, mapa, herramientas y configuración). Está agrupado por pieza
+   y cada grupo dice qué componente lo usa, para poder borrarlo si esa pieza
+   desaparece.
+
+   La paleta es la misma de arriba, sin colores nuevos:
+     azul #1976d2 · verde #2e7d32 · naranja #ef6c00 · amarillo #f9a825
+     rojo #c62828 · gris #607d8b · textos #333 / #666 / #9e9e9e
+   ==========================================================================
+   ============================================================================ */
+
+
+/* ========== 14.1 TEXTO Y AUXILIARES ==========
+   Clases chicas que usan casi todas las pantallas. */
+.pagina-subtitulo { color: #78909c; font-size: 14px; margin: -12px 0 24px; }
+.texto-chico { font-size: 12px; color: #90a4ae; line-height: 1.5; }
+.texto-gris { color: #9e9e9e; }
+.texto-ok { color: #2e7d32; font-size: 14px; font-weight: 600; }
+/* Un plazo vencido tiene que gritar: de eso depende que alguien lo mire. */
+.texto-vencido { color: #c62828; font-weight: 700; }
+.header-acciones { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+
+/* Link a la ficha de un local. Aparece en todas las tablas. */
+.link-local { color: #1565c0; font-weight: 600; text-decoration: none; }
+.link-local:hover { text-decoration: underline; }
+
+/* Segundo renglón chico dentro de una celda (razón social, ayuda, etc.) */
+.celda-sub { display: block; font-size: 11px; color: #9e9e9e; margin-top: 2px; }
+.celda-estado { display: inline-flex; align-items: center; gap: 4px; }
+.celda-motivo { max-width: 320px; font-size: 13px; color: #555; }
+/* Celda que se completa a mano en el papel de la hoja de ruta. */
+.celda-papel { min-width: 120px; border-bottom: 1px solid #cfd8dc; }
+
+
+/* ========== 14.2 AVISOS Y ESTADOS VACÍOS ==========
+   components/ui/Aviso.jsx
+   Se usan mucho porque este sistema tiene reglas que el usuario TIENE que ver
+   antes de apretar un botón. Cuatro colores, cuatro significados fijos. */
+.aviso {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 18px; border-radius: 8px; margin-bottom: 20px;
+  border-left: 4px solid;
+}
+.aviso-cuerpo { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.aviso-titulo { font-size: 14px; font-weight: 700; }
+.aviso-texto { font-size: 13px; line-height: 1.55; }
+.aviso a { color: inherit; font-weight: 700; }
+
+/* La acción del aviso: va a la derecha y con recuadro, no colgada al final
+   del párrafo. Un link metido en la explicación se lee como texto y se
+   saltea; suelto y con borde se ve que es el boton de ese aviso. Hereda el
+   color del recuadro (currentColor), así que el de validaciones sale ámbar y
+   el de cedulas azul sin una regla por tipo. */
+.aviso-accion { margin-left: auto; flex-shrink: 0; align-self: center; }
+.aviso-accion a {
+  display: inline-block; padding: 7px 16px; border-radius: 6px;
+  border: 1px solid currentColor; font-size: 13px; white-space: nowrap;
+  text-decoration: none; transition: background 0.2s ease;
+}
+.aviso-accion a:hover { background: rgba(255, 255, 255, 0.65); }
+/* En pantalla angosta la acción baja debajo del texto. La regla del @media de
+   768px de más arriba no alcanzaba: estas, que vienen después, la pisaban, y
+   el texto se encogía en vez de dejarle el renglón al botón. */
+@media (max-width: 768px) {
+  .aviso-con-accion .aviso-cuerpo { flex-basis: 220px; }
+  .aviso-accion { margin-left: 0; }
+}
+
+.aviso-info    { background: #e3f2fd; border-color: #1976d2; color: #0d47a1; }
+.aviso-ok      { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; }
+.aviso-alerta  { background: #fff8e1; border-color: #f9a825; color: #825b00; }
+.aviso-bloqueo { background: #ffebee; border-color: #c62828; color: #8e1010; }
+
+.vacio {
+  background: white; border: 1px dashed #cfd8dc; border-radius: 12px;
+  padding: 32px; text-align: center; margin-bottom: 24px;
+}
+.vacio strong { display: block; color: #546e7a; font-size: 15px; margin-bottom: 6px; }
+.vacio p { color: #90a4ae; font-size: 13px; line-height: 1.6; max-width: 620px; margin: 0 auto; }
+
+/* Bloque informativo neutro: datos de contexto dentro de un formulario. */
+.bloque-info {
+  background: #f5f7fa; border: 1px solid #e0e6ed; border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 20px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.bloque-info strong { font-size: 13px; color: #37474f; }
+.bloque-info span { font-size: 13px; color: #607d8b; line-height: 1.5; }
+
+
+/* ========== 14.3 BOTONES DE ACCIÓN ==========
+   components/AccionesLocal.jsx
+   Los botones que hacen avanzar el circuito. En la ficha van grandes
+   (.btn-accion) y dentro de una fila de tabla van chicos (.btn-tabla, que ya
+   estaba definido en la sección 9). */
+.acciones-local { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px; }
+.btn-accion {
+  background: white; color: #1565c0; border: 1px solid #90caf9;
+  padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: 0.2s; font-family: inherit;
+}
+.btn-accion:hover { background: #1976d2; border-color: #1976d2; color: white; }
+.sin-acciones { color: #90a4ae; font-size: 13px; font-style: italic; }
+
+/* El botón "Acciones (N)" de una fila de tabla. Es un .btn-tabla con la flecha
+   al lado; el menú que abre lo viste MUI desde AccionesLocal.jsx (ESTILO_MENU). */
+.btn-menu-acciones { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.btn-menu-acciones svg { font-size: 16px; }
+.confirmar-cuerpo { font-size: 14px; color: #444; line-height: 1.6; }
+.confirmar-cuerpo p { margin-bottom: 12px; }
+
+/* Barra con una acción de lote y su explicación al costado. */
+.barra-lote {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+
+/* ========== 14.4 FILTROS Y FORMULARIOS ==========
+   components/ui/Campo.jsx  ·  todas las pantallas de listado */
+.filtros-fila { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 4px; }
+.filtros-fila .form-grupo { margin-bottom: 12px; min-width: 240px; }
+
+/* Formularios de dos columnas. Los campos con ancho={2} ocupan las dos. */
+.form-grilla { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+.form-grupo-check label {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  font-size: 14px; font-weight: 600; color: #555;
+}
+.form-grupo-check input { width: auto; }
+
+/* El formulario de campo va a una columna y con controles grandes: se usa con
+   el celular, en la calle, muchas veces con una mano. */
+.formulario-campo { max-width: 640px; }
+.formulario-campo .form-grupo input,
+.formulario-campo .form-grupo select { padding: 14px; font-size: 16px; }
+
+/* Dato de solo lectura (ui/Campo.jsx → Dato). Se usa en las fichas. */
+.dato { display: flex; flex-direction: column; gap: 3px; padding: 10px 0; }
+.dato-etiqueta {
+  font-size: 11px; font-weight: 700; color: #90a4ae;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.dato-valor { font-size: 14px; color: #37474f; }
+
+
+/* ========== 14.5 TABLERO Y BANDEJAS ==========
+   pages/Tablero.jsx */
+.bandeja {
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  margin-bottom: 16px; overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+/* La cabecera es azul, del mismo azul que el encabezado de las tablas: la
+   parte de arriba de la tarjeta (título + nombres de columna) es UN bloque
+   azul y solo las filas son blancas. Antes la cabecera era blanca y quedaba
+   una franja azul suelta en el medio de la tarjeta. */
+.bandeja-cabecera {
+  display: flex; align-items: center; gap: 16px; width: 100%;
+  padding: 16px 20px; background: #1976d2; border: none; cursor: pointer;
+  text-align: left; font-family: inherit; color: white;
+}
+.bandeja-cabecera:hover { background: #1565c0; }
+/* El contador va primero y grande: lo primero que se quiere saber de una
+   bandeja es cuántos hay, no cómo se llama. Sobre el fondo azul va en un
+   recuadro blanco y el color de la bandeja pasa al número: un cuadrado azul
+   sobre azul desaparecía. */
+.bandeja-contador {
+  flex: 0 0 48px; height: 48px; border-radius: 10px; background: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 800;
+}
+.bandeja-contador-azul { color: #1976d2; }
+.bandeja-contador-verde { color: #2e7d32; }
+.bandeja-contador-naranja { color: #ef6c00; }
+.bandeja-contador-amarillo { color: #f9a825; }
+.bandeja-contador-rojo { color: #c62828; }
+.bandeja-titulo { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.bandeja-titulo strong { font-size: 15px; color: white; }
+.bandeja-titulo small { font-size: 12px; color: rgba(255, 255, 255, 0.8); }
+.bandeja-flecha { color: rgba(255, 255, 255, 0.75); font-size: 12px; }
+.bandeja-vacia { padding: 20px; color: #b0bec5; font-size: 13px; }
+/* Dentro de una .bandeja del tablero la tabla no lleva su propio marco: ya la
+   enmarca la sección. Los nombres de columna van en un azul un tono más oscuro
+   que la cabecera, para que se lean como la segunda línea del mismo bloque y
+   no como otra tabla pegada abajo. */
+.bandeja-cuerpo .tabla-datos { border-radius: 0; border: none; box-shadow: none; }
+.bandeja-cuerpo .tabla-datos th { background: #1565c0; }
+
+/* La tabla de una bandeja va separada del encabezado azul que la titula: sin
+   este aire, los botones de imprimir y descargar quedaban pegados a la franja
+   y parecía que formaban parte de ella. */
+.bandeja-cuerpo { padding: 16px 16px 4px; }
+
+/* La tarjeta de cada bandeja se centra y lleva el ancho de su tabla, que le
+   pone Tablero.jsx con anchoDeColumnas(). */
+.bandeja { margin-left: auto; margin-right: auto; }
+.bandeja-cuerpo .tabla-acciones { margin-bottom: 12px; }
+.tabla-bandeja td { padding: 12px 16px; vertical-align: top; }
+
+/* Leyenda de colores. Tablero y mapa. */
+.leyenda {
+  display: flex; flex-wrap: wrap; gap: 18px; align-items: center;
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 16px 20px; margin-bottom: 24px; font-size: 13px; color: #607d8b;
+}
+.leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+
+
+/* ========== 14.6 TARJETAS CON NÚMERO ==========
+   components/ui/Card.jsx (Home y Portal) */
+.card-valor { display: block; font-size: 32px; font-weight: 800; margin-bottom: 6px; }
+.card-valor-azul { color: #1976d2; }
+.card-valor-verde { color: #2e7d32; }
+.card-valor-naranja { color: #ef6c00; }
+.card-valor-amarillo { color: #f9a825; }
+.card-valor-rojo { color: #c62828; }
+/* margin-top: auto lo empuja al fondo de la tarjeta: así el pie queda alineado
+   entre tarjetas aunque arriba haya distinta cantidad de texto. */
+.card-pie { margin-top: auto; padding-top: 12px; font-size: 12px; color: #90a4ae; }
+/* Cuando la tarjeta es un <button> hay que apagarle el estilo del navegador. */
+.card-acceso-boton {
+  background: white; border: 1px solid #e8ecf1; text-align: left;
+  font-family: inherit; cursor: pointer; width: 100%;
+}
+
+
+/* ========== 14.7 FICHA DEL LOCAL ==========
+   pages/LocalFicha.jsx */
+.ficha-situacion {
+  display: flex; gap: 24px; flex-wrap: wrap; align-items: stretch;
+  margin-bottom: 20px;
+}
+.ficha-estado {
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 18px 22px; display: flex; flex-direction: column; gap: 8px;
+  align-items: flex-start; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+/* El código interno del estado se muestra en chico: sirve para reportar un
+   problema sin depender de la etiqueta, que el área puede cambiar. */
+.ficha-estado-codigo { font-size: 11px; color: #b0bec5; font-family: monospace; }
+.ficha-plazo {
+  background: white; border: 1px solid #e8ecf1; border-left: 4px solid #f9a825;
+  border-radius: 12px; padding: 18px 22px;
+  display: flex; flex-direction: column; gap: 6px; justify-content: center;
+}
+.ficha-plazo strong { font-size: 13px; color: #37474f; }
+.ficha-plazo span { font-size: 13px; color: #607d8b; }
+.ficha-plazo-vencido { border-left-color: #c62828; background: #fff5f5; }
+.ficha-plazo-vencido span { color: #c62828; font-weight: 600; }
+
+.ficha-datos {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 4px 28px; background: white; border: 1px solid #e8ecf1;
+  border-radius: 12px; padding: 20px 24px; margin-bottom: 24px;
+}
+
+
+/* ========== 14.8 HISTORIAL DE ACTUACIONES ==========
+   components/HistorialActuaciones.jsx
+   La vista unificada del historial: es lo que en el sistema viejo justificaba
+   la tabla de 44 columnas, resuelto donde corresponde (en la presentación). */
+.historial { list-style: none; margin-bottom: 24px; }
+.historial-fila {
+  background: white; border: 1px solid #e8ecf1; border-left: 4px solid #cfd8dc;
+  border-radius: 12px; padding: 16px 24px 12px; margin-bottom: 12px;
+}
+/* El color del borde izquierdo es el del tipo de actuación: se puede recorrer
+   el historial de un vistazo sin leer las etiquetas. */
+.historial-azul { border-left-color: #1976d2; }
+.historial-verde { border-left-color: #2e7d32; }
+.historial-amarillo { border-left-color: #f9a825; }
+.historial-rojo { border-left-color: #c62828; }
+.historial-gris { border-left-color: #90a4ae; }
+
+.hist-cabecera {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 10px; border-bottom: 1px solid #eef2f6;
+}
+.hist-fecha { font-size: 14px; font-weight: 700; color: #37474f; }
+.hist-usuario { font-size: 12px; color: #90a4ae; margin-left: auto; }
+/* El cuerpo es la misma grilla de etiqueta + valor que "Datos del padrón"
+   (.ficha-datos / .dato): el historial se lee igual que el resto de la ficha. */
+.hist-cuerpo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 28px; padding-top: 4px;
+}
+.hist-cuerpo .dato { padding: 8px 0; }
+.hist-cuerpo .dato-valor { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hist-pendiente { color: #ef6c00; font-weight: 600; }
+.hist-vencido { color: #c62828; font-weight: 600; }
+.hist-obs { font-style: italic; color: #78909c; }
+.hist-nota { font-size: 12px; color: #90a4ae; }
+
+
+/* ========== 14.9 APP DE CAMPO ==========
+   pages/campo/Relevar.jsx y pages/campo/Entregas.jsx */
+.campo-estado {
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 14px 18px; margin-bottom: 20px; font-size: 13px;
+}
+.lista-cola { list-style: none; margin-bottom: 12px; }
+.lista-cola li {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  background: white; border: 1px solid #e8ecf1; border-radius: 8px;
+  padding: 12px 16px; margin-bottom: 8px; font-size: 13px;
+}
+.lista-cola strong { color: #37474f; }
+.lista-cola span { color: #90a4ae; }
+
+/* La hoja de ruta en pantalla. Números grandes y botones grandes: se usa
+   caminando. */
+.lista-entregas { list-style: none; margin-bottom: 24px; }
+.entrega-item {
+  display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 16px 20px; margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.entrega-orden {
+  flex: 0 0 40px; height: 40px; border-radius: 50%; background: #1976d2;
+  color: white; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 16px;
+}
+.entrega-datos { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 4px; }
+.entrega-datos strong { font-size: 15px; color: #263238; }
+.entrega-direccion { font-size: 14px; color: #546e7a; }
+.entrega-meta { font-size: 12px; color: #90a4ae; }
+.entrega-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.entrega-acciones { display: flex; gap: 10px; flex-wrap: wrap; }
+
+
+/* ========== 14.10 MAPA ==========
+   pages/Mapa.jsx */
+.mapa-contenedor {
+  position: relative; background: white; border: 1px solid #e8ecf1;
+  border-radius: 12px; padding: 12px; margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.mapa-svg { width: 100%; height: auto; display: block; }
+
+/* ---------- El mapa de Leaflet ----------
+   Leaflet necesita que su contenedor tenga una ALTURA EXPLÍCITA: con altura
+   automática el mapa se dibuja de cero píxeles y la pantalla queda en blanco.
+   Es el error más típico al montarlo. */
+.mapa-leaflet {
+  height: 620px;
+  width: 100%;
+  border-radius: 8px;
+  z-index: 0; /* por debajo del menú lateral y de los modales */
+}
+
+/* ---------- Los controles propios: Mapa / Satélite y pantalla completa ----------
+   Van encima del mapa, en las esquinas, como en el mapa de Google que usaba el
+   área. El contenedor tiene 12px de relleno: por eso quedan a 22px del borde.
+   .mapa-leaflet tiene z-index 0, así que con 1 ya quedan por encima. */
+.mapa-capas {
+  position: absolute; top: 22px; left: 22px; z-index: 1;
+  display: flex; background: white; border-radius: 3px; overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+.mapa-capas button {
+  border: none; background: white; padding: 0 17px; height: 40px;
+  font-family: inherit; font-size: 17px; color: #565656; cursor: pointer;
+}
+.mapa-capas button:hover { color: #000; }
+.mapa-capas button.activa { color: #000; font-weight: 600; }
+
+.mapa-pantalla-completa {
+  position: absolute; top: 22px; right: 22px; z-index: 1;
+  width: 40px; height: 40px; background: white; border: none; border-radius: 3px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.mapa-pantalla-completa:hover svg { fill: #000; }
+
+/* En pantalla completa el mapa ocupa todo: sin marco ni relleno. */
+.mapa-contenedor-completa { padding: 0; border: none; border-radius: 0; background: #000; }
+.mapa-contenedor-completa .mapa-leaflet { height: 100vh; border-radius: 0; }
+.mapa-contenedor-completa .mapa-capas,
+.mapa-contenedor-completa .mapa-pantalla-completa { top: 10px; }
+.mapa-contenedor-completa .mapa-capas { left: 10px; }
+.mapa-contenedor-completa .mapa-pantalla-completa { right: 10px; }
+
+/* El pin. `className` propio para que Leaflet no le ponga el cuadrado blanco
+   con borde de su .leaflet-div-icon. La sombra lo despega del fondo. */
+.mapa-pin { background: none; border: none; }
+.mapa-pin svg { display: block; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.4)); }
+.mapa-pin-leyenda { display: inline-flex; vertical-align: middle; }
+.mapa-pin-leyenda svg { display: block; }
+
+/* ========== GRÁFICO DE BARRAS DE REPORTES ==========
+   pages/Reportes.jsx (Barras). Barras finas (14px), punta redondeada del lado
+   del dato y cuadrada en la base, un solo color de datos; la pista gris clara
+   es el fondo, no un dato. Etiqueta y valor en el color del texto, no en el
+   de la serie. */
+.reporte-nota { max-width: 900px; margin: -8px 0 16px; }
+.grafico-par { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; margin-bottom: 20px; }
+.grafico-bloque { background: white; border: 1px solid #e0e0e0; border-radius: 10px; padding: 16px 18px; }
+.grafico-titulo { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: #37474f; }
+.grafico-barras { display: flex; flex-direction: column; gap: 6px; }
+.grafico-fila { display: grid; grid-template-columns: minmax(120px, 36%) 1fr 44px; align-items: center; gap: 10px; min-height: 24px; }
+.grafico-fila:hover .grafico-barra { background: #1565c0; }
+.grafico-etiqueta { font-size: 13px; color: #37474f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grafico-pista { display: block; height: 14px; background: #f1f3f4; border-radius: 0 4px 4px 0; overflow: hidden; }
+.grafico-barra { display: block; height: 100%; background: #1976d2; border-radius: 0 4px 4px 0; transition: width 0.2s; }
+.grafico-valor { font-size: 13px; font-weight: 600; color: #263238; text-align: right; font-variant-numeric: tabular-nums; }
+@media print {
+  .grafico-par { grid-template-columns: 1fr 1fr; }
+  .grafico-barra { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* El desplegable de frecuencia de recolección, dentro de la grilla de
+   contratos (herramientas/Informe9DJ.jsx). Se guarda al elegir. */
+.selector-frecuencia {
+  font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid #cfd8dc; border-radius: 6px;
+  background: white; color: #263238; min-width: 150px;
+}
+.selector-frecuencia:disabled { background: #f5f5f5; color: #90a4ae; }
+.selector-frecuencia-vacio { border-color: #ffb300; background: #fff8e1; }
+
+/* El contenido de la ventanita que se abre al hacer clic en un local. */
+.mapa-popup { display: flex; flex-direction: column; gap: 6px; min-width: 190px; font-size: 13px; }
+.mapa-popup strong { font-size: 14px; color: #1a1a1a; }
+.mapa-popup span { color: #607d8b; line-height: 1.3; }
+
+/* El puntito de color de la leyenda, del mismo color que el del mapa. */
+.mapa-punto-leyenda {
+  display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle; border: 1px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
+}
+.mapa-punto { cursor: pointer; transition: 0.15s; }
+.mapa-punto:hover { fill-opacity: 1; }
+.mapa-etiqueta-ejido { font-size: 11px; fill: #90a4ae; font-family: inherit; }
+/* La ficha del punto va fija arriba a la derecha y no sigue al mouse: con el
+   tooltip pegado al cursor, mover el mouse para leerlo lo hacía desaparecer. */
+.mapa-tooltip {
+  position: absolute; top: 24px; right: 24px; width: 240px;
+  background: white; border: 1px solid #cfd8dc; border-radius: 10px;
+  padding: 14px 16px; box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  display: flex; flex-direction: column; gap: 6px; font-size: 13px;
+}
+.mapa-tooltip strong { color: #263238; }
+.mapa-tooltip a { color: #1565c0; font-weight: 600; }
+
+.lista-simple { list-style: none; margin-bottom: 24px; }
+.lista-simple li {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 10px 0; border-bottom: 1px solid #eceff1; font-size: 14px;
+}
+
+
+/* ========== 14.11 HERRAMIENTAS ==========
+   pages/herramientas/* */
+.par-duplicado {
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 18px 22px; margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.par-cabecera {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 16px; font-size: 13px; color: #546e7a;
+}
+.par-cuerpo { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.par-lado {
+  flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 5px;
+  border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #546e7a;
+}
+.par-lado-conserva { background: #e8f5e9; border: 1px solid #a5d6a7; }
+.par-lado-absorbe { background: #ffebee; border: 1px solid #ef9a9a; }
+.par-rol {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.6px;
+  text-transform: uppercase; color: #607d8b;
+}
+.par-flecha { font-size: 24px; color: #90a4ae; }
+.par-acciones { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+
+.zona-carga {
+  background: white; border: 2px dashed #b0bec5; border-radius: 12px;
+  padding: 36px; text-align: center; margin-bottom: 24px;
+}
+.zona-carga strong { display: block; font-size: 16px; color: #37474f; margin-bottom: 8px; }
+.zona-carga p { font-size: 13px; color: #90a4ae; max-width: 560px; margin: 0 auto 20px; line-height: 1.6; }
+/* La fila dudosa se marca en la tabla: es la que hay que mirar antes de
+   aplicar el informe. */
+.fila-dudosa { background: #fff8e1; }
+
+
+/* ========== 14.12 PORTAL DEL TITULAR ==========
+   pages/Portal.jsx */
+.portal-local { margin-bottom: 40px; }
+.portal-expedientes {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px; background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 20px 24px; margin: 20px 0;
+}
+.portal-expedientes strong { display: block; font-size: 13px; color: #37474f; margin-bottom: 10px; }
+.portal-expedientes .lista-simple li { font-size: 13px; }
+.portal-historial { margin-bottom: 20px; }
+.portal-historial summary {
+  cursor: pointer; font-size: 14px; font-weight: 600; color: #1565c0;
+  padding: 12px 0;
+}
+
+
+/* ========== 14.13 CÉDULA Y PLANTILLA ==========
+   components/VistaCedula.jsx y pages/config/Plantilla.jsx
+   La cédula se muestra en monoespaciada y sobre fondo blanco a propósito: es
+   un documento que se imprime, no una pantalla. */
+.cedula-papel {
+  background: white; border: 1px solid #cfd8dc; border-radius: 4px;
+  padding: 28px 32px; font-family: 'Courier New', Courier, monospace;
+  font-size: 13px; line-height: 1.7; color: #212121;
+  white-space: pre-wrap; overflow-x: auto; margin-bottom: 20px;
+}
+.plantilla-columnas {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-bottom: 24px;
+}
+.textarea-plantilla { font-family: 'Courier New', Courier, monospace; font-size: 13px; }
+
+
+/* ========== 14.14 MODAL: AGREGADOS ==========
+   components/ui/Modal.jsx */
+.modal-etiqueta {
+  display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+  color: #90a4ae; text-transform: uppercase; margin-bottom: 4px;
+}
+/* Modal ancho: para los formularios de dos columnas y los pasos guiados. */
+.modal-caja-ancha { max-width: 900px; }
+/* Dentro de un modal ancho el formulario usa las dos columnas; en el angosto
+   se apila, porque dos columnas de 200px no se pueden completar. */
+.modal-caja:not(.modal-caja-ancha) .form-grilla { grid-template-columns: 1fr; }
+
+
+/* ========== 14.15 IMPRESIÓN ==========
+   Al imprimir (cédula, hoja de ruta, reportes) hay que sacar de la hoja la
+   navbar, el menú y los botones: si no, salen en el papel.
+   .solo-impresion marca el bloque que SÍ tiene que salir. */
+@media print {
+  /* Con una cédula abierta (el modal se dibuja aparte, en el body): sale solo
+     el papel de la cédula, sin la pantalla de atrás ni el resto del modal. */
+  body:has(.modal-fondo .solo-impresion) > *:not(.modal-fondo) { display: none !important; }
+  .modal-fondo:has(.solo-impresion) .modal-cuerpo > *:not(.solo-impresion) { display: none !important; }
+  /* Hoja de ruta (Notificaciones): sin un modal abierto, sale solo la tabla
+     .solo-papel y no la pantalla entera con las grillas. */
+  body:has(.solo-papel):not(:has(.modal-fondo)) .main-content > *:not(.solo-papel) { display: none !important; }
+}
+
+/* ========== 14.11 ACCESOS ==========
+   pages/accesos/TiposUsuario.jsx, pages/accesos/Usuarios.jsx y ui/hab/des.jsx (Interruptor) */
+
+/* La llave sí/no (ui/hab/des.jsx, componente Interruptor). El checkbox real queda invisible pero
+   sigue ahí: se opera con teclado y el lector de pantalla lo anuncia. */
+.interruptor { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; position: relative; }
+.interruptor input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.interruptor-pista {
+  position: relative; width: 40px; height: 22px; border-radius: 11px;
+  background: #cfd8dc; transition: background 0.2s; flex-shrink: 0;
+}
+.interruptor-perilla {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: white; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: left 0.2s;
+}
+.interruptor input:checked + .interruptor-pista { background: #1976d2; }
+.interruptor input:checked + .interruptor-pista .interruptor-perilla { left: 21px; }
+.interruptor input:focus-visible + .interruptor-pista { outline: 2px solid #90caf9; outline-offset: 2px; }
+.interruptor-texto { font-size: 13px; font-weight: 600; color: #546e7a; white-space: nowrap; }
+.interruptor input:checked ~ .interruptor-texto { color: #1976d2; }
+.interruptor-deshabilitado { cursor: default; opacity: 0.55; }
+
+/* La tabla de módulos por rol (ventana Permisos). La primera columna agrupa
+   por sección del menú. */
+.tabla-permisos { margin-bottom: 8px; }
+.tabla-permisos .celda-grupo {
+  width: 130px; vertical-align: top; font-size: 11px; font-weight: 700; color: #90a4ae;
+  text-transform: uppercase; letter-spacing: 0.5px; border-right: 1px solid #f0f0f0; background: #fafbfc;
+}
+.tabla-permisos .celda-modulo strong { display: flex; align-items: center; gap: 8px; color: #37474f; }
+.tabla-permisos .celda-modulo .texto-chico { display: block; margin-top: 2px; }
+.tabla-permisos .fila-apagada .celda-modulo strong,
+.tabla-permisos .fila-apagada .celda-modulo .texto-chico { color: #b0bec5; }
+
+/* Los íconos de la columna Acciones de las grillas de Accesos: editar en azul,
+   eliminar en rojo, la llave de permisos en gris oscuro. Van con el contenedor
+   adelante para ganarle a la clase propia del botón de MUI. */
+.grilla-contenedor .accion-grilla-editar { color: #1976d2; }
+.grilla-contenedor .accion-grilla-borrar { color: #c62828; }
+.grilla-contenedor .accion-grilla-llave { color: #37474f; }
+
+@media print {
+  .navbar,
+  .sidebar,
+  .sidebar-fondo,
+  .info-bar,
+  .tabla-acciones,
+  .form-acciones,
+  .acciones-local,
+  .barra-lote,
+  .modal-encabezado,
+  .bandeja-cabecera,
+  .filtros-fila { display: none !important; }
+
+  .modal-fondo { position: static; background: none; padding: 0; }
+  .modal-caja, .modal-caja-ancha {
+    max-width: none; max-height: none; box-shadow: none; border-radius: 0;
+  }
+  .main-content { padding: 0; }
+  body { background: white; }
+  .cedula-papel { border: none; padding: 0; }
+  /* Que las tablas largas no se corten a la mitad de una fila. */
+  .tabla-datos tr { page-break-inside: avoid; }
+  /* En papel el encabezado va gris: el azul lleno gasta tinta y muchas
+     impresoras lo sacan negro. */
+  .tabla-datos { box-shadow: none; border-radius: 0; }
+  .tabla-datos th { background: #f5f7fa; color: #333; border-right-color: #ddd; }
+}
+
+
+/* ========== 14.16 RESPONSIVE DE LO NUEVO ==========
+   Todo a una columna. La app de campo se usa siempre así. */
+@media (max-width: 900px) {
+  .form-grilla,
+  .plantilla-columnas { grid-template-columns: 1fr; }
+  .ficha-situacion { flex-direction: column; }
+  .par-cuerpo { flex-direction: column; }
+  .par-flecha { transform: rotate(-90deg); }
+  .mapa-tooltip { position: static; width: auto; margin-top: 12px; }
+  .entrega-item { flex-direction: column; align-items: flex-start; }
+  .entrega-acciones { width: 100%; }
+  .entrega-acciones button, .entrega-acciones a { flex: 1; text-align: center; }
+}
+
+
+/* ========== CELDAS DE LA GRILLA ==========
+   .celda-apilada -> dos líneas dentro de una celda del Data Grid (el nombre
+   del local y su razón social, la fecha y cuántos días faltan).
+
+   Hace falta porque la celda del Data Grid es flex en fila: sin esto, el
+   <small> de abajo se acomoda AL LADO del texto principal en vez de debajo. */
+.celda-apilada {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.3;
+  overflow: hidden;
+}
+.celda-apilada .celda-sub { display: block; margin: 0; }
+
+
+/* Aviso de que la lista llegó filtrada desde otra pantalla (el tablero manda a
+   /locales?estado=...). Sin esto, el padrón parecería tener menos locales de
+   los que tiene y no habría forma de saber por qué. */
+.filtro-activo {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; background: #e3f2fd; border: 1px solid #90caf9;
+  border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
+  font-size: 14px; color: #14599e;
+}
+
+/* ========== 14.17 FOTO DE LA ENTREGA Y TRABAJO SIN CONEXIÓN ==========
+   components/ui/Campo.jsx (CampoFoto), components/Navbar.jsx (indicador). */
+.campo-foto-previa { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.campo-foto-previa img { width: 96px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid #e0e0e0; }
+.navbar-conexion {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px;
+  font-size: 12px; font-weight: 600; background: #fff3e0; color: #e65100; white-space: nowrap;
+}
+.navbar-conexion-pendientes { background: #e3f2fd; color: #1565c0; cursor: pointer; border: none; }
+.hist-foto { max-width: 220px; max-height: 160px; border-radius: 6px; border: 1px solid #e0e0e0; display: block; }
+
+/* ========== 14.18 TABLAS SIN COLORES ==========
+   Pedido del área (2026-10-02): todas las tablas iguales, con las filas
+   blancas y sin pastillas de color. Todo lo que está adentro de una grilla
+   (ui/Grilla.jsx) o de una .tabla-datos se lee como texto común: estados,
+   resultados de entrega, vigencias, clasificaciones, "Sin asignar", días
+   vencidos. Quedan con color solo el encabezado azul, los links y los botones.
+
+   Los colores no se borraron: siguen definidos arriba (.badge-*) y se ven
+   fuera de las tablas (ficha del local, portal, mapa). Para volver a tener
+   color en las tablas, alcanza con borrar este bloque. */
+.grilla-contenedor .badge,
+.tabla-datos .badge {
+  background: transparent !important;
+  color: #37474f !important;
+  font-weight: 500;
+  padding-left: 0;
+  padding-right: 0;
+}
+.grilla-contenedor .texto-vencido,
+.grilla-contenedor .texto-ok,
+.grilla-contenedor .hist-pendiente,
+.grilla-contenedor .hist-vencido,
+.tabla-datos .texto-vencido,
+.tabla-datos .texto-ok,
+.tabla-datos .hist-pendiente,
+.tabla-datos .hist-vencido {
+  color: inherit;
+}
+/* El número de cada bandeja del tablero, todos del mismo azul del encabezado. */
+.bandeja-contador-azul,
+.bandeja-contador-verde,
+.bandeja-contador-naranja,
+.bandeja-contador-amarillo,
+.bandeja-contador-rojo {
+  color: #1976d2;
+}
+
+/* ========== 14.19 BUSCADOR DE LOCAL ==========
+   Elegir un local escribiendo (components/BuscadorLocal.jsx), en vez de un
+   desplegable con todo el padrón. Las coincidencias van debajo del campo; el
+   elegido queda en un recuadro con el botón "Cambiar". */
+.buscador-rotulo { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #555; }
+.buscador-elegido {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; background: #fafbfc;
+}
+.buscador-resultados {
+  list-style: none; margin: 6px 0 0; padding: 0;
+  border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background: white;
+}
+.buscador-resultados li + li { border-top: 1px solid #eef1f4; }
+.buscador-resultados button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+  padding: 10px 14px; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer;
+}
+.buscador-resultados button:hover,
+.buscador-resultados button:focus-visible { background: #e3f2fd; outline: none; }
+.buscador-resultados small { font-size: 12px; color: #78909c; }
+
+/* ========== 14.20 REPORTES: PERÍODO ==========
+   Las pastillas del período (pages/Reportes.jsx) reusan las del orden del
+   tablero; acá solo se les deja bajar de renglón en pantallas chicas. */
+.reporte-periodo { flex-wrap: wrap; margin: 4px 0 16px; border-radius: 16px; }
+.reporte-fechas { display: flex; flex-wrap: wrap; gap: 16px; max-width: 520px; }
+.reporte-fechas .form-grupo { flex: 1 1 200px; }
+@media print {
+  .reporte-periodo,
+  .reporte-fechas { display: none; }
+}
+
+/* ========== 14.21 IMPRESIÓN DE CÉDULAS POR LOTE ==========
+   Notificaciones → "Imprimir N cédulas": cada cédula en su hoja. El bloque
+   solo existe mientras se imprime (pages/Notificaciones.jsx). */
+@media print {
+  .lote-cedulas .cedula-papel { break-after: page; page-break-after: always; margin: 0; }
+  .lote-cedulas .cedula-papel:last-child { break-after: auto; page-break-after: auto; }
+}
+
+/* ========== 14.22 PADRÓN: FILTROS COMBINABLES ==========
+   pages/Local.jsx: estado, rubro y situación, arriba de la grilla. */
+.filtros-padron { align-items: flex-end; }
+.filtros-padron .form-grupo { min-width: 200px; flex: 0 1 240px; }
+.filtros-padron .filtros-limpiar { margin-bottom: 12px; }
+@media (max-width: 600px) {
+  .filtros-padron .form-grupo { flex: 1 1 100%; min-width: 0; }
+}
+
+/* ========== 14.23 BARRA SUPERIOR EN EL CELULAR ==========
+   El selector de PRUEBA (rol + "Firmar como") no entraba en 390px y toda la
+   página se podía arrastrar de costado (674px de ancho). En pantalla chica:
+   se esconde la palabra "CIUDAD", los selectores se achican y cortan el texto,
+   y la barra no puede ser más ancha que la pantalla. Se va con el selector
+   cuando haya login. */
+@media (max-width: 600px) {
+  .navbar { gap: 8px; padding: 0 10px; max-width: 100vw; overflow: hidden; }
+  .logo-icon { display: none; }
+  .ciudad { display: none; }
+  .smt { font-size: 20px; }
+  .navbar-derecha { gap: 8px; min-width: 0; }
+  /* En el teléfono no entra el nombre: queda solo el ícono. */
+  .navbar-usuario-nombre { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   INFORME 9 DE JULIO: los botones de decisión viven dentro de las celdas de
+   la grilla, así que son más chicos que los botones de página.
+   --------------------------------------------------------------------------- */
+.btn-chico { padding: 3px 10px; font-size: 0.8rem; }
+.acciones-fila { display: flex; gap: 6px; align-items: center; }
+.lista-candidatos { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* ========== 14.24 HISTORIAL: EDITAR OBSERVACIONES ==========
+   components/HistorialActuaciones.jsx: el botón va al pie de la actuación. */
+.hist-editar { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+@media print { .hist-editar { display: none; } }
+
+/* ---------------------------------------------------------------------------
+   CELDAS DE ADVERTENCIA (Informe 9DJ)
+   ---------------------------------------------------------------------------
+   Un dato que vino mal en el archivo (CUIT que no cierra, contrato que ya
+   venció) tiene que GRITAR antes de que el agente confirme o rechace la fila.
+   A propósito NO es un .badge: la regla 14.18 apaga los colores dentro de las
+   tablas, y esto no es decoración, es una señal de cuidado.
+   --------------------------------------------------------------------------- */
+.celda-advertencia {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  background: #fdecea;
+  border: 2px solid #c62828;
+  border-radius: 6px;
+  padding: 3px 10px;
+  line-height: 1.25;
+  max-width: 100%;
+}
+.celda-advertencia strong {
+  color: #b71c1c;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+.celda-advertencia small {
+  color: #8d2f2a;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: normal;
+}
+
+/* El archivo abierto en el historial: la imagen con su botón de cerrar al lado. */
+.archivo-abierto { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+
+
+/* ========== 14.25 PANTALLAS EN EL CELULAR ==========
+   Lo que en una PC sobra y en un teléfono de 360-430px se come la pantalla:
+   menos margen alrededor de todo, el título más chico, y los tres filtros del
+   padrón (Estado, Rubro, Situación) en una sola fila. Que se vean angostos no
+   importa: al tocarlos, el teléfono abre su propia lista a pantalla completa.
+   La tabla en sí se ajusta en ui/Grilla.jsx (AJUSTE_CELULAR). */
+@media (max-width: 600px) {
+  .main-content { padding: 14px 12px; }
+  .inicio-tag { margin-bottom: 8px; }
+  .sistema-titulo { font-size: 18px; margin-bottom: 10px; }
+  .info-bar { margin-bottom: 16px; gap: 12px; }
+
+  .filtros-padron { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .filtros-padron .form-grupo { margin-bottom: 8px; min-width: 0; }
+  .filtros-padron .form-grupo label { font-size: 12px; margin-bottom: 4px; }
+  .filtros-padron .form-grupo select { padding: 8px 6px; font-size: 13px; }
+  .filtros-padron .filtros-limpiar { grid-column: 1 / -1; margin-bottom: 8px; }
+
+  .tabla-acciones { margin-bottom: 10px; gap: 8px; }
+  .tabla-buscadores { flex: 1 1 100%; }
+  .buscador { min-width: 0; width: 100%; }
+}
+
+/* La ficha del local en el celular: los datos en una sola columna (los que
+   piden dos, con ancho={2}, forzaban una segunda columna que no entraba) y las
+   tablas comunes (.tabla-datos, el historial de estados) se deslizan de costado
+   adentro de su recuadro en vez de ensanchar toda la página. */
+@media (max-width: 600px) {
+  .ficha-datos { grid-template-columns: minmax(0, 1fr); padding: 14px 16px; }
+  .ficha-datos .dato { grid-column: 1 / -1 !important; }
+  .tabla-datos { display: block; max-width: 100%; overflow-x: auto; }
+}
+
+/* ========== 14.26 EL IPHONE NO AGRANDA LA PANTALLA AL TOCAR UN CAMPO ==========
+   Safari en el iPhone hace zoom solo cada vez que se toca un campo con letra
+   menor a 16px, y después la pantalla queda agrandada y corrida. Pasaba con
+   los formularios (15px), los filtros, el buscador de las tablas y el selector
+   de PRUEBA. En pantallas táctiles todos los campos van a 16px. El !important
+   es para ganarle también a los campos de MUI (la grilla). */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
+/* ========== 14.27 EL PADRÓN EN TARJETAS (TELÉFONO) ==========
+   Usado en: components/ListaTarjetasLocales.jsx, solo hasta 600px. */
+.tarjetas-locales-barra { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.tarjetas-locales-barra .buscador { flex: 1; min-width: 0; }
+.tarjetas-locales-lista { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.tarjeta-local {
+  background: white; border: 1px solid #e8ecf1; border-radius: 12px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.tarjeta-local-titulo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.tarjeta-local-titulo .link-local { font-size: 16px; overflow-wrap: anywhere; }
+.tarjeta-local-titulo .texto-chico { white-space: nowrap; }
+.tarjeta-local-direccion { color: #455a64; font-size: 14px; }
+.tarjeta-local-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tarjeta-local-acciones { display: flex; gap: 8px; margin-top: 4px; }
+.tarjeta-local-acciones .btn-tabla { flex: 1; text-align: center; text-decoration: none; padding: 8px 6px; }
+.tarjetas-locales-vacio { padding: 16px 4px; }
+.tarjetas-locales-mas { width: 100%; margin-top: 12px; }
+
+/* ========== 14.28 AVISO PARA INSTALAR LA APP ==========
+   Usado en: components/AvisoInstalar.jsx (Inicio, solo en el teléfono). */
+.aviso-instalar-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+.aviso-instalar-botones button { white-space: nowrap; }
+
+/* ========== 14.29 FORMULARIOS A UNA COLUMNA, TODOS LOS CAMPOS IGUALES ==========
+   En pantallas angostas .form-grilla pasa a una columna (14.16), pero los
+   campos que piden dos (ancho={2}: el nombre del local, las observaciones)
+   forzaban una segunda columna escondida. El resto quedaba apareado de a dos y
+   más angosto: en "Nuevo local", Razón social, Rubro, Domicilio fiscal y
+   Teléfono se veían más chicos que los demás. Acá cada campo ocupa todo el
+   ancho. El !important le gana al span que el campo trae escrito en su style. */
+@media (max-width: 900px) {
+  .form-grilla > * { grid-column: 1 / -1 !important; }
+}
+
+/* "Ubicar la dirección en el mapa" del formulario del local (FormLocal.jsx). */
+.ubicar-direccion { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.ubicar-direccion .texto-ok a { margin-left: 4px; }
+
+/* ========== 14.30 BOTONES Y ENLACES CÓMODOS PARA EL DEDO ==========
+   En pantallas táctiles, lo que se toca mide al menos 40px de alto (lo
+   recomendado para un dedo es 44-48px; con menos de 30px se erra seguido).
+   Antes medían 17-29px: los enlaces "Abrir el tablero de trabajo" y "Reportes
+   e indicadores" del Inicio, los botones de período y de orden (Reportes,
+   Tablero), los "Ver" y "Agregar observaciones" de la ficha, el nombre en las
+   tarjetas del padrón y la "Ficha" de Mis entregas. En la PC no cambia nada. */
+@media (pointer: coarse) {
+  .btn-tabla,
+  .selector-orden-opcion,
+  .entrega-acciones a,
+  .entrega-acciones button { min-height: 40px; }
+  .entrega-acciones a { display: inline-flex; align-items: center; justify-content: center; }
+  .accesos-header-link,
+  .inicio-pie-indicadores a,
+  .aviso-texto a,
+  .tarjeta-local-titulo .link-local { display: inline-block; padding: 10px 0; }
+  .main-content input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  .main-content select { min-height: 40px; }
+  /* La × que cierra las ventanas (ui/Modal.jsx) medía 27x26 (05/11/2026). */
+  .modal-cerrar { min-width: 40px; min-height: 40px; }
+}
+
+/* ========== 14.31 LA CÉDULA CON EL MODELO OFICIAL (pantalla "Ver cédula") ==========
+   Usado en: components/VistaCedula.jsx. Es el mismo contenido que sale impreso
+   (dominio/cedulaOficial.js), con la letra y el armado del modelo de la
+   Dirección de Ambiente, para revisarla antes de imprimir. */
+.cedula-oficial {
+  background: white; border: 1px solid #cfd8dc; border-radius: 4px; color: #111;
+  padding: 24px 28px; margin-bottom: 12px;
+  font-family: 'Times New Roman', Times, serif; font-size: 14px; line-height: 1.35;
+}
+.cedula-oficial p { margin: 0 0 8px; }
+.cedula-oficial .justificado { text-align: justify; }
+.cedula-oficial-titulo { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; margin-bottom: 8px; }
+.cedula-oficial-titulo strong:first-child { flex: 1; text-align: center; }
+.cedula-oficial-logos { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 10px; }
+.cedula-oficial-logo { max-height: 70px; max-width: 45%; object-fit: contain; }
+/* El de Ambiente, como en el modelo: un poco más de la mitad de alto. */
+.cedula-oficial-logo.derecha { max-height: 41px; }
+.cedula-oficial-logo-texto { display: flex; flex-direction: column; font-family: Arial, sans-serif; font-weight: 700; font-size: 12px; }
+.cedula-oficial-logo-texto.derecha { text-align: right; }
+.cedula-oficial-fecha { text-align: right; }
+.cedula-oficial-firmas { display: flex; gap: 12px; margin: 34px 0 14px; }
+.cedula-oficial-firmas.tres { justify-content: space-between; }
+.cedula-oficial-firmas.director { justify-content: flex-end; margin-bottom: 6px; }
+.cedula-oficial-firmas.dos { justify-content: flex-start; gap: 60px; margin-top: 24px; }
+@media (max-width: 600px) {
+  .cedula-oficial { padding: 14px 12px; font-size: 13px; }
+  .cedula-oficial-firmas.tres { flex-direction: column; gap: 22px; }
+}
+/* Las líneas para completar a mano (Sr./a, Observaciones): punteadas y del
+   ancho que haya, para que en el teléfono no se salgan del papel. */
+.cedula-oficial-renglon { display: flex; align-items: flex-end; gap: 6px; }
+.cedula-oficial-puntos { flex: 1; min-width: 40px; height: 1em; border-bottom: 2px dotted #444; }
+/* Modelo del 12/11/2026: las ordenanzas con viñeta y el recuadro de la
+   documentación a presentar, con el QR a las plantillas a la derecha. */
+.cedula-oficial-vinetas { margin: 0 0 8px; padding-left: 2.4em; list-style: circle; }
+.cedula-oficial-documentacion { display: flex; border: 1px solid #111; font-size: 12px; line-height: 1.3; margin: 4px 0 8px; }
+.cedula-oficial-documentacion-lista { flex: 1; display: flex; flex-direction: column; padding: 4px 6px; min-width: 0; }
+.cedula-oficial-qr { display: flex; align-items: center; justify-content: center; padding: 6px; border-left: 1px solid #111; }
+.cedula-oficial-qr img { width: 84px; height: 84px; display: block; }
+@media (max-width: 600px) {
+  .cedula-oficial-vinetas { padding-left: 1.5em; }
+  .cedula-oficial-documentacion { font-size: 11px; }
+  .cedula-oficial-qr img { width: 64px; height: 64px; }
+}

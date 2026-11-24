@@ -136,6 +136,8 @@ app.get('/salud', (_req, res) => {
    rol, cuil, nombreCompleto } o null, y motivo explica el null para que el
    problema se vea en la consola del navegador y no haya que adivinar. */
 app.get('/sesion', (req, res) => {
+  // Es distinta para cada persona: el navegador no la guarda ni la reusa.
+  res.set('Cache-Control', 'no-store');
   const modo = modoCidituc();
   const token = tokenDelPedido(req);
   let motivo = null;

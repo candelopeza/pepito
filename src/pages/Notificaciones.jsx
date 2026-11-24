@@ -41,6 +41,7 @@ import Badge, { BadgeEstado } from '../components/ui/Badge';
 import Aviso, { Vacio } from '../components/ui/Aviso';
 import Confirmar from '../components/ui/Confirmar';
 import AccionesLocal from '../components/AccionesLocal';
+import { EnlaceFicha } from '../components/RutaProtegida';
 import VistaCedula from '../components/VistaCedula';
 import { textoDeCedula } from '../dominio/textoCedula';
 import { FORMATO_OFICIAL, faltantesCedulaOficial } from '../dominio/cedulaOficial';
@@ -443,11 +444,33 @@ function Notificaciones() {
               )}
             </div>
           )}
+          {/* Cuáles son y qué les falta, con el enlace a la ficha (19/11/2026):
+              antes el aviso decía solo cuántas eran y no se sabía cuál
+              corregir. Los faltantes se calculan con los datos del local en
+              el momento, así que al completarlos la cédula entra sola. */}
           {loteConFaltantes > 0 && (
             <Aviso
               tipo="alerta"
-              titulo={`${loteConFaltantes} cédula(s) no entran en el lote: les faltan datos. Corregí el local y regenerala.`}
-            />
+              titulo={`${loteConFaltantes} cédula(s) no entran en el lote porque al local le faltan datos`}
+            >
+              Entrá a la ficha del local, tocá <strong>Editar datos</strong> y completá lo que falta. Cuando esté
+              completo, la cédula entra sola en el lote.
+              <ul className="lista-faltantes">
+                {loteCedulas
+                  .filter((c) => c.faltantes > 0)
+                  .map((c) => {
+                    const local = localPorId(c.localId);
+                    const faltan = faltantesParaCedula(local, c.instancia === 2 ? 2 : 1);
+                    return (
+                      <li key={c.id}>
+                        <EnlaceFicha id={c.localId}>{local?.nombreLocal || `Local N° ${c.localId}`}</EnlaceFicha>
+                        {' — '}
+                        {c.instancia === 2 ? '2° cédula' : '1° cédula'}. Falta: {faltan.join(', ') || 'revisar los datos'}
+                      </li>
+                    );
+                  })}
+              </ul>
+            </Aviso>
           )}
 
           {/* Las cédulas del lote, una por hoja. Solo existen mientras se

@@ -435,6 +435,18 @@ export const PERMISOS_VACIOS = { modulos: {}, rolesDeshabilitados: [] };
    deshacer cualquier cambio, incluso apagarlo a él mismo por error. */
 export const ROL_ADMINISTRADOR = 'administrador';
 
+/* >>> LOS AGENTES DE CALLE SOLO CONSULTAN (20/11/2026) <<<
+   Pedido de cande: el relevador y el notificador ven el padrón para
+   consultar (nombre, dirección, rubro, estado), pero NO los datos sensibles
+   del local (razón social, CUIT, contacto, CUIL del titular, observaciones),
+   ni su historial, y no imprimen ni descargan ninguna tabla.
+   Lo usan: ui/Grilla.jsx (sin imprimir/descargar), pages/Local.jsx (columnas),
+   components/ListaTarjetasLocales.jsx, pages/LocalFicha.jsx (ficha de
+   consulta) y pages/Mapa.jsx (el globito del pin). Para sumar o sacar un rol,
+   este array. */
+export const ROLES_SOLO_CONSULTA = ['relevador', 'notificador'];
+export const esSoloConsulta = (rol) => ROLES_SOLO_CONSULTA.includes(rol);
+
 /* El módulo que ningún ajuste puede quitarle a un rol, ni siquiera apagar el
    rol entero. Por eso en nivelAcceso() se mira ANTES que rolHabilitado(). */
 const FIJOS = { [ROL_ADMINISTRADOR]: ['accesos'] };

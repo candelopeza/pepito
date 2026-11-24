@@ -93,11 +93,20 @@ function Portal() {
      aviso de "ningún local" hasta que exista esa vinculación. Compara el CUIL
      contra `titularCuil` del local o, si no lo tiene, contra su CUIT. */
   const identificacion = normalizarCuit(usuario.cuil);
-  const mios = localesConEstado.filter((l) =>
-    l.titularCuil
-      ? normalizarCuit(l.titularCuil) === identificacion
-      : Boolean(identificacion) && normalizarCuit(l.cuit) === identificacion,
-  );
+  /* CiDiTuc devuelve el documento de la persona (documento_persona), que
+     puede ser el CUIL entero o solo el DNI (19/11/2026). Con el DNI se compara
+     contra los 8 números del medio del CUIL: 27-45517392-8 -> 45517392. Es la
+     misma regla que usa el alta de agentes (backend/personas.js, mismaPersona). */
+  const esDeEstaPersona = (cuil) => {
+    const c = normalizarCuit(cuil);
+    if (!identificacion || c.length !== 11) return false;
+    if (identificacion.length === 11) return c === identificacion;
+    if (identificacion.length >= 6 && identificacion.length <= 8) {
+      return c.slice(2, 10).replace(/^0+/, '') === identificacion.replace(/^0+/, '');
+    }
+    return false;
+  };
+  const mios = localesConEstado.filter((l) => esDeEstaPersona(l.titularCuil || l.cuit));
 
   /* El historial de cada local propio: de ahí sale por qué la oficina rechazó
      una presentación (la presentación rechazada se da de baja y deja de estar

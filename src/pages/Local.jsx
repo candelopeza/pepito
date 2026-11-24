@@ -44,7 +44,7 @@ import { CampoSelect } from '../components/ui/Campo';
 import { faltantesRegistrales } from '../dominio/reglas';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
-import { puedeEditar } from '../config/modulos';
+import { esSoloConsulta, puedeEditar } from '../config/modulos';
 import { LISTA_ESTADOS, etiquetaEstado } from '../dominio/estados';
 import { textoFrecuencia } from '../dominio/actuaciones';
 import { fmtFecha } from '../dominio/fechas';
@@ -90,12 +90,19 @@ const ROLES_BAJA_LOCAL = ['coordinacion', 'administrador'];
    ver components/ListaTarjetasLocales.jsx. En false, la tabla también ahí. */
 const TARJETAS_EN_CELULAR = true;
 
+/* Lo que el relevador y el notificador NO ven en el padrón (20/11/2026): los
+   datos registrales del titular y lo que es del circuito administrativo. Ven
+   número, nombre, rubro, dirección y estado. */
+const COLUMNAS_SENSIBLES = ['razonSocial', 'cuit', 'vencimiento', 'frecuenciaSemanal', 'cantidadActuaciones'];
+
 function Local() {
   const { rol } = useRol();
   const navegar = useNavigate();
   const { localesConEstado, guardarLocal, eliminarLocal, permisos } = useDatos();
   const puedeEditarLocales = puedeEditar(rol, 'locales', permisos);
   const puedeDarDeBaja = puedeEditarLocales && ROLES_BAJA_LOCAL.includes(rol);
+  // Relevador y notificador: consulta sin datos sensibles (config/modulos.js).
+  const soloConsulta = esSoloConsulta(rol);
   const enTarjetas = useMediaQuery('(max-width:600px)') && TARJETAS_EN_CELULAR;
 
   /* ---------- Lo que puede venir pedido desde el Inicio ----------
@@ -284,8 +291,8 @@ function Local() {
           return acciones;
         },
       },
-    ],
-    [puedeEditarLocales, puedeDarDeBaja, navegar],
+    ].filter((c) => !soloConsulta || !COLUMNAS_SENSIBLES.includes(c.field)),
+    [puedeEditarLocales, puedeDarDeBaja, navegar, soloConsulta],
   );
 
   /* LA BÚSQUEDA Y LOS FILTROS SON LOS DE LA GRILLA.
@@ -410,6 +417,7 @@ function Local() {
         <ListaTarjetasLocales
           locales={filas}
           alAbrir={(l) => navegar(`/locales/${l.id}`)}
+          sinDatosRegistrales={soloConsulta}
           alEditar={puedeEditarLocales ? (l) => setSeleccion({ local: l, esNuevo: false }) : null}
           alNuevo={puedeEditarLocales ? () => setSeleccion({ local: { ...LOCAL_VACIO }, esNuevo: true }) : null}
         />

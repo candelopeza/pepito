@@ -92,6 +92,33 @@ function RolProvider({ children }) {
     };
   }, [sesion.estado]);
 
+  /* >>> SI LA SESIÓN LLEGÓ SIN NOMBRE NI CUIL, SE VUELVE A PREGUNTAR (19/11/2026) <<<
+     El nombre y el CUIL los pide el backend a CiDiTuc, y a veces CiDiTuc tarda
+     y no contesta a tiempo. Sin el CUIL el titular no ve sus locales. En vez
+     de dejarlo así hasta que recargue, se pregunta otra vez a los 6 y a los
+     20 segundos; en cuanto llegan los datos, la pantalla se completa sola. */
+  const faltanDatos = sesion.estado === 'identificado' && agente && !agente.cuil && !agente.nombreCompleto;
+  useEffect(() => {
+    if (!faltanDatos) return undefined;
+    let vigente = true;
+    const relojes = [6000, 20000].map((espera) =>
+      setTimeout(() => {
+        api
+          .sesion()
+          .then((r) => {
+            if (vigente && r?.persona && (r.persona.cuil || r.persona.nombreCompleto)) {
+              setAgente(usuarioValido(r.persona));
+            }
+          })
+          .catch(() => undefined);
+      }, espera),
+    );
+    return () => {
+      vigente = false;
+      relojes.forEach(clearTimeout);
+    };
+  }, [faltanDatos]);
+
   /* u = { id, nombre (el id_persona), rol, cuil, nombreCompleto }, o null
      para volver a público. Lo llama la carga de la sesión de arriba. */
   function elegirAgente(u) {

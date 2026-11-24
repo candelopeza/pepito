@@ -35,7 +35,7 @@
    ============================================================================ */
 
 import { Router } from 'express';
-import { consultar, ejecutar, enTransaccion } from '../conexion-bd.js';
+import { consultar, consultarEn, ejecutar, enTransaccion } from '../conexion-bd.js';
 import { tiene } from '../capacidades.js';
 import { cicloActual, insertarTramite, recortarObservacion } from '../consultas.js';
 import { ID_ESTADO, ID_TDOC, ID_TTRAMITE } from '../mapeo.js';
@@ -446,16 +446,47 @@ router.put('/contratos/:idTramite/frecuencia', requiereRol('coordinacion', 'dire
 /* ===========================================================================
    POST /informe-9dj/cargas  ->  subir un archivo
    ---------------------------------------------------------------------------
-   { nombreArchivo, contenidoBase64, periodo? }
+   { nombreArchivo, contenidoBase64, periodo }
 
    El archivo viaja en base64 dentro del JSON: una planilla de trescientas
    filas pesa decenas de KB y así no hace falta otro mecanismo de subida.
    Acá SOLO se lee y se cruza: no se toca el padrón.
-   =========================================================================== */
+
+   >>> EL MES QUE CUBRE ES OBLIGATORIO Y EL VENCIMIENTO NO SE USA (24/11/2026) <<<
+   Pedido de cande, mirando el informe real de la prestataria: la columna
+   "VTO CONTRATO" trae fechas sin sentido para el área (de 2011, 2014, 2020,
+   con errores de tipeo como "09/08/207"), que la prestataria ni siquiera
+   mantiene. Lo que importa es QUÉ MES cubre el informe: eso se elige al
+   subirlo (`periodo`, 'AAAA-MM') y el vencimiento del archivo se descarta.
+
+   >>> CADA CONTRATO DEL INFORME VALE UN MES DESDE QUE SE CARGA <<<
+   (24/11/2026, pedido de cande) Si el informe de octubre se carga el 15 de
+   octubre, todos sus contratos quedan vigentes hasta el 15 de noviembre. Al
+   aplicarlo, los contratos nuevos nacen con esa fecha y los que ya existían
+   se RENUEVAN hasta esa fecha (efecto CONTRATO_RENOVADO, que la anulación
+   deshace). Si el mes pasa sin un informe nuevo, los contratos vencen y los
+   locales vuelven al circuito, como cualquier documentación vencida.
+   Para volver a usar las fechas del archivo: USAR_VENCIMIENTO_DEL_ARCHIVO. */
+const USAR_VENCIMIENTO_DEL_ARCHIVO = false;
+
+/* La misma fecha un mes después. Si ese mes no tiene el día (31 de enero), el
+   último día del mes (28 o 29 de febrero). */
+export function unMesDespues(iso) {
+  const [a, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  const ultimoDia = new Date(Date.UTC(a, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(a, m, Math.min(d, ultimoDia))).toISOString().slice(0, 10);
+}
+
 router.post('/cargas', async (req, res, next) => {
   try {
     const { nombreArchivo, contenidoBase64, periodo } = req.body ?? {};
     if (!contenidoBase64) return res.status(400).json({ error: 'No llegó el archivo' });
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(periodo ?? ''))) {
+      return res.status(400).json({ error: 'Elegí el mes que cubre el informe antes de subirlo.' });
+    }
+    if (periodo > hoyISO().slice(0, 7)) {
+      return res.status(400).json({ error: 'El mes que cubre el informe no puede ser posterior al mes actual.' });
+    }
 
     const buffer = Buffer.from(String(contenidoBase64), 'base64');
     const huella = huellaDeArchivo(buffer);
@@ -494,6 +525,16 @@ router.post('/cargas', async (req, res, next) => {
     }
     if (!lectura.filas.length) return res.status(400).json({ error: 'El archivo se leyó pero no tiene ninguna fila con datos.' });
 
+    // El vencimiento que trae el archivo no se usa (ver arriba): todas las
+    // filas valen un mes desde hoy, el día de la carga.
+    if (!USAR_VENCIMIENTO_DEL_ARCHIVO) {
+      const vence = unMesDespues(hoyISO());
+      for (const f of lectura.filas) {
+        f.vencimiento = vence;
+        f.motivoVencimiento = null;
+      }
+    }
+
     /* >>> UN VENCIMIENTO QUE NO SE ENTIENDE FRENA LA CARGA <<<
        No se guarda nada: se devuelve fila por fila qué tiene de malo, para
        que corrijan el archivo y lo vuelvan a subir. Guardarlo vacío sería
@@ -526,7 +567,7 @@ router.post('/cargas', async (req, res, next) => {
         [
           String(nombreArchivo ?? 'informe'),
           huella,
-          periodo ? String(periodo).slice(0, 30) : null,
+          periodo,
           lectura.formato,
           lectura.advertencia ?? null,
           firmante(req),
@@ -601,8 +642,8 @@ router.put('/cargas/:id/filas/:idFila', async (req, res, next) => {
     if (['CONFIRMADA', 'VINCULADA', 'ALTA'].includes(decision) && vencimientoFila && vencimientoFila < hoyISO()) {
       return res.status(409).json({
         error:
-          `El contrato de esta fila ya viene vencido (${vencimientoFila}): no se puede cargar. ` +
-          'Rechazala o dejala pendiente y pedí la aclaración a la prestataria.',
+          `La vigencia de este informe ya terminó (${vencimientoFila}): pasó más de un mes desde que se cargó. ` +
+          'Descartalo y cargá el informe del mes actual.',
       });
     }
 
@@ -723,8 +764,8 @@ router.post('/cargas/:id/aplicar', async (req, res, next) => {
     if (vencidas.length) {
       return res.status(400).json({
         error:
-          `Hay ${vencidas.length} fila(s) confirmadas cuyo contrato ya viene vencido ` +
-          `(filas ${vencidas.map((f) => f.nroFila).join(', ')}): rechazalas o dejalas pendientes antes de aplicar.`,
+          `La vigencia de este informe ya terminó para ${vencidas.length} fila(s) confirmadas ` +
+          `(pasó más de un mes desde la carga): descartalo y cargá el informe del mes actual.`,
       });
     }
 
@@ -747,7 +788,7 @@ router.post('/cargas/:id/aplicar', async (req, res, next) => {
     }
 
     const hoy = hoyISO();
-    const resumen = { confirmados: 0, completados: 0, creados: 0, altas: 0, retirados: 0, pendientes: 0, rechazadas: 0 };
+    const resumen = { confirmados: 0, completados: 0, renovados: 0, creados: 0, altas: 0, retirados: 0, pendientes: 0, rechazadas: 0 };
 
     await enTransaccion(async (cx) => {
       const marcarFila = (f, efecto, idTramite, idLocal = f.idLocal) =>
@@ -772,6 +813,19 @@ router.post('/cargas/:id/aplicar', async (req, res, next) => {
         const existente = candidatas[0];
 
         if (existente?.idTramite) {
+          /* RENOVAR: el contrato ya existía con una fecha anterior a la de este
+             informe (el del mes pasado). Se lleva hasta la nueva fecha. La
+             anulación la vuelve a la fecha del informe anterior. */
+          const nueva = f.fechaVencimiento ? String(f.fechaVencimiento instanceof Date ? f.fechaVencimiento.toISOString() : f.fechaVencimiento).slice(0, 10) : null;
+          const actual = existente.vencimiento
+            ? String(existente.vencimiento instanceof Date ? existente.vencimiento.toISOString() : existente.vencimiento).slice(0, 10)
+            : null;
+          if (nueva && actual && actual < nueva) {
+            await cx.execute('UPDATE documentacion SET fecha_vencimiento = ? WHERE id_tramite = ?', [nueva, existente.idTramite]);
+            await cx.execute('UPDATE tramite SET fecha_vencimiento = ? WHERE id_tramite = ?', [nueva, existente.idTramite]);
+            resumen.renovados += 1;
+            return marcarFila(f, 'CONTRATO_RENOVADO', existente.idTramite, idLocal);
+          }
           const completaNumero = !existente.numero && f.numeroContrato;
           const completaFecha = !existente.vencimiento && f.fechaVencimiento;
           if (completaNumero || completaFecha) {
@@ -948,6 +1002,7 @@ router.post('/cargas/:id/descartar', async (req, res, next) => {
      CONTRATO_CREADO / LOCAL_Y_CONTRATO_CREADOS -> baja lógica de lo creado
      CONTRATO_COMPLETADO -> los campos completados vuelven a vacío
      CONTRATO_CONFIRMADO -> no tocó nada, no hay nada que deshacer
+     CONTRATO_RENOVADO   -> el vencimiento vuelve al del informe anterior
      CONTRATO_RETIRADO   -> el contrato vuelve a VIGENTE
    =========================================================================== */
 router.post('/cargas/:id/anular', requiereRol('coordinacion', 'direccion'), async (req, res, next) => {
@@ -982,6 +1037,32 @@ router.post('/cargas/:id/anular', requiereRol('coordinacion', 'direccion'), asyn
             'UPDATE documentacion SET fecha_vencimiento = NULL WHERE id_tramite = ? AND fecha_vencimiento <=> ?',
             [f.idTramite, f.fechaVencimiento],
           );
+        } else if (f.efecto === 'CONTRATO_RENOVADO') {
+          /* Vuelve a la fecha que le había dado el informe aplicado anterior
+             que tocó ese contrato (toda fecha de un contrato de 9 de Julio sale
+             de una fila de informe). Solo si todavía tiene la de esta carga:
+             si un informe posterior ya lo renovó, no se pisa. */
+          const [anterior] = await consultarEn(
+            cx,
+            `SELECT DATE_FORMAT(f.fecha_vencimiento, '%Y-%m-%d') vencimiento
+               FROM informe_9dj_fila f JOIN informe_9dj i ON i.id_informe = f.id_informe
+              WHERE f.id_tramite = ? AND f.id_informe < ? AND f.habilita = 1
+                AND i.estado = 'APLICADO' AND i.habilita = 1
+                AND f.efecto IN ('CONTRATO_CREADO', 'LOCAL_Y_CONTRATO_CREADOS', 'CONTRATO_COMPLETADO', 'CONTRATO_RENOVADO')
+              ORDER BY f.id_informe DESC LIMIT 1`,
+            [f.idTramite, informe.idInforme],
+          );
+          const previa = anterior?.vencimiento ?? null;
+          await cx.execute('UPDATE documentacion SET fecha_vencimiento = ? WHERE id_tramite = ? AND fecha_vencimiento <=> ?', [
+            previa,
+            f.idTramite,
+            f.fechaVencimiento,
+          ]);
+          await cx.execute('UPDATE tramite SET fecha_vencimiento = ? WHERE id_tramite = ? AND fecha_vencimiento <=> ?', [
+            previa,
+            f.idTramite,
+            f.fechaVencimiento,
+          ]);
         } else if (f.efecto === 'CONTRATO_RETIRADO') {
           await cx.execute('UPDATE tramite SET id_estado = ? WHERE id_tramite = ?', [
             ID_ESTADO.DOC_VIGENTE,

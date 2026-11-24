@@ -21,6 +21,16 @@
 
 import { validarCuit } from '../backend/lector-informe-9dj.js';
 import { estadoDeLocal, ID_ESTADO } from '../backend/mapeo.js';
+import { hoyISO } from '../src/dominio/fechas.js';
+
+/* Desde el 24/11/2026 cada contrato del informe vale un mes desde el día de
+   la carga (rutas/informe-9dj.js, unMesDespues). */
+function unMesDespues(iso) {
+  const [a, m, d] = iso.split('-').map(Number);
+  const ultimoDia = new Date(Date.UTC(a, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(a, m, Math.min(d, ultimoDia))).toISOString().slice(0, 10);
+}
+const VENCE_UN_MES = unMesDespues(hoyISO());
 
 const BASE = process.env.VITE_API_URL ?? 'http://localhost:3000';
 const USUARIO = 'Prueba automática 9DJ';
@@ -80,8 +90,9 @@ const get = (r) => pedir(r);
 const post = (r, b) => pedir(r, { method: 'POST', body: JSON.stringify(b ?? {}) });
 const put = (r, b) => pedir(r, { method: 'PUT', body: JSON.stringify(b ?? {}) });
 
-/* Subir un archivo como lo hace la pantalla: en base64. */
-const cargar = (nombre, buffer, periodo) =>
+/* Subir un archivo como lo hace la pantalla: en base64. Desde el 24/11/2026
+   el mes que cubre es obligatorio ('AAAA-MM'). */
+const cargar = (nombre, buffer, periodo = '2026-10') =>
   post('/informe-9dj/cargas', { nombreArchivo: nombre, contenidoBase64: buffer.toString('base64'), periodo });
 
 /* Un PDF mínimo pero VÁLIDO, armado a mano con su tabla xref correcta. Las
@@ -213,7 +224,7 @@ seccion('2. PDF: con capa de texto se lee; el escaneo deriva a la contingencia')
 seccion('1. Cargar no escribe nada en el padrón hasta que el agente confirma');
 
 const localesAntes = padron.length;
-const { estado: estadoCarga, cuerpo: carga } = await cargar('informe-prueba.csv', csvPrincipal, 'prueba automática');
+const { estado: estadoCarga, cuerpo: carga } = await cargar('informe-prueba.csv', csvPrincipal, '2026-10');
 if (estadoCarga !== 201) {
   console.log(`No se pudo cargar el informe de prueba: ${JSON.stringify(carga)}`);
   process.exit(1);
@@ -270,15 +281,15 @@ seccion('7. Cerrar y volver a abrir conserva lo decidido');
 
   verificar('la fila del local real cruzó sola (CUIT único)', filaA?.cruce === 'ENCONTRADO' && filaA?.idLocal === localA.id);
 
-  seccion('Corrección: un contrato que ya viene vencido no se puede cargar');
+  /* Desde el 24/11/2026 el vencimiento del archivo no se usa (las fechas de
+     la prestataria no son confiables): toda fila vale un mes desde la carga,
+     y una fila con una fecha ya pasada se decide como cualquier otra. */
+  seccion('El vencimiento del archivo no se usa: vale un mes desde la carga');
   {
     const filaVencida = carga.filas.find((f) => f.cuit === CUIT_VENCIDO);
-    const alta = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaVencida.id}`, { decision: 'ALTA' });
-    verificar('darlo de alta se rechaza nombrando el vencimiento', alta.estado === 409 && /vencido/.test(alta.cuerpo?.error ?? ''), JSON.stringify(alta.cuerpo));
-    const vinculo = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaVencida.id}`, { decision: 'VINCULADA', idLocal: localA.id });
-    verificar('vincularlo también', vinculo.estado === 409);
+    verificar('la fila vence un mes después de la carga, no cuando dice el archivo', filaVencida?.vencimiento === VENCE_UN_MES, String(filaVencida?.vencimiento));
     const rechazo = await put(`/informe-9dj/cargas/${carga.id}/filas/${filaVencida.id}`, { decision: 'RECHAZADA' });
-    verificar('rechazarlo sí se puede: es justamente lo que corresponde', rechazo.estado === 200);
+    verificar('se puede decidir como cualquier otra fila', rechazo.estado === 200);
   }
 
   seccion('Corrección: las coincidencias parecidas se detectan y se proponen');
@@ -429,18 +440,26 @@ seccion('8. Cargar dos veces el mismo archivo avisa que ya fue procesado');
 }
 
 /* ===========================================================================
-   Un vencimiento que no existe en el calendario frena la carga con el motivo
-   (pedido del 4/11/2026). Antes quedaba vacío sin aviso.
+   El mes que cubre es obligatorio, y el vencimiento del archivo se descarta
+   (24/11/2026). Antes (pedido del 4/11/2026) una fecha imposible frenaba la
+   carga; ahora la fila entra sin fecha.
    =========================================================================== */
-seccion('5b. Una fecha imposible rechaza la carga y dice por qué');
+seccion('5b. El mes es obligatorio y una fecha imposible ya no frena la carga');
 
 {
+  const chico = Buffer.from(`CUIT;Razón Social;Domicilio\n${CUIT_NUEVO};SIN MES;CALLE 1\n`);
+  const sinMes = await cargar('sin-mes.csv', chico, '');
+  verificar('sin el mes que cubre, la carga se rechaza (400)', sinMes.estado === 400 && /mes/.test(sinMes.cuerpo?.error ?? ''), JSON.stringify(sinMes.cuerpo));
+  const futuro = await cargar('mes-futuro.csv', chico, '2099-01');
+  verificar('un mes posterior al actual se rechaza (400)', futuro.estado === 400, JSON.stringify(futuro.cuerpo));
+
   const conFechaMala = Buffer.from(`CUIT;Razón Social;Domicilio;Vencimiento\n${CUIT_NUEVO};FECHA MALA;CALLE 1;2027-11-31\n`);
   const { estado, cuerpo } = await cargar('fecha-mala.csv', conFechaMala);
-  verificar('la carga se rechaza (400) en vez de guardar la fila sin fecha', estado === 400, `estado ${estado}: ${JSON.stringify(cuerpo)}`);
-  verificar('el mensaje dice la fila y por qué no es una fecha', /fila \d+ \(FECHA MALA\)/.test(cuerpo?.error ?? '') && /noviembre de 2027 tiene 30 d/.test(cuerpo?.error ?? ''), cuerpo?.error);
+  verificar('la carga entra igual (201)', estado === 201, `estado ${estado}: ${JSON.stringify(cuerpo).slice(0, 200)}`);
+  verificar('y la fila vence un mes después de la carga', cuerpo?.filas?.[0]?.vencimiento === VENCE_UN_MES, JSON.stringify(cuerpo?.filas?.[0]));
+  if (estado === 201) await post(`/informe-9dj/cargas/${cuerpo.id}/descartar`);
   const { cuerpo: cargas } = await get('/informe-9dj/cargas');
-  verificar('no quedó ninguna carga en revisión por el intento', !cargas.some((c) => c.estado === 'EN_REVISION'), '');
+  verificar('no quedó ninguna carga en revisión después de descartarla', !cargas.some((c) => c.estado === 'EN_REVISION'), '');
 }
 
 /* ===========================================================================

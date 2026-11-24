@@ -188,7 +188,7 @@ app.use((req, res) => {
    en la consola (no una traza por pedido) y la pantalla recibe qué revisar. */
 let ultimoAvisoSinBase = 0;
 // eslint-disable-next-line no-unused-vars
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   const sinBase = problemaDeConexion(err);
   if (sinBase) {
     if (Date.now() - ultimoAvisoSinBase > 30_000) {
@@ -201,7 +201,11 @@ app.use((err, _req, res, _next) => {
   if (status >= 500) {
     console.error(err);
     const cuerpo = { error: 'Error interno del servidor. El detalle quedó registrado en la consola del backend.' };
-    if (process.env.NODE_ENV !== 'production') cuerpo.detalle = err.message;
+    // El detalle técnico, también en producción para el personal del área
+    // (no para el titular ni el público): sin él, diagnosticar exige entrar a
+    // la consola del servidor (24/11/2026). Corto, y solo el mensaje.
+    const esPersonal = req.usuario && !['titular', 'sistema'].includes(req.usuario.rol);
+    if (process.env.NODE_ENV !== 'production' || esPersonal) cuerpo.detalle = String(err.message ?? err).slice(0, 300);
     return res.status(status).json(cuerpo);
   }
   res.status(status).json({ error: err.message || 'No se pudo completar el pedido' });

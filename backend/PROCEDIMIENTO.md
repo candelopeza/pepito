@@ -1373,3 +1373,80 @@ y el front (`npm run build` y subir `dist/` completo). Con el front nuevo y el
 backend viejo, la foto se manda pero no se guarda.
 
 **Para apagarlo:** `FOTO_EN_RELEVAMIENTO = false` en `Relevar.jsx`.
+
+
+## 29. El PDF del Informe 9 de Julio: "DOMMatrix is not defined" (24 de noviembre de 2026)
+
+**Síntoma:** al subir un PDF en Herramientas → Informe 9 de Julio, el servidor
+respondía "Error interno" con el detalle técnico "DOMMatrix is not defined".
+El Excel andaba. En la PC de desarrollo el mismo PDF se leía bien.
+
+**Causa:** la librería de PDF (pdf-parse, que usa pdfjs-dist) necesita una
+pieza compilada para cada sistema operativo, `@napi-rs/canvas`. En el
+servidor (Linux) esa pieza no cargaba: lo más probable es que `node_modules`
+se haya copiado alguna vez desde Windows, y por eso `npm install` decía
+"up to date" sin instalar la versión de Linux.
+
+**Arreglo en el código:** `backend/lector-informe-9dj.js` (asegurarDOMMatrix)
+usa un DOMMatrix mínimo cuando la pieza no está. Para leer el texto del PDF
+alcanza; la pieza solo hace falta para dibujar páginas, que el sistema no hace.
+
+**Arreglo de fondo (recomendado), en la terminal del servidor, dentro de la
+carpeta backend desde donde corre Node:**
+
+    rm -rf node_modules
+    npm ci
+
+y reiniciar el backend. `npm ci` instala exactamente lo de `package-lock.json`
+y baja las piezas del sistema donde se corre.
+
+**Regla para el despliegue:** `node_modules` nunca se copia de la PC al
+servidor. Se instala en el servidor con `npm ci` (o `npm install`).
+
+
+## 30. Ubicaciones: toda la avenida Belgrano en la Belgrano 2642 (24 de noviembre de 2026)
+
+**Síntoma (lo detectó Ambiente):** cualquier dirección sobre la avenida
+Belgrano, con cualquier altura, quedaba en el mapa en la Belgrano 2642.
+
+**Causa:** cuando OpenStreetMap no tiene cargada la altura de una calle, el
+geocodificador (Nominatim) devuelve un punto de LA CALLE, o de LA CIUDAD si
+tampoco la encuentra, y el sistema lo guardaba como si fuera la dirección. En
+la base había 247 locales en 87 puntos repetidos (J. B. Justo, Entre Ríos,
+9 de Julio, Las Heras, el centro de la ciudad, esquinas).
+
+**Arreglo en el código** (`backend/geocodificador.js`):
+- se separan calle y altura (`partesDeDireccion`): AVDA pasa a Avenida,
+  1.306 a 1306, y se descarta lo que sigue a la altura (LOCAL 6, PISO 7,
+  -PB, /290). Una esquina ("Chacabuco y Piedras") no tiene altura y no se
+  busca;
+- solo se guarda un resultado con ESE número de puerta sobre una calle con
+  ese nombre, dentro del ejido;
+- si el mapa encontró solo la calle o la ciudad, el local queda SIN
+  ubicación, con el motivo, para ubicarlo a mano.
+
+**Ubicar a mano:** Mapa → Geocodificación pendiente → "Ubicar en el mapa"
+(`src/components/UbicarEnMapa.jsx`): clic donde está el local y guardar. Se
+valida contra el ejido. La columna "Por qué no se pudo" se completa al tocar
+"Reintentar geocodificación".
+
+**Datos ya cargados:** `backend/sql/18-ubicaciones-repetidas.sql` les saca la
+coordenada a los locales con puntos repetidos (con respaldo en la tabla
+`respaldo_coordenadas_241126` y el bloque para deshacer). Después:
+"Reintentar geocodificación" (ubica solos los que el mapa tiene con altura;
+tarda un segundo por dirección) y el resto, "Ubicar en el mapa".
+
+## 31. Informe 9 de Julio: el mes que cubre y un mes de vigencia (24 de noviembre de 2026)
+
+- Al subir el informe hay que elegir el mes que cubre (obligatorio).
+- Las fechas de vencimiento del archivo NO se usan: la prestataria las
+  escribe mal y no le sirven al área.
+- Cada contrato del informe queda vigente **un mes desde el día en que se
+  carga** (cargado el 15 de octubre, vigente hasta el 15 de noviembre). Al
+  aplicarlo, los contratos nuevos nacen con esa fecha y los que ya existían
+  se renuevan (efecto CONTRATO_RENOVADO; anular el informe los devuelve a la
+  fecha del informe anterior).
+- Si pasa el mes sin cargar el informe siguiente, los contratos vencen y los
+  locales vuelven al circuito de notificaciones.
+- Para volver a usar las fechas del archivo: `USAR_VENCIMIENTO_DEL_ARCHIVO`
+  en `backend/rutas/informe-9dj.js`.

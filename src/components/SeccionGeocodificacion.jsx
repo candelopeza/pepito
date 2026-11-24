@@ -26,13 +26,26 @@ import { Vacio } from './ui/Aviso';
 import Modal from './ui/Modal';
 import FormLocal from './FormLocal';
 import RevisionCoordenadas from './RevisionCoordenadas';
+import UbicarEnMapa from './UbicarEnMapa';
 import { useDatos } from '../datos/datosContexto';
 
 function SeccionGeocodificacion() {
   const { localesConEstado, guardarLocal, geocodificarPendientes } = useDatos();
   const [editando, setEditando] = useState(null);
+  // El local que se está ubicando a mano en el mapa (UbicarEnMapa).
+  const [ubicando, setUbicando] = useState(null);
+  /* Por qué no se pudo ubicar cada uno, según el último "Reintentar". Antes la
+     columna quedaba vacía: el backend explicaba el motivo y acá se perdía. */
+  const [motivos, setMotivos] = useState(() => new Map());
 
-  const sinGeo = localesConEstado.filter((l) => l.sinGeo);
+  const sinGeo = localesConEstado
+    .filter((l) => l.sinGeo)
+    .map((l) => ({ ...l, motivoSinGeo: motivos.get(l.id) ?? l.motivoSinGeo ?? '' }));
+
+  async function reintentar() {
+    const r = await geocodificarPendientes();
+    if (r?.sinResolver) setMotivos(new Map(r.sinResolver.map((x) => [x.id, x.motivo])));
+  }
   const total = localesConEstado.length;
 
   /* Las columnas necesitan setEditando (el botón de corregir), así que se
@@ -68,13 +81,20 @@ function SeccionGeocodificacion() {
       {
         field: 'accion',
         headerName: 'Acción',
-        width: 200,
+        width: 300,
         sortable: false,
         filterable: false,
         renderCell: ({ row }) => (
-          <button type="button" className="btn-tabla" onClick={() => setEditando(row)}>
-            Corregir dirección
-          </button>
+          <span style={{ display: 'flex', gap: 6 }}>
+            {/* Cuando el mapa no tiene la altura de esa calle, corregir la
+                dirección no alcanza: se ubica a mano (24/11/2026). */}
+            <button type="button" className="btn-tabla" onClick={() => setUbicando(row)}>
+              Ubicar en el mapa
+            </button>
+            <button type="button" className="btn-tabla" onClick={() => setEditando(row)}>
+              Corregir dirección
+            </button>
+          </span>
         ),
       },
     ],
@@ -87,7 +107,7 @@ function SeccionGeocodificacion() {
         <span>
           Geocodificación pendiente ({sinGeo.length} de {total} locales sin ubicación)
         </span>
-        <button type="button" className="btn-secundario" onClick={geocodificarPendientes}>
+        <button type="button" className="btn-secundario" onClick={reintentar}>
           Reintentar geocodificación
         </button>
       </div>
@@ -110,6 +130,8 @@ function SeccionGeocodificacion() {
       {/* ---------- El límite contra el que se valida ---------- */}
 
       <RevisionCoordenadas />
+
+      {ubicando && <UbicarEnMapa local={ubicando} onCerrar={() => setUbicando(null)} />}
 
       {editando && (
         <Modal abierto etiqueta="PADRÓN" titulo={`Corregir la dirección de ${editando.nombreLocal}`} ancho="ancho" onCerrar={() => setEditando(null)}>

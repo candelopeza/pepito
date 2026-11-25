@@ -32,6 +32,8 @@
    ============================================================================ */
 
 import { useState } from 'react';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 
 function Envoltura({ id, etiqueta, error, ayuda, children, ancho }) {
   return (
@@ -149,13 +151,36 @@ function achicarImagen(archivo, maximo = 1600, calidad = 0.8) {
 
 /* Foto desde la cámara o la galería del celular. `valor` es la imagen ya
    achicada (data URL); onChange recibe (imagen, nombreDelArchivo). Se usa en
-   el formulario de entrega de cédulas (sección 6.2).
+   el relevamiento (foto del local) y en la entrega de cédulas (sección 6.2).
 
    soloCamara: en el teléfono abre directo la cámara trasera y no deja elegir
    una foto guardada (atributo `capture`, lo respetan Android e iPhone). Así la
-   foto es del momento. En la PC no cambia nada: abre el explorador de archivos. */
+   foto es del momento. En la PC no cambia nada: abre el explorador de archivos.
+
+   >>> DOS BOTONES EN EL TELÉFONO: CÁMARA Y GALERÍA (25/11/2026) <<<
+   Con un solo <input type="file" accept="image/*">, los Android nuevos abren
+   directo el selector de fotos del sistema, que muestra solo la galería: no
+   había forma de sacar la foto en el momento. Ahora, en el teléfono (pantalla
+   táctil), salen dos botones: "Cámara" (el mismo input con capture, abre la
+   cámara trasera) y "Galería" (sin capture, elige una guardada). Las dos
+   terminan igual: la foto se achica y se guarda con el relevamiento o la
+   entrega, como el archivo de siempre. En la PC queda el input de antes.
+   Para volver al input único: FOTO_DOS_BOTONES = false. */
+const FOTO_DOS_BOTONES = true;
+
+/* Pantalla táctil = teléfono o tablet, donde tiene sentido ofrecer la cámara.
+   En la PC (mouse) los dos botones abrirían el mismo explorador de archivos. */
+function esPantallaTactil() {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches;
+  } catch {
+    return false;
+  }
+}
+
 export function CampoFoto({ id, etiqueta, valor, onChange, error, ayuda, ancho, soloCamara = false }) {
   const [preparando, setPreparando] = useState(false);
+  const [dosBotones] = useState(() => FOTO_DOS_BOTONES && !soloCamara && esPantallaTactil());
 
   async function elegir(e) {
     const archivo = e.target.files?.[0];
@@ -173,14 +198,29 @@ export function CampoFoto({ id, etiqueta, valor, onChange, error, ayuda, ancho, 
 
   return (
     <Envoltura id={id} etiqueta={etiqueta} error={error} ayuda={preparando ? 'Preparando la foto…' : ayuda} ancho={ancho}>
-      <input
-        id={id}
-        type="file"
-        accept="image/*"
-        capture={soloCamara ? 'environment' : undefined}
-        className={error ? 'con-error' : ''}
-        onChange={elegir}
-      />
+      {dosBotones ? (
+        /* Los inputs quedan invisibles (no display:none: el iPhone no abre un
+           input escondido así); cada <label> es el botón que lo abre. */
+        <span className="campo-foto-botones">
+          <input id={id} type="file" accept="image/*" capture="environment" className="campo-foto-oculto" onChange={elegir} />
+          <label htmlFor={id} className={`btn-secundario campo-foto-boton ${error ? 'con-error' : ''}`}>
+            <PhotoCameraIcon fontSize="small" /> Cámara
+          </label>
+          <input id={`${id}-galeria`} type="file" accept="image/*" className="campo-foto-oculto" onChange={elegir} />
+          <label htmlFor={`${id}-galeria`} className={`btn-secundario campo-foto-boton ${error ? 'con-error' : ''}`}>
+            <PhotoLibraryIcon fontSize="small" /> Galería
+          </label>
+        </span>
+      ) : (
+        <input
+          id={id}
+          type="file"
+          accept="image/*"
+          capture={soloCamara ? 'environment' : undefined}
+          className={error ? 'con-error' : ''}
+          onChange={elegir}
+        />
+      )}
       {valor && (
         <span className="campo-foto-previa">
           <img src={valor} alt="Foto cargada" />

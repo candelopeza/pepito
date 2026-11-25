@@ -1917,6 +1917,25 @@
    components/ui/Campo.jsx (CampoFoto), components/Navbar.jsx (indicador). */
 .campo-foto-previa { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .campo-foto-previa img { width: 96px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid #e0e0e0; }
+/* Foto en el teléfono: botones "Cámara" y "Galería" (25/11/2026, ui/Campo.jsx,
+   CampoFoto). Los inputs de archivo quedan invisibles pero no con display:none
+   (el iPhone no abriría la cámara); el <label> hace de botón. Los selectores
+   llevan .form-grupo .campo-foto-botones para ganarle a ".form-grupo label"
+   y ".form-grupo input", y a las etiquetas flotantes del formulario en
+   ventana (las de :has(...) pesan más): por eso el elemento (label./input.)
+   y la clase del botón repetida a propósito. */
+.campo-foto-botones { position: relative; display: flex; gap: 10px; flex-wrap: wrap; }
+.form-grupo .campo-foto-botones label.campo-foto-boton.campo-foto-boton {
+  position: static; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  flex: 1 1 140px; padding: 12px 16px; margin: 0; background: white;
+  font-size: 15px; font-weight: 600; color: #1565c0;
+  pointer-events: auto; cursor: pointer;
+}
+.form-grupo .campo-foto-botones label.campo-foto-boton.campo-foto-boton.con-error { border-color: #d32f2f; }
+.form-grupo .campo-foto-botones input.campo-foto-oculto {
+  position: absolute; top: 0; left: 0; width: 1px; height: 1px; padding: 0; border: 0;
+  opacity: 0; overflow: hidden; pointer-events: none;
+}
 .navbar-conexion {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px;
   font-size: 12px; font-weight: 600; background: #fff3e0; color: #e65100; white-space: nowrap;

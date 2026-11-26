@@ -1538,6 +1538,10 @@ archivo (verificado: sale idéntico a antes).
 
 ## 34. Dos cédulas por hoja, ya armadas en el PDF (26 de noviembre de 2026)
 
+> El mismo día cambiaron el papel y las copias (sección 36): ahora es **oficio**
+> apaisado, como el modelo, y son **2 copias** por cédula, las dos en una hoja. Lo
+> de "papel Carta" y "3 copias" de acá vale solo si se vuelve atrás.
+
 **El pedido:** la Dirección pasó su modelo: la hoja carta **apaisada** partida en
 dos mitades, con una cédula en cada una. Son de Ambiente: quieren usar menos
 papel. Hasta ahora el PDF salía con una cédula por hoja y en la oficina lo
@@ -1646,5 +1650,73 @@ de sesión vencida). Estilos en `src/App.css`, sección 2 (`.navbar-ingresar`).
 
 **Para volver atrás el botón:** `BOTON_INGRESAR = false` en `Navbar.jsx` (vuelve
 "Sin identificar").
+
+**Para publicarlo:** solo el front (`npm run build` y subir `dist/` completo).
+
+## 36. Las notificaciones en oficio, las dos copias en una hoja (26 de noviembre de 2026)
+
+**El pedido:** "dejalas de esta forma, que entren las 2 en una sola hoja", con el
+modelo de la Dirección (`PRIMERA NOTIFICACION - Modificada.pdf`). Comparado con lo
+de la sección 34, había tres diferencias:
+
+1. **El papel.** El modelo está en **oficio** apaisado (355,6 x 215,9 mm), no en
+   carta. Cada mitad mide 177,8 mm de ancho (en carta, 139,7), por eso en el
+   modelo la letra es más grande.
+2. **Las copias.** Salían 3 por cédula: la segunda hoja mezclaba la 3.ª copia
+   de una cédula con la 1.ª de la siguiente. El modelo lleva 2 copias iguales en
+   una hoja. Se decidió **2 copias: una hoja por cédula**.
+3. **El espacio de abajo.** Quedaban hasta 2 cm vacíos al pie: la letra
+   siguiente (un cuarto de punto más) corre varios renglones y ya no entraba, y
+   lo que sobraba quedaba abajo de todo. En el modelo ese espacio está entre el
+   recuadro y las firmas, y OBSERVACIONES va al pie.
+
+**Qué cambió:**
+
+- El PDF de las cédulas sale en **oficio apaisado**, con las 2 copias de la misma
+  cédula, una en cada mitad. Dos cédulas, dos hojas.
+- Lo que sobra abajo va al lugar para firmar (en la segunda notificación, mitad
+  para el Director y mitad para recepción y notificador). OBSERVACIONES queda a la
+  misma altura que en el modelo.
+- OBSERVACIONES lleva un solo renglón de puntos, como el modelo (antes dos).
+- "Ver cédula" dice "Se imprimen 2 copias iguales en una hoja oficio apaisada."
+
+**Cómo queda la letra** (impresa a tamaño real):
+
+| | Modelo | Antes (carta) | Ahora (oficio) |
+|---|---|---|---|
+| Primera notificación | 11 pt | 9,5 pt | 10,5 pt (10 con nombres muy largos) |
+| Segunda notificación | – | 8,75 pt | 9,75 pt (9 con nombres muy largos) |
+
+A 11 pt el texto corta los renglones igual que el modelo; no llega a 11 porque
+deja al menos 6 mm abajo (el modelo deja 4,6, donde muchas impresoras ya no
+imprimen) y el recuadro del QR es un poco más alto.
+
+**CÓMO SE IMPRIME (importante para la oficina):**
+
+- **Papel oficio** en la impresora, y en el cuadro de impresión elegir **Oficio**
+  (en algunas impresoras dice **Legal**). Con carta, la impresora achica la hoja
+  al 79 % y la letra queda como antes.
+- **Páginas por hoja: 1.** La orientación ya viene horizontal en el PDF.
+
+**El recuadro sigue diciendo "CUATRO (4) DOCUMENTOS"** (el modelo dice "CINCO
+(5)" con cuatro ítems; se decidió el 12/11, sección 25).
+
+**Verificado:** primera y segunda notificación, con un local normal, uno con
+nombres muy largos y uno sin razón social, CUIT ni rubro; un lote de dos cédulas
+(dos hojas, cada una con las dos copias de su cédula); y la vuelta a carta. En
+todas, firmas y observaciones entran en su mitad y abajo quedan unos 5 mm, como en el
+modelo.
+
+**Dónde está:** `src/components/pdfCedulas.js`: `PAPEL_CEDULAS` (el papel),
+`AJUSTE_MITAD` (`repartir`, `renglonesObservaciones`, `firmas`) y `LETRAS_MITAD`
+(ahora desde 12 pt); `src/dominio/cedulaOficial.js`: `COPIAS_OFICIALES`. La hoja
+de ruta y los listados siguen en carta.
+
+**Para volver atrás:**
+
+- `PAPEL_CEDULAS = 'carta'`: carta apaisada (con el espacio repartido, la letra
+  queda en 9,75 y 9,25 pt).
+- `COPIAS_OFICIALES = 3`: vuelven las tres copias (y el texto de "Ver cédula"
+  con el local, la Dirección y el expediente).
 
 **Para publicarlo:** solo el front (`npm run build` y subir `dist/` completo).

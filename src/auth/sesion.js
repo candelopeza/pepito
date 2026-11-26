@@ -17,10 +17,37 @@
    SE GUARDA EN localStorage (pedido de la Dirección): la persona sigue
    identificada aunque cierre la pestaña o abra la app instalada. Cuando el
    token vence, el backend lo rechaza y RolProvider lo olvida (olvidarToken).
+
+   >>> VOLVER A ENTRAR DESDE LA APP (27/11/2026) <<<
+   En el celular, cuando el token vencía (dura 24 horas), la app quedaba como
+   público y no había cómo volver a entrar: había que ir al navegador, entrar a
+   CiDiTuc y abrir el sistema desde ahí. Ahora:
+     - URL_INGRESO_CIDITUC: la página de CiDiTuc a la que lleva el botón
+       "Ingresar" (Navbar.jsx y el aviso de sesión vencida en Layout.jsx).
+       Desde ahí CiDiTuc vuelve a abrir el sistema con un token nuevo;
+     - venceToken / tokenVencido: leen el vencimiento del token (el `exp` del
+       JWT) sin señal, para avisar "tu sesión venció" en vez de quedar mudo;
+     - recordarPersona / personaRecordada: la última persona que el backend
+       confirmó con ESTE token. Sin señal no se puede preguntar, y la app la
+       dejaba afuera; ahora la usa hasta que vuelva la señal (el backend igual
+       revisa el token en cada pedido: esto solo decide qué se ve);
+     - alCambiarToken: avisa si otra pestaña (o el navegador, en el teléfono
+       comparten el almacenamiento con la app instalada) guardó un token nuevo.
    ============================================================================ */
 
 const CLAVE = 'grandes-generadores-token';
+const CLAVE_PERSONA = 'grandes-generadores-persona';
 const PARAMETROS = ['auth', 'token', 'access_token', 'jwt', 't'];
+
+/* La página de ingreso de CiDiTuc (la que pasó la Dirección el 27/11/2026). Se
+   puede cambiar sin tocar el código con VITE_CIDITUC_INGRESO en el .env. */
+export const URL_INGRESO_CIDITUC = import.meta.env.VITE_CIDITUC_INGRESO || 'https://cidituc.smt.gob.ar/?destino=derivador#/home';
+
+/* Va a CiDiTuc en la misma ventana (dentro de la app instalada, sin abrir el
+   navegador aparte). Al volver, capturarToken() toma el token nuevo. */
+export function ingresarConCidituc() {
+  window.location.assign(URL_INGRESO_CIDITUC);
+}
 
 function sacarDe(params) {
   for (const nombre of PARAMETROS) {
@@ -73,7 +100,56 @@ export function leerToken() {
 export function olvidarToken() {
   try {
     localStorage.removeItem(CLAVE);
+    localStorage.removeItem(CLAVE_PERSONA);
   } catch {
     // nada que olvidar
   }
+}
+
+/* Cuándo vence el token, en milisegundos, leyendo el `exp` del JWT SIN
+   verificar la firma (eso lo hace el backend). null si no es un JWT o no trae
+   vencimiento: en ese caso decide el backend. */
+export function venceToken(token = leerToken()) {
+  try {
+    const cuerpo = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof cuerpo.exp === 'number' ? cuerpo.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+export function tokenVencido(token = leerToken()) {
+  const vence = venceToken(token);
+  return vence !== null && vence <= Date.now();
+}
+
+/* La persona se guarda atada al token con el que se confirmó (sus últimos
+   caracteres, que son parte de la firma): con otro token no se usa. */
+const huella = (token) => (token ? token.slice(-16) : '');
+
+export function recordarPersona(persona) {
+  try {
+    localStorage.setItem(CLAVE_PERSONA, JSON.stringify({ token: huella(leerToken()), persona }));
+  } catch {
+    // Sin almacenamiento: sin señal no se va a poder recordar, nada más.
+  }
+}
+
+export function personaRecordada() {
+  try {
+    const guardada = JSON.parse(localStorage.getItem(CLAVE_PERSONA) ?? 'null');
+    return guardada && guardada.token === huella(leerToken()) ? guardada.persona : null;
+  } catch {
+    return null;
+  }
+}
+
+/* Llama a `avisar` cuando otra ventana del mismo sitio guarda o borra el token.
+   Devuelve la función para dejar de escuchar. */
+export function alCambiarToken(avisar) {
+  const escuchar = (e) => {
+    if (e.key === CLAVE || e.key === null) avisar();
+  };
+  window.addEventListener('storage', escuchar);
+  return () => window.removeEventListener('storage', escuchar);
 }

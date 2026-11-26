@@ -5,7 +5,7 @@
    Ambiente (PRIMERA y SEGUNDA NOTIFICACION), con los datos del local ya
    completados. Lo usan las dos cosas que muestran la cédula, para que no
    puedan diferir:
-     - components/pdfCedulas.js   la imprime (tres copias iguales);
+     - components/pdfCedulas.js   la imprime (COPIAS_OFICIALES copias iguales);
      - components/VistaCedula.jsx la muestra en pantalla ("Ver cédula").
 
    Cada párrafo es una lista de partes { t: texto, e: estilo }, con estilo
@@ -56,9 +56,11 @@ const DOCUMENTACION = {
   ],
 };
 
-/* Tres copias iguales de cada cédula: para el local, para la Dirección de
-   Ambiente y para el expediente. */
-export const COPIAS_OFICIALES = 3;
+/* Copias iguales de cada cédula. Eran tres (para el local, para la Dirección
+   de Ambiente y para el expediente), una por hoja. Desde el 26/11/2026 son dos,
+   las dos en la misma hoja oficio apaisada, como el modelo de la Dirección
+   (components/pdfCedulas.js, DOS_CEDULAS_POR_HOJA). En 3 vuelven las tres. */
+export const COPIAS_OFICIALES = 2;
 
 /* El "Generado el ... a las ... por ..." de abajo a la izquierda: la
    Dirección pidió sacarlo de las cédulas (27/10/2026). La hoja de ruta y los

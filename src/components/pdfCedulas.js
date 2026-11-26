@@ -250,8 +250,9 @@ function dibujarConstancia(doc, y0, notificador) {
    firmas y las observaciones. La primera lleva las tres firmas en una fila; la
    segunda, la del Director arriba y las de recepción y notificador abajo.
 
-   TRES COPIAS IGUALES de cada cédula, una por hoja: para el local, para la
-   Dirección de Ambiente y para el expediente.
+   COPIAS IGUALES de cada cédula (COPIAS_OFICIALES): eran tres, una por hoja;
+   desde el 26/11/2026 son dos, las dos en una hoja oficio apaisada
+   (DOS_CEDULAS_POR_HOJA y PAPEL_CEDULAS, más abajo), como el modelo.
 
    El texto y los datos salen de dominio/cedulaOficial.js, el mismo que usa la
    pantalla "Ver cédula": lo que se revisa y lo que se imprime no pueden
@@ -270,6 +271,99 @@ function dibujarConstancia(doc, y0, notificador) {
    las firmas, el recuadro con la documentación a presentar y el QR a las
    plantillas (src/assets/cedula/qr-plantillas.png, recuadroDocumentacion).
    =========================================================================== */
+/* >>> LETRA MÁS GRANDE PARA IMPRIMIR "2 PÁGINAS POR HOJA" (26/11/2026) <<<
+   En la oficina las cédulas se imprimen 2 páginas por hoja: la impresora achica
+   cada carta al 65 % (lo limita el ancho: 139,7 / 215,9 mm). Con la letra de
+   10,5 pt el texto quedaba impreso en 6,8 pt, muy chico. Ahora:
+     - márgenes más chicos y parejos (antes 18 mm a la izquierda y 24 a la
+       derecha, porque el contenido no estaba centrado en la carta);
+     - el título arriba de todo y el pie más cerca del borde;
+     - se prueban letras más grandes (hasta 13 pt) y queda la más grande que
+       deja entrar firmas y observaciones en la misma hoja;
+     - el interlineado un poco más junto (1,17 en vez de 1,22), que deja
+       subir otro poco la letra;
+     - Fecha, Sr./a, las firmas y OBSERVACIONES acompañan a la letra del texto.
+   Cada notificación usa la suya: la segunda tiene más firmas y le entra menos.
+   Para volver a como estaba: CEDULA_PARA_DOS_POR_HOJA = false.
+
+   `firmas`: lo que ocupan firmas + observaciones debajo del texto, en mm, por
+   notificación ([primera, segunda]). Son los y += de abajo sumados: 20+11+7 y
+   16+6+14+5+11+7. Antes se reservaba 34 y 52 (menos de lo real); con el margen
+   de abajo de 16 no se notaba, pero con 10 la última línea podía quedar a 3 mm
+   del borde, donde muchas impresoras no imprimen. Con lo real, abajo quedan
+   siempre al menos `abajo` mm. */
+const CEDULA_PARA_DOS_POR_HOJA = true;
+const AJUSTE_OFICIAL = CEDULA_PARA_DOS_POR_HOJA
+  ? { margen: 11, titulo: 12, abajo: 10, interlinea: 1.17, firmas: [38, 59], letras: [13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5, 9, 8.5] }
+  : { margen: 18, titulo: 17, abajo: 16, interlinea: 1.22, firmas: [34, 52], letras: [10.5, 10, 9.5, 9, 8.5] };
+// Centra la zona imprimible en la carta (antes quedaba recostada a la izquierda).
+const CORRIMIENTO_X = CEDULA_PARA_DOS_POR_HOJA ? (HOJA.ancho - ZONA.ancho) / 2 : 0;
+
+/* >>> DOS CÉDULAS POR HOJA, YA ARMADAS EN EL PDF (26/11/2026) <<<
+   Pedido de la Dirección (son de Ambiente: quieren gastar menos papel): como en
+   su modelo, la carta APAISADA partida en dos mitades, con una cédula en cada
+   una. Antes salía una por hoja y se imprimía con "2 páginas por hoja", que
+   achica la carta entera (márgenes incluidos) y deja sin usar arriba y abajo de
+   cada mitad. Armada así, cada cédula se dibuja para su mitad (139,7 x 210 mm)
+   y la letra queda más grande en el papel.
+
+   Las copias van seguidas. Con 2 copias por cédula (COPIAS_OFICIALES), cada
+   hoja lleva las dos de la misma cédula. Con 3, la hoja 1 llevaba la 1.ª y la
+   2.ª de la primera cédula, y la hoja 2 la 3.ª de esa y la 1.ª de la siguiente.
+
+   SE IMPRIME CON "1 PÁGINA POR HOJA": si la impresora sigue en 2 por hoja,
+   salen 4 cédulas por hoja, chiquitas.
+
+   Para volver a una por hoja: DOS_CEDULAS_POR_HOJA = false. */
+const DOS_CEDULAS_POR_HOJA = true;
+
+/* >>> EN PAPEL OFICIO, COMO EL MODELO (26/11/2026) <<<
+   El modelo de la Dirección está en OFICIO apaisado (355,6 x 215,9 mm), no en
+   carta: cada mitad mide 177,8 mm de ancho (en carta, 139,7) y la letra llega a
+   unos 11 pt, como en el modelo (en carta apaisada quedaba en 9,5).
+   LA IMPRESORA TIENE QUE TENER PAPEL OFICIO y en el cuadro de impresión hay que
+   elegir "Oficio" (o "Legal"): con carta, la impresora achica la hoja al 79 %.
+   Para volver a la carta apaisada: PAPEL_CEDULAS = 'carta'.
+   Solo las cédulas de a dos por hoja: la hoja de ruta y los listados siguen en
+   PAPEL. */
+const PAPEL_CEDULAS = 'oficio';
+const HOJA_CEDULAS = PAPELES[PAPEL_CEDULAS] ?? PAPELES.carta;
+
+/* Dónde se dibuja una cédula: x, y, ancho y alto del lugar (mm), `escala` para
+   lo que tiene medida fija (logos, QR, espacios para firmar, rótulos) y
+   `ajuste` (márgenes, letras posibles, lo que ocupan las firmas). */
+const CAJA_HOJA = { x: CORRIMIENTO_X, y: 0, ancho: ZONA.ancho, alto: ZONA.alto, escala: 1, ajuste: AJUSTE_OFICIAL };
+/* En la hoja apaisada el largo del papel es el ancho. En carta, el alto útil
+   es el que comparten Carta y A4 apaisadas (210 mm), igual que ZONA en la hoja
+   parada. El oficio apaisado no entra en A4: se usa su alto entero (215,9). */
+const MITAD = {
+  ancho: HOJA_CEDULAS.alto / 2,
+  alto: PAPEL_CEDULAS === 'oficio' ? HOJA_CEDULAS.ancho : Math.min(HOJA_CEDULAS.ancho, 210),
+};
+// De 12 a 6,5 pt, de a 0,25: en media hoja cada cuarto de punto se nota.
+const LETRAS_MITAD = Array.from({ length: 23 }, (_, i) => 12 - i * 0.25);
+/* `repartir`: lo que sobra abajo, entre el texto y las firmas (más lugar para
+   firmar), como en el modelo: así OBSERVACIONES queda al pie de la hoja. Sin
+   esto, al no entrar la letra siguiente (un cuarto de punto más corre varios
+   renglones) quedaban hasta 2 cm vacíos abajo de todo. */
+/* `renglonesObservaciones`: 1, como en el modelo (la hoja entera lleva 2). Por
+   eso `firmas` es 7 mm menos que en la hoja entera: 20+11 y 16+6+14+5+11. Ese
+   renglón de menos deja subir la letra de 10,25 a 10,5 pt en la primera. */
+const AJUSTE_MITAD = {
+  margen: 7,
+  titulo: 9,
+  abajo: 6,
+  firmas: [31, 52],
+  renglonesObservaciones: 1,
+  letras: LETRAS_MITAD,
+  repartir: true,
+};
+/* Lo de medida fija va a la escala del ancho útil de la mitad respecto del de
+   la hoja entera (0,87 en oficio, 0,67 en carta). La letra del texto no: se
+   elige la más grande que entra, igual que en la hoja entera. */
+const ESCALA_MITAD = (MITAD.ancho - AJUSTE_MITAD.margen * 2) / (ZONA.ancho - AJUSTE_OFICIAL.margen * 2);
+const CAJAS_MITAD = [0, 1].map((n) => ({ x: n * MITAD.ancho, y: 0, ancho: MITAD.ancho, alto: MITAD.alto, escala: ESCALA_MITAD, ajuste: AJUSTE_MITAD }));
+
 /* Prepara un logo para el PDF, con su tamaño en píxeles (para no deformarlo).
    null si no carga. */
 async function cargarLogo(url) {
@@ -318,7 +412,7 @@ function dibujarLogo(doc, logo, caja, textoSinLogo, alinear) {
    palabras pegadas entre partes (una negrita seguida de ":") quedan juntas.
    Con dibujar = false solo mide: devuelve dónde termina. */
 function parrafo(doc, partes, { x, y, ancho, tam, justificar = true, dibujar = true, sangria = 0 }) {
-  const interlinea = tam * 0.3528 * 1.22;
+  const interlinea = tam * 0.3528 * AJUSTE_OFICIAL.interlinea;
   // Unidades: palabras (con su estilo) que van juntas, separadas por espacios.
   const unidades = [];
   let actual = [];
@@ -398,17 +492,20 @@ function puntos(doc, x1, y, x2) {
    siguiente al recuadro. Si la imagen del QR no carga, en su celda va la
    dirección escrita. */
 const LADO_QR = 22; // mm: se lee bien con cualquier teléfono
-function recuadroDocumentacion(doc, documentacion, { x, y, ancho, tam, dibujar, qr }) {
+// En media hoja el QR se achica con el resto, pero no a menos de esto (mm),
+// para que el teléfono lo siga leyendo de cerca.
+const LADO_QR_MINIMO = 17;
+function recuadroDocumentacion(doc, documentacion, { x, y, ancho, tam, dibujar, qr, ladoQr = LADO_QR }) {
   const t = tam * 0.8; // la letra del recuadro, más chica que el texto, como en el modelo
   const pt = t * 0.3528;
   const margen = 1.6;
-  const celdaQr = LADO_QR + margen * 2;
+  const celdaQr = ladoQr + margen * 2;
   const arriba = y - tam * 0.3528 * 0.4;
   const opciones = { x: x + margen, ancho: ancho - celdaQr - margen * 2, tam: t, justificar: false, dibujar };
   let yy = arriba + margen + pt * 0.85;
   yy = parrafo(doc, [{ t: documentacion.titulo, e: 'bold' }], { ...opciones, y: yy });
   for (const item of documentacion.items) yy = parrafo(doc, item, { ...opciones, y: yy });
-  const alto = Math.max(yy - pt * 1.22 + pt * 0.35 + margen - arriba, celdaQr);
+  const alto = Math.max(yy - pt * AJUSTE_OFICIAL.interlinea + pt * 0.35 + margen - arriba, celdaQr);
 
   if (dibujar) {
     const xQr = x + ancho - celdaQr;
@@ -417,7 +514,7 @@ function recuadroDocumentacion(doc, documentacion, { x, y, ancho, tam, dibujar, 
     doc.rect(x, arriba, ancho, alto);
     doc.line(xQr, arriba, xQr, arriba + alto);
     if (qr) {
-      doc.addImage(qr.datos, qr.tipo, xQr + margen, arriba + (alto - LADO_QR) / 2, LADO_QR, LADO_QR, undefined, 'FAST');
+      doc.addImage(qr.datos, qr.tipo, xQr + margen, arriba + (alto - ladoQr) / 2, ladoQr, ladoQr, undefined, 'FAST');
     } else {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6);
@@ -430,8 +527,9 @@ function recuadroDocumentacion(doc, documentacion, { x, y, ancho, tam, dibujar, 
 /* El cuerpo de la cédula oficial, desde los datos del local hasta el último
    párrafo (y el recuadro de documentación, si va). Devuelve dónde termina. Con
    dibujar = false solo mide (para elegir el tamaño de letra que entra en una
-   hoja). `qr`: la imagen del QR del recuadro. */
-function cuerpoOficial(doc, contenido, { x, y, ancho, tam, dibujar, qr = null }) {
+   hoja). `qr`: la imagen del QR del recuadro. `escala`: la de la caja donde se
+   dibuja (1 en la hoja entera), para la sangría de las viñetas y el QR. */
+function cuerpoOficial(doc, contenido, { x, y, ancho, tam, dibujar, qr = null, escala = 1 }) {
   const opciones = { x, ancho, tam, dibujar };
   const salto = tam * 0.3528 * 0.55;
 
@@ -450,9 +548,10 @@ function cuerpoOficial(doc, contenido, { x, y, ancho, tam, dibujar, qr = null })
       if (dibujar) {
         doc.setDrawColor(0);
         doc.setLineWidth(0.2);
-        doc.circle(x + 6, y - tam * 0.3528 * 0.3, radio);
+        doc.circle(x + 6 * escala, y - tam * 0.3528 * 0.3, radio);
       }
-      y = parrafo(doc, [{ t: titulo, e: 'bold' }, { t: texto }], { ...opciones, x: x + 10, ancho: ancho - 10, y });
+      const sangria = 10 * escala;
+      y = parrafo(doc, [{ t: titulo, e: 'bold' }, { t: texto }], { ...opciones, x: x + sangria, ancho: ancho - sangria, y });
     }
   } else {
     // Modelo del 26/10: cada ordenanza con su casillero vacío para tildar a mano.
@@ -468,80 +567,104 @@ function cuerpoOficial(doc, contenido, { x, y, ancho, tam, dibujar, qr = null })
     }
   }
   for (const p of contenido.cierre) y = parrafo(doc, p, { ...opciones, y });
-  if (contenido.documentacion) y = recuadroDocumentacion(doc, contenido.documentacion, { x, y, ancho, tam, dibujar, qr });
+  if (contenido.documentacion) {
+    const ladoQr = escala === 1 ? LADO_QR : Math.max(LADO_QR_MINIMO, LADO_QR * escala);
+    y = recuadroDocumentacion(doc, contenido.documentacion, { x, y, ancho, tam, dibujar, qr, ladoQr });
+  }
   return y;
 }
 
-/* Una copia de la cédula oficial: una hoja. */
-function dibujarCedulaOficial(doc, { cedula, local }, { logos, generado }) {
-  const x = 18;
-  const fin = ZONA.ancho - 18;
+/* Una copia de la cédula oficial, dentro de `caja`: la hoja entera (CAJA_HOJA)
+   o una mitad de la hoja apaisada (CAJAS_MITAD). Las medidas fijas están
+   pensadas para la hoja entera y se multiplican por `e` (1 en la hoja entera). */
+function dibujarCedulaOficial(doc, { cedula, local }, { logos, generado, caja = CAJA_HOJA }) {
+  const aj = caja.ajuste;
+  const e = caja.escala;
+  const x = caja.x + aj.margen;
+  const fin = caja.x + caja.ancho - aj.margen;
   const ancho = fin - x;
   const contenido = contenidoCedulaOficial(cedula, local);
   const { instancia } = contenido;
+  // El encabezado se mide desde el título. En la hoja entera con el ajuste
+  // anterior: título a 17 mm, logos a 21 y 25,5, Fecha a 50, Sr./a a 59 y el
+  // texto desde 66.
+  const yTitulo = caja.y + aj.titulo;
+  const yFecha = yTitulo + 33 * e;
+
+  // El cuerpo: se elige el tamaño de letra más grande que deja entrar las
+  // firmas y las observaciones en la misma hoja. Se calcula antes de dibujar
+  // porque Fecha, Sr./a y las firmas usan una letra que acompaña a esta.
+  const inicioCuerpo = yFecha + 9 * e + 7 * e;
+  const firmasYObservaciones = aj.firmas[instancia === 1 ? 0 : 1] * e;
+  const limite = caja.y + caja.alto - aj.abajo - firmasYObservaciones;
+  const minima = aj.letras.at(-1);
+  const medir = (t) => cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam: t, dibujar: false, escala: e });
+  const tam = aj.letras.find((t) => medir(t) <= limite) ?? minima;
+  // Lo que sobra hasta el lugar de las firmas (solo en media hoja, `repartir`).
+  const sobra = aj.repartir ? Math.max(0, limite - medir(tam)) : 0;
+  // Los rótulos (Fecha, Sr./a, firmas, OBSERVACIONES): nunca menos de 10,5 pt
+  // (a escala, en media hoja); si el texto creció, crecen con él, y sus líneas
+  // de puntos se corren en la misma proporción para que la palabra no las pise.
+  const tamRotulos = Math.max(10.5 * e, tam);
+  const k = tamRotulos / 10.5;
 
   // Título y número
   doc.setFont('times', 'bold');
-  doc.setFontSize(12.5);
-  doc.text(contenido.titulo, x + ancho * 0.38, 17, { align: 'center' });
-  doc.setFontSize(11);
-  doc.text(apto(`N°: ${contenido.numero}`), fin, 17, { align: 'right' });
+  doc.setFontSize(Math.max(12.5 * e, tam + 1.5));
+  doc.text(contenido.titulo, x + ancho * 0.38, yTitulo, { align: 'center' });
+  doc.setFontSize(Math.max(11 * e, tam));
+  doc.text(apto(`N°: ${contenido.numero}`), fin, yTitulo, { align: 'right' });
 
   // Los logos, a la misma altura. El de Ambiente, como en el modelo, un poco
   // más de la mitad de alto que el del Municipio.
-  dibujarLogo(doc, logos.municipio, { x: x + 4, y: 21, ancho: 58, alto: 22 }, LOGOS.municipio.texto, 'izquierda');
-  dibujarLogo(doc, logos.ambiente, { x: fin - 62, y: 25.5, ancho: 58, alto: 13 }, LOGOS.ambiente.texto, 'derecha');
+  dibujarLogo(doc, logos.municipio, { x: x + 4 * e, y: yTitulo + 4 * e, ancho: 58 * e, alto: 22 * e }, LOGOS.municipio.texto, 'izquierda');
+  dibujarLogo(doc, logos.ambiente, { x: fin - 62 * e, y: yTitulo + 8.5 * e, ancho: 58 * e, alto: 13 * e }, LOGOS.ambiente.texto, 'derecha');
 
   // Fecha y hora (a mano)
-  let y = 50;
+  let y = yFecha;
   doc.setFont('times', 'bold');
-  doc.setFontSize(10.5);
-  doc.text('Fecha:', fin - 92, y);
+  doc.setFontSize(tamRotulos);
+  doc.text('Fecha:', fin - 92 * k, y);
   doc.setFont('times', 'normal');
-  doc.text('........./........./.........', fin - 79, y);
+  doc.text('........./........./.........', fin - 79 * k, y);
   doc.setFont('times', 'bold');
-  doc.text('Hora:', fin - 36, y);
-  puntos(doc, fin - 25, y + 0.6, fin);
+  doc.text('Hora:', fin - 36 * k, y);
+  puntos(doc, fin - 25 * k, y + 0.6, fin);
 
   // Sr./a (a mano)
-  y += 9;
+  y += 9 * e;
   doc.text('Sr./a:', x, y);
-  puntos(doc, x + 11, y + 0.6, fin);
+  puntos(doc, x + 11 * k, y + 0.6, fin);
 
-  // El cuerpo: se elige el tamaño de letra más grande que deja entrar las
-  // firmas y las observaciones en la misma hoja.
-  const inicioCuerpo = y + 7;
-  const firmasYObservaciones = instancia === 1 ? 34 : 52;
-  const limite = ZONA.alto - 16 - firmasYObservaciones;
-  const tam = [10.5, 10, 9.5, 9, 8.5].find((t) => cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam: t, dibujar: false }) <= limite) ?? 8.5;
-  y = cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam, dibujar: true, qr: logos.qr });
+  y = cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam, dibujar: true, qr: logos.qr, escala: e });
 
-  // Firmas
+  // Firmas. Lo que sobra va al lugar para firmar: en la segunda, mitad para
+  // el Director y mitad para recepción y notificador.
   doc.setFont('times', 'bold');
-  doc.setFontSize(10.5);
+  doc.setFontSize(tamRotulos);
   if (instancia === 1) {
-    y += 20;
+    y += 20 * e + sobra;
     doc.text('Firma Recepción', x + ancho / 6, y, { align: 'center' });
     doc.text('Firma Notificador', x + ancho / 2, y, { align: 'center' });
     doc.text('Firma Director/ Sub director', x + (ancho * 5) / 6, y, { align: 'center' });
   } else {
-    y += 16;
-    puntos(doc, x, y, x + 60);
-    y += 6;
+    y += 16 * e + sobra / 2;
+    puntos(doc, x, y, x + 60 * e);
+    y += 6 * e;
     doc.text('Firma Director/ Sub director', fin, y, { align: 'right' });
-    y += 14;
-    puntos(doc, x, y, x + 55);
-    puntos(doc, x + 80, y, x + 135);
-    y += 5;
-    doc.text('Firma Recepción', x + 27.5, y, { align: 'center' });
-    doc.text('Firma Notificador', x + 107.5, y, { align: 'center' });
+    y += 14 * e + sobra / 2;
+    puntos(doc, x, y, x + 55 * e);
+    puntos(doc, x + 80 * e, y, x + 135 * e);
+    y += 5 * e;
+    doc.text('Firma Recepción', x + 27.5 * e, y, { align: 'center' });
+    doc.text('Firma Notificador', x + 107.5 * e, y, { align: 'center' });
   }
 
   // Observaciones
-  y += 11;
+  y += 11 * e;
   doc.text('OBSERVACIONES:', x, y);
-  puntos(doc, x + 33, y + 0.6, fin);
-  puntos(doc, x, y + 7, fin);
+  puntos(doc, x + 33 * k, y + 0.6, fin);
+  if ((aj.renglonesObservaciones ?? 2) > 1) puntos(doc, x, y + 7 * e, fin);
 
   // Pie: quién la generó y cuándo (sección 6.4), chico y en gris. Hoy apagado
   // en las cédulas (PIE_GENERADO_EN_CEDULAS): `generado` llega vacío.
@@ -549,23 +672,35 @@ function dibujarCedulaOficial(doc, { cedula, local }, { logos, generado }) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(GRIS);
-    doc.text(generado, x, ZONA.alto - 8);
+    doc.text(generado, x, caja.y + caja.alto - 8 * e);
     doc.setTextColor(0);
   }
 }
 
-/* Las cédulas. Formato oficial: tres copias iguales de cada una, una por hoja.
-   Formato anterior: una por hoja (o dos con COPIAS_POR_CEDULA = 2).
+/* Las cédulas. Formato oficial: COPIAS_OFICIALES copias iguales de cada una,
+   de a dos por hoja oficio apaisada (DOS_CEDULAS_POR_HOJA, PAPEL_CEDULAS) o una
+   por hoja. Formato anterior: una por hoja (o dos con COPIAS_POR_CEDULA = 2).
    `items`: [{ cedula, local, notificador }]. */
 export async function pdfCedulas(items, plantilla, { generadoPor = '' } = {}) {
   const { jsPDF } = await jsPdf();
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: HOJA.formato });
+  const dosPorHoja = FORMATO_OFICIAL && DOS_CEDULAS_POR_HOJA;
+  const papel = dosPorHoja ? HOJA_CEDULAS : HOJA;
+  const doc = new jsPDF({ orientation: dosPorHoja ? 'landscape' : 'portrait', unit: 'mm', format: papel.formato });
   doc.setProperties({ title: 'Cédulas de notificación', author: 'Dirección de Ambiente' });
   const generado = PIE_GENERADO_EN_CEDULAS ? leyendaGenerado(generadoPor) : '';
   const logos = FORMATO_OFICIAL
     ? { municipio: await cargarLogo(logoMunicipio), ambiente: await cargarLogo(logoAmbiente), qr: await cargarLogo(qrPlantillas) }
     : null;
   const copias = FORMATO_OFICIAL ? COPIAS_OFICIALES : COPIAS_POR_CEDULA;
+  if (dosPorHoja) {
+    // Todas las copias en fila, de a dos por hoja: izquierda y derecha.
+    const mitades = items.flatMap((item) => Array.from({ length: copias }, () => item));
+    mitades.forEach((item, i) => {
+      if (i > 0 && i % 2 === 0) doc.addPage();
+      dibujarCedulaOficial(doc, item, { logos, generado, caja: CAJAS_MITAD[i % 2] });
+    });
+    return doc;
+  }
   let primera = true;
   for (const item of items) {
     for (let n = 0; n < copias; n += 1) {

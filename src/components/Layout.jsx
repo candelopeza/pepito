@@ -55,6 +55,8 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigationType } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
+import Aviso from './ui/Aviso';
+import { useRol } from '../auth/rolContexto';
 
 function Layout() {
   // Arranca cerrado: el menú se dibuja ENCIMA del contenido, así que abierto
@@ -77,6 +79,10 @@ function Layout() {
   }, [menuAbierto]);
 
   const cerrarMenu = () => setMenuAbierto(false);
+
+  // Sesión de CiDiTuc vencida (auth/RolProvider.jsx, 27/11/2026): se avisa
+  // arriba de cualquier pantalla, con el botón para volver a entrar.
+  const { sesion, ingresar } = useRol();
 
   // ===== CADA PANTALLA ARRANCA ARRIBA =====
   // La página no se recarga al cambiar de sección: solo cambia lo de adentro,
@@ -120,6 +126,19 @@ function Layout() {
         {/* ===== ZONA 3: contenido variable =====
             Ocupa siempre el mismo ancho, esté el menú abierto o cerrado. */}
         <main className="main-content">
+          {sesion?.vencio && (
+            <Aviso
+              tipo="alerta"
+              titulo="Tu sesión de CiDiTuc venció"
+              accion={
+                <button type="button" className="btn-primario btn-ingresar" onClick={ingresar}>
+                  Ingresar con CiDiTuc
+                </button>
+              }
+            >
+              La sesión dura 24 horas. Volvé a ingresar para seguir trabajando.
+            </Aviso>
+          )}
           <Outlet />
         </main>
 

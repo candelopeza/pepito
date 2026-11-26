@@ -39,6 +39,7 @@
 import { Link } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import LoginIcon from '@mui/icons-material/Login';
 import { useRol } from '../auth/rolContexto';
 import { useDatos } from '../datos/datosContexto';
 import { fmtFechaHora } from '../dominio/fechas';
@@ -47,13 +48,21 @@ import logoCiudadSmt from '../assets/logo-ciudad-smt.png';
 /* Para sacar el bloque del nombre de la barra: false. */
 const MOSTRAR_PERSONA = true;
 
+/* >>> BOTÓN "INGRESAR" (27/11/2026) <<<
+   Sin nadie identificado, en vez de "Sin identificar" va un botón que lleva a
+   CiDiTuc (auth/sesion.js, URL_INGRESO_CIDITUC). Pedido: en el celular la app
+   quedaba sin sesión y no había cómo volver a entrar sin ir al navegador.
+   Para volver al texto "Sin identificar": BOTON_INGRESAR = false. */
+const BOTON_INGRESAR = true;
+
 function Navbar({ onAlternarMenu }) {
   /* Quién entró por CiDiTuc (auth/RolProvider.jsx): se muestra el NOMBRE que
      devuelve CiDiTuc, nunca el legajo ni el número de persona (13/11/2026, la
      Dirección lo pidió expreso). Si todavía no hay nombre —porque el servidor
      no tiene configurado CIDITUC_URL_PERSONA, ver backend/.env.ejemplo— no se
      muestra nada en vez del número. */
-  const { usuario, sesion } = useRol();
+  const { usuario, sesion, ingresar, agente } = useRol();
+  const sinNadie = sesion?.estado === 'publico' && !agente;
   // Qué dice el bloque de la derecha (PROCEDIMIENTO.md sección 27). El nombre
   // lo trae el backend de CiDiTuc (backend/cidituc.js, CIDITUC_URL_PERSONA).
   // Nunca se muestra el número de persona: no es un dato para el público.
@@ -129,7 +138,12 @@ function Navbar({ onAlternarMenu }) {
 
         {/* La persona que entró por CiDiTuc. Es un <div>, no un <button>:
             todavía no despliega nada (acá iría cerrar sesión). */}
-        {MOSTRAR_PERSONA && (
+        {BOTON_INGRESAR && sinNadie ? (
+          <button type="button" className="navbar-ingresar" onClick={ingresar} title="Ingresar con CiDiTuc">
+            <LoginIcon fontSize="small" />
+            <span>Ingresar</span>
+          </button>
+        ) : MOSTRAR_PERSONA && (
           <div className="navbar-usuario" title={nombreVisible}>
             <span className="navbar-usuario-nombre">{nombreVisible}</span>
             <AccountCircleIcon className="navbar-usuario-icono" />

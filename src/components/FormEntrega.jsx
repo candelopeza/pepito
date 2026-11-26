@@ -57,8 +57,14 @@ import { fmtFecha, hoyISO, vencimientoHabil } from '../dominio/fechas';
    no se concreta es la única prueba de que el notificador estuvo en el
    domicilio, y una foto vieja de la galería no prueba nada (decidido con
    DITEC, 15/10/2026). No rige al corregir una entrega desde la oficina. En
-   false vuelve a dejar elegir de la galería. */
-const FOTO_SOLO_CAMARA = true;
+   false vuelve a dejar elegir de la galería.
+
+   >>> DESDE EL 26/11/2026, EN false <<<
+   Pedido del área: al cargar entregas no concretadas, abrir directo la cámara
+   impedía usar una foto ya sacada (por ejemplo, la tomada en la calle y
+   cargada después en la oficina). Sin `capture`, el celular pregunta si sacar
+   una foto o elegirla de la galería. */
+const FOTO_SOLO_CAMARA = false;
 
 function FormEntrega({ cedula, local, onGuardar, onCancelar, correccion = false, pideMotivo = false }) {
   const { feriados, parametros, capacidades } = useDatos();

@@ -90,9 +90,9 @@ const get = (r) => pedir(r);
 const post = (r, b) => pedir(r, { method: 'POST', body: JSON.stringify(b ?? {}) });
 const put = (r, b) => pedir(r, { method: 'PUT', body: JSON.stringify(b ?? {}) });
 
-/* Subir un archivo como lo hace la pantalla: en base64. Desde el 24/11/2026
-   el mes que cubre es obligatorio ('AAAA-MM'). */
-const cargar = (nombre, buffer, periodo = '2026-10') =>
+/* Subir un archivo como lo hace la pantalla: en base64. Desde el 26/11/2026
+   es obligatorio el día desde el que cuentan los contratos ('AAAA-MM-DD'). */
+const cargar = (nombre, buffer, periodo = hoyISO()) =>
   post('/informe-9dj/cargas', { nombreArchivo: nombre, contenidoBase64: buffer.toString('base64'), periodo });
 
 /* Un PDF mínimo pero VÁLIDO, armado a mano con su tabla xref correcta. Las
@@ -224,7 +224,7 @@ seccion('2. PDF: con capa de texto se lee; el escaneo deriva a la contingencia')
 seccion('1. Cargar no escribe nada en el padrón hasta que el agente confirma');
 
 const localesAntes = padron.length;
-const { estado: estadoCarga, cuerpo: carga } = await cargar('informe-prueba.csv', csvPrincipal, '2026-10');
+const { estado: estadoCarga, cuerpo: carga } = await cargar('informe-prueba.csv', csvPrincipal, hoyISO());
 if (estadoCarga !== 201) {
   console.log(`No se pudo cargar el informe de prueba: ${JSON.stringify(carga)}`);
   process.exit(1);
@@ -448,10 +448,25 @@ seccion('5b. El mes es obligatorio y una fecha imposible ya no frena la carga');
 
 {
   const chico = Buffer.from(`CUIT;Razón Social;Domicilio\n${CUIT_NUEVO};SIN MES;CALLE 1\n`);
-  const sinMes = await cargar('sin-mes.csv', chico, '');
-  verificar('sin el mes que cubre, la carga se rechaza (400)', sinMes.estado === 400 && /mes/.test(sinMes.cuerpo?.error ?? ''), JSON.stringify(sinMes.cuerpo));
-  const futuro = await cargar('mes-futuro.csv', chico, '2099-01');
-  verificar('un mes posterior al actual se rechaza (400)', futuro.estado === 400, JSON.stringify(futuro.cuerpo));
+  const sinMes = await cargar('sin-dia.csv', chico, '');
+  verificar('sin el día desde el que cuentan los contratos, la carga se rechaza (400)', sinMes.estado === 400 && /día/.test(sinMes.cuerpo?.error ?? ''), JSON.stringify(sinMes.cuerpo));
+  const futuro = await cargar('dia-futuro.csv', chico, '2099-01-01');
+  verificar('un día posterior a hoy se rechaza (400)', futuro.estado === 400, JSON.stringify(futuro.cuerpo));
+  const viejo = await cargar('dia-viejo.csv', chico, '2020-01-01');
+  verificar('un día con el que los contratos ya estarían vencidos se rechaza (400)', viejo.estado === 400 && /vencidos/.test(viejo.cuerpo?.error ?? ''), JSON.stringify(viejo.cuerpo));
+  const inexistente = await cargar('dia-inexistente.csv', chico, '2026-02-30');
+  verificar('un día que no existe se rechaza (400)', inexistente.estado === 400, JSON.stringify(inexistente.cuerpo));
+
+  // Un contrato SUSPENDIDO no cuenta como contrato (26/11/2026).
+  const conSuspendido = Buffer.from(`CUIT;Razón Social;Domicilio;Vigente/Susp\n${CUIT_NUEVO};SUSPENDIDA;CALLE 1;SUSPENDIDO\n`);
+  const susp = await cargar('suspendido.csv', conSuspendido);
+  const filaSusp = susp.cuerpo?.filas?.[0];
+  verificar('la fila suspendida entra ya rechazada', susp.estado === 201 && filaSusp?.decision === 'RECHAZADA', JSON.stringify(filaSusp));
+  if (susp.estado === 201) {
+    const intento = await put(`/informe-9dj/cargas/${susp.cuerpo.id}/filas/${filaSusp.id}`, { decision: 'ALTA' });
+    verificar('y no se puede dar de alta ni confirmar (409)', intento.estado === 409 && /SUSPENDIDO/.test(intento.cuerpo?.error ?? ''), JSON.stringify(intento.cuerpo));
+    await post(`/informe-9dj/cargas/${susp.cuerpo.id}/descartar`);
+  }
 
   const conFechaMala = Buffer.from(`CUIT;Razón Social;Domicilio;Vencimiento\n${CUIT_NUEVO};FECHA MALA;CALLE 1;2027-11-31\n`);
   const { estado, cuerpo } = await cargar('fecha-mala.csv', conFechaMala);

@@ -1436,18 +1436,25 @@ coordenada a los locales con puntos repetidos (con respaldo en la tabla
 "Reintentar geocodificación" (ubica solos los que el mapa tiene con altura;
 tarda un segundo por dirección) y el resto, "Ubicar en el mapa".
 
-## 31. Informe 9 de Julio: el mes que cubre y un mes de vigencia (24 de noviembre de 2026)
+## 31. Informe 9 de Julio: el día de inicio, un mes de vigencia y los suspendidos (24 y 26 de noviembre de 2026)
 
-- Al subir el informe hay que elegir el mes que cubre (obligatorio).
+- Al subir el informe hay que elegir en el calendario **desde qué día cuentan
+  los contratos** (obligatorio; no puede ser posterior a hoy, ni tan viejo
+  que los contratos ya estarían vencidos). Se guarda en `informe_9dj.periodo`
+  como AAAA-MM-DD.
 - Las fechas de vencimiento del archivo NO se usan: la prestataria las
   escribe mal y no le sirven al área.
-- Cada contrato del informe queda vigente **un mes desde el día en que se
-  carga** (cargado el 15 de octubre, vigente hasta el 15 de noviembre). Al
-  aplicarlo, los contratos nuevos nacen con esa fecha y los que ya existían
-  se renuevan (efecto CONTRATO_RENOVADO; anular el informe los devuelve a la
-  fecha del informe anterior).
+- Cada contrato del informe queda vigente **un mes desde el día elegido**
+  (desde el 15 de octubre, vigente hasta el 15 de noviembre). Al aplicarlo,
+  los contratos nuevos nacen con esa fecha y los que ya existían se renuevan
+  (efecto CONTRATO_RENOVADO; anular el informe los devuelve a la fecha del
+  informe anterior).
 - Si pasa el mes sin cargar el informe siguiente, los contratos vencen y los
   locales vuelven al circuito de notificaciones.
+- **Los contratos que el informe marca SUSPENDIDO no cuentan como contrato**
+  (columna "VIGENTE/SUSP"): la fila entra rechazada y no se puede confirmar.
+  Si el local tenía contrato de 9 de Julio, aparece entre las bajas
+  propuestas. Necesita `backend/sql/19-situacion-informe-9dj.sql`.
 - Para volver a usar las fechas del archivo: `USAR_VENCIMIENTO_DEL_ARCHIVO`
   en `backend/rutas/informe-9dj.js`.
 

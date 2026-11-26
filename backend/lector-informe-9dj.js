@@ -229,13 +229,26 @@ const sinTildes = (t) =>
 
 /* El orden importa: 'contrato' se prueba antes que nada que diga 'numero',
    porque "N° de contrato" debe caer en contrato y no en otra cosa. */
+/* `situacion`: la columna "VIGENTE/SUSP" del informe real de la prestataria
+   (26/11/2026). Un contrato SUSPENDIDO no cuenta como contrato (decisión de
+   cande): rutas/informe-9dj.js lo rechaza solo. Va después de `vencimiento`
+   para que "VTO CONTRATO" siga cayendo en el vencimiento. */
 const COLUMNAS = [
   ['cuit', /c\.?u\.?i\.?t|cuil/],
   ['vencimiento', /venc|vto|vigencia|hasta/],
+  ['situacion', /vigente|susp|situaci|estado/],
   ['numeroContrato', /contrato/],
   ['razonSocial', /razon|titular|denominacion|nombre|cliente/],
   ['direccion', /direccion|domicilio|calle|ubicacion/],
 ];
+
+/* Lo que dice la celda de situación, normalizado: 'SUSPENDIDO', 'VIGENTE' o ''. */
+export function normalizarSituacion(texto) {
+  const t = sinTildes(texto);
+  if (/susp/.test(t)) return 'SUSPENDIDO';
+  if (/vigente/.test(t)) return 'VIGENTE';
+  return '';
+}
 
 function mapearEncabezados(celdas) {
   const mapa = {};
@@ -274,6 +287,7 @@ function armarFila(celdas, mapa, numeroDeFila) {
     numeroContrato: String(leer('numeroContrato')),
     vencimiento: normalizarFecha(leer('vencimiento')),
     motivoVencimiento: motivoDeFecha(leer('vencimiento')),
+    situacion: normalizarSituacion(leer('situacion')),
     // La fila tal como vino, para que el agente pueda cotejar contra el
     // archivo original sin salir de la pantalla.
     crudo: celdas.map((c) => (c instanceof Date ? normalizarFecha(c) : String(c ?? '').trim())).join(' | '),

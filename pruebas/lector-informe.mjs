@@ -142,6 +142,8 @@ const csv = (texto) => Buffer.from(texto);
     vencimiento: '2026-12-31',
     // Desde el 04/11/2026 cada fila dice si el vencimiento se pudo leer.
     motivoVencimiento: null,
+    // Desde el 26/11/2026, la columna VIGENTE/SUSP (acá no viene).
+    situacion: '',
     crudo: '20-12345678-6 | ALMACEN DON PEDRO | SAN MARTIN 450 | CON-0012 | 31/12/2026',
   });
   verificar('el formato que informa es planilla', formato, 'planilla');
@@ -254,6 +256,17 @@ verificar('"SIN CONTRATO" es vencimiento no informado, sin error', [normalizarFe
 verificar('"S/C" también', motivoDeFecha('S/C'), null);
 verificar('una barra doble no cambia la fecha', normalizarFecha('25//08/26'), '2026-08-25');
 verificar('un año de tres cifras sigue siendo un error', motivoDeFecha('09/08/207') !== null, true);
+
+/* La columna VIGENTE/SUSP del informe real (26/11/2026): un contrato
+   SUSPENDIDO no cuenta como contrato. */
+seccion('Situación del contrato: VIGENTE o SUSPENDIDO');
+{
+  const { filas } = await leerInforme(
+    Buffer.from(`CUIT;Razón Social;Domicilio;Vigente/Susp\n${CUIT_OK};A;CALLE 1;VIGENTE\n${CUIT_OK};B;CALLE 2;Suspendido\n${CUIT_OK};C;CALLE 3;\n`),
+    'situacion.csv',
+  );
+  verificar('se lee la situación de cada fila', filas.map((f) => f.situacion), ['VIGENTE', 'SUSPENDIDO', '']);
+}
 
 /* ===========================================================================
    RESULTADO

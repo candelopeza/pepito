@@ -327,6 +327,30 @@ router.post('/:id/impresion', async (req, res, next) => {
   }
 });
 
+/* >>> ENTREGAS VIEJAS CARGADAS DESDE LA OFICINA (26/11/2026) <<<
+   Una entrega no puede tener fecha anterior a la emisión de la cédula: para un
+   agente de calle, que registra lo que hizo en el día, sería un error de carga.
+   Pero la oficina está cargando entregas de las últimas semanas que no se
+   migraron del sistema viejo, y esas cédulas figuran emitidas en el sistema
+   nuevo DESPUÉS de haberse entregado en papel. Pedido de cande: para
+   coordinación y el administrador (la oficina) ese control no rige.
+   Igual se frena una fecha absurda (un año mal tipeado) y la fecha futura.
+   Para sumar o sacar roles: ROLES_ENTREGA_ANTERIOR_A_EMISION. */
+const ROLES_ENTREGA_ANTERIOR_A_EMISION = ['coordinacion', 'administrador'];
+const FECHA_MINIMA_ENTREGA = '2015-01-01';
+
+function controlarFechaAnterior(req, tramite, fechaEntrega) {
+  if (fechaEntrega < FECHA_MINIMA_ENTREGA) {
+    return `La fecha de entrega (${fmtFecha(fechaEntrega)}) es demasiado antigua: revisá el año.`;
+  }
+  if (!tramite.fecha || fechaEntrega >= tramite.fecha) return null;
+  if (ROLES_ENTREGA_ANTERIOR_A_EMISION.includes(req.usuario?.rol)) return null;
+  return (
+    `La fecha de entrega (${fmtFecha(fechaEntrega)}) es anterior a la emisión de la cédula (${fmtFecha(tramite.fecha)}). ` +
+    'Si es una entrega vieja del sistema anterior, la carga coordinación desde la oficina.'
+  );
+}
+
 /* POST /notificaciones/:id/entrega
 
    >>> ACÁ EMPIEZA A CORRER EL PLAZO <<<
@@ -338,7 +362,8 @@ router.post('/:id/impresion', async (req, res, next) => {
    CONTROLES, porque de esta fecha depende todo lo que viene después:
      - la cédula tiene que ser la que está en curso y tener número;
      - una entrega efectiva ya registrada no se pisa;
-     - la fecha no puede ser futura ni anterior a la emisión;
+     - la fecha no puede ser futura ni anterior a la emisión (salvo para la
+       oficina, ver controlarFechaAnterior);
      - si la cédula está asignada a otro notificador, no la puede registrar
        otro notificador (coordinación sí). Si no estaba asignada, queda
        asignada a quien la entregó, que es su producción del día.
@@ -394,11 +419,8 @@ router.post('/:id/entrega', requiereRol('notificador', 'relevador', 'coordinacio
       }
       if (fechaEntrega > hoy)
         return res.status(400).json({ error: 'No se puede registrar una entrega con fecha futura' });
-      if (tramite.fecha && fechaEntrega < tramite.fecha) {
-        return res.status(400).json({
-          error: `La fecha de entrega (${fmtFecha(fechaEntrega)}) es anterior a la emisión de la cédula (${fmtFecha(tramite.fecha)})`,
-        });
-      }
+      const problemaFecha = controlarFechaAnterior(req, tramite, fechaEntrega);
+      if (problemaFecha) return res.status(400).json({ error: problemaFecha });
     }
 
     const esAgenteDeCampo = ['notificador', 'relevador'].includes(req.usuario?.rol);
@@ -566,11 +588,8 @@ router.put('/:id/entrega', requiereRol('notificador', 'relevador', 'coordinacion
       }
       if (fechaEntrega > hoy)
         return res.status(400).json({ error: 'No se puede registrar una entrega con fecha futura' });
-      if (tramite.fecha && fechaEntrega < tramite.fecha) {
-        return res.status(400).json({
-          error: `La fecha de entrega (${fmtFecha(fechaEntrega)}) es anterior a la emisión de la cédula (${fmtFecha(tramite.fecha)})`,
-        });
-      }
+      const problemaFecha = controlarFechaAnterior(req, tramite, fechaEntrega);
+      if (problemaFecha) return res.status(400).json({ error: problemaFecha });
     }
 
     // Nada cambió (por ejemplo, el mismo pedido llegó dos veces): se responde como está.

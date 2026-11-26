@@ -320,6 +320,7 @@ function aFilaFront(f) {
     idLocal: f.idLocal,
     candidatos: f.candidatos ? f.candidatos.split(',').map(Number) : [],
     decision: f.decision,
+    situacion: f.situacion ?? '',
     usuarioDecision: nombreDeActor(f.usuarioDecision),
     datosAlta: f.datosAlta ? JSON.parse(f.datosAlta) : null,
     efecto: f.efecto,
@@ -459,9 +460,10 @@ router.put('/contratos/:idTramite/frecuencia', requiereRol('coordinacion', 'dire
    mantiene. Lo que importa es QUÉ MES cubre el informe: eso se elige al
    subirlo (`periodo`, 'AAAA-MM') y el vencimiento del archivo se descarta.
 
-   >>> CADA CONTRATO DEL INFORME VALE UN MES DESDE QUE SE CARGA <<<
-   (24/11/2026, pedido de cande) Si el informe de octubre se carga el 15 de
-   octubre, todos sus contratos quedan vigentes hasta el 15 de noviembre. Al
+   >>> CADA CONTRATO DEL INFORME VALE UN MES DESDE EL DÍA ELEGIDO <<<
+   (24 y 26/11/2026, pedido de cande) Al subir el informe se elige en el
+   calendario desde qué día cuentan sus contratos (`periodo`, 'AAAA-MM-DD').
+   Si se elige el 15 de octubre, quedan vigentes hasta el 15 de noviembre. Al
    aplicarlo, los contratos nuevos nacen con esa fecha y los que ya existían
    se RENUEVAN hasta esa fecha (efecto CONTRATO_RENOVADO, que la anulación
    deshace). Si el mes pasa sin un informe nuevo, los contratos vencen y los
@@ -477,15 +479,28 @@ export function unMesDespues(iso) {
   return new Date(Date.UTC(a, m, Math.min(d, ultimoDia))).toISOString().slice(0, 10);
 }
 
+/* 'AAAA-MM-DD' que existe en el calendario (no 2026-02-30). */
+function esFechaReal(texto) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) return false;
+  const d = new Date(`${texto}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === texto;
+}
+
 router.post('/cargas', async (req, res, next) => {
   try {
     const { nombreArchivo, contenidoBase64, periodo } = req.body ?? {};
     if (!contenidoBase64) return res.status(400).json({ error: 'No llegó el archivo' });
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(periodo ?? ''))) {
-      return res.status(400).json({ error: 'Elegí el mes que cubre el informe antes de subirlo.' });
+    const desde = String(periodo ?? '');
+    if (!esFechaReal(desde)) {
+      return res.status(400).json({ error: 'Elegí en el calendario desde qué día cuentan los contratos del informe antes de subirlo.' });
     }
-    if (periodo > hoyISO().slice(0, 7)) {
-      return res.status(400).json({ error: 'El mes que cubre el informe no puede ser posterior al mes actual.' });
+    if (desde > hoyISO()) {
+      return res.status(400).json({ error: 'El día desde el que cuentan los contratos no puede ser posterior a hoy.' });
+    }
+    if (unMesDespues(desde) <= hoyISO()) {
+      return res.status(400).json({
+        error: `Desde el ${desde.split('-').reverse().join('/')} los contratos ya estarían vencidos (valen un mes). Elegí un día más reciente.`,
+      });
     }
 
     const buffer = Buffer.from(String(contenidoBase64), 'base64');
@@ -526,9 +541,9 @@ router.post('/cargas', async (req, res, next) => {
     if (!lectura.filas.length) return res.status(400).json({ error: 'El archivo se leyó pero no tiene ninguna fila con datos.' });
 
     // El vencimiento que trae el archivo no se usa (ver arriba): todas las
-    // filas valen un mes desde hoy, el día de la carga.
+    // filas valen un mes desde el día elegido.
     if (!USAR_VENCIMIENTO_DEL_ARCHIVO) {
-      const vence = unMesDespues(hoyISO());
+      const vence = unMesDespues(desde);
       for (const f of lectura.filas) {
         f.vencimiento = vence;
         f.motivoVencimiento = null;
@@ -567,19 +582,24 @@ router.post('/cargas', async (req, res, next) => {
         [
           String(nombreArchivo ?? 'informe'),
           huella,
-          periodo,
+          desde,
           lectura.formato,
           lectura.advertencia ?? null,
           firmante(req),
         ],
       );
+      const conSituacion = tiene('situacion9dj');
       for (const fila of lectura.filas) {
         const { cruce, idLocal, candidatos } = cruzarFila(fila, indice);
+        /* Un contrato SUSPENDIDO no cuenta como contrato (26/11/2026): la
+           fila entra ya rechazada y no se puede confirmar (PUT de abajo). */
+        const suspendido = fila.situacion === 'SUSPENDIDO';
         await cx.execute(
           `INSERT INTO informe_9dj_fila
              (id_informe, nro_fila, cuit, cuit_valido, motivo_cuit, razon_social, direccion,
-              numero_contrato, fecha_vencimiento, crudo, cruce, id_local, candidatos)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              numero_contrato, fecha_vencimiento, crudo, cruce, id_local, candidatos,
+              decision, usuario_decision, fecha_decision${conSituacion ? ', situacion' : ''})
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${conSituacion ? ', ?' : ''})`,
           [
             r.insertId,
             fila.numeroDeFila,
@@ -594,6 +614,10 @@ router.post('/cargas', async (req, res, next) => {
             cruce,
             idLocal,
             candidatos,
+            suspendido ? 'RECHAZADA' : 'SIN_REVISAR',
+            suspendido ? 'Sistema: contrato suspendido según el informe' : null,
+            suspendido ? new Date() : null,
+            ...(conSituacion ? [fila.situacion || null] : []),
           ],
         );
       }
@@ -644,6 +668,13 @@ router.put('/cargas/:id/filas/:idFila', async (req, res, next) => {
         error:
           `La vigencia de este informe ya terminó (${vencimientoFila}): pasó más de un mes desde que se cargó. ` +
           'Descartalo y cargá el informe del mes actual.',
+      });
+    }
+
+    // Un contrato SUSPENDIDO no cuenta como contrato (26/11/2026).
+    if (fila.situacion === 'SUSPENDIDO' && ['CONFIRMADA', 'VINCULADA', 'ALTA'].includes(decision)) {
+      return res.status(409).json({
+        error: 'El informe dice que este contrato está SUSPENDIDO: no cuenta como contrato y no se puede confirmar.',
       });
     }
 
@@ -863,7 +894,8 @@ router.post('/cargas/:id/aplicar', async (req, res, next) => {
 
       for (const f of filas) {
         if (f.cruce === 'BAJA') continue;
-        if (f.decision === 'RECHAZADA') {
+        // Un suspendido nunca sostiene un contrato, decidido como esté.
+        if (f.decision === 'RECHAZADA' || f.situacion === 'SUSPENDIDO') {
           resumen.rechazadas += 1;
           continue;
         }

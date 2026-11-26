@@ -98,12 +98,16 @@ const normalizarTexto = (t) =>
 
 /* El archivo del input a base64, leyéndolo como data URL: es binario-seguro
    (una planilla .xlsx o un PDF no sobreviven a pasar por texto). */
-/* El mes que cubre el informe se guarda como 'AAAA-MM' (24/11/2026) y se
-   muestra como "Octubre 2026". Las cargas viejas tienen texto libre: va tal cual. */
+/* Desde el 26/11/2026 se guarda el DÍA desde el que cuentan los contratos
+   ('AAAA-MM-DD') y se muestra "desde el 15/10/2026". Las cargas del 24/11
+   tienen solo el mes ('AAAA-MM' -> "Octubre 2026"); las más viejas, texto
+   libre, que va tal cual. */
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 function textoPeriodo(periodo) {
-  const m = /^(\d{4})-(\d{2})$/.exec(String(periodo ?? ''));
-  return m ? `${MESES[Number(m[2]) - 1]} ${m[1]}` : (periodo ?? '');
+  const p = String(periodo ?? '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return `desde el ${fmtFecha(p)}`;
+  const m = /^(\d{4})-(\d{2})$/.exec(p);
+  return m ? `${MESES[Number(m[2]) - 1]} ${m[1]}` : p;
 }
 
 function archivoABase64(archivo) {
@@ -333,6 +337,10 @@ function Informe9DJ() {
 
   const botonesDecision = useCallback(
     (fila) => {
+      // Suspendido: ya está rechazado y no se puede confirmar (lo frena el backend).
+      if (fila.situacion === 'SUSPENDIDO') {
+        return <span className="texto-gris">No cuenta como contrato</span>;
+      }
       const boton = (decision, texto, clase = 'btn-secundario') =>
         fila.decision === decision ? null : (
           <button key={decision} type="button" className={`${clase} btn-chico`} onClick={() => decidir(fila, decision)}>
@@ -447,6 +455,14 @@ function Informe9DJ() {
         headerName: 'Decisión',
         width: 120,
         renderCell: ({ row }) => {
+          // Un contrato SUSPENDIDO no cuenta como contrato (26/11/2026).
+          if (row.situacion === 'SUSPENDIDO') {
+            return (
+              <span title="El informe dice que este contrato está suspendido: no cuenta como contrato">
+                <Badge color="rojo">Suspendido</Badge>
+              </span>
+            );
+          }
           const d = DECISION[row.decision] ?? DECISION.SIN_REVISAR;
           return <Badge color={d.color}>{d.etiqueta}</Badge>;
         },
@@ -526,7 +542,7 @@ function Informe9DJ() {
     () => [
       { field: 'id', headerName: 'N°', width: 70 },
       { field: 'nombreArchivo', headerName: 'Archivo', flex: 1, minWidth: 180 },
-      { field: 'periodo', headerName: 'Mes que cubre', width: 150, valueGetter: (_v, row) => textoPeriodo(row.periodo) },
+      { field: 'periodo', headerName: 'Contratos desde', width: 170, valueGetter: (_v, row) => textoPeriodo(row.periodo) },
       { field: 'filas', headerName: 'Filas', width: 80 },
       {
         field: 'estado',
@@ -679,23 +695,24 @@ function Informe9DJ() {
       {!carga && (
         <>
           <Aviso tipo="info" titulo="Cómo funciona">
-            Primero elegí <strong>el mes que cubre el informe</strong>, y después subí el archivo que mandó la prestataria
+            Primero elegí en el calendario <strong>desde qué día cuentan los contratos</strong>, y después subí el archivo que mandó la prestataria
             (planilla Excel o CSV; también PDF con capa de texto). El sistema lo lee, verifica cada CUIT por su dígito y lo cruza
             contra el padrón. <strong>Nada cambia hasta que revises y apliques.</strong> Las fechas de vencimiento que trae el
-            archivo no se usan: <strong>cada contrato del informe queda vigente un mes desde el día en que se carga</strong> (si
-            se carga el 15 de octubre, hasta el 15 de noviembre). Si en ese mes no se carga el informe siguiente, los contratos
-            vencen y los locales vuelven al circuito. Si el archivo es una foto o un escaneo, pedí el informe en planilla.
+            archivo no se usan: <strong>cada contrato del informe queda vigente un mes desde el día elegido</strong> (si se elige
+            el 15 de octubre, hasta el 15 de noviembre). Si en ese mes no se carga el informe siguiente, los contratos vencen y
+            los locales vuelven al circuito. Los contratos que el informe marca como <strong>SUSPENDIDO</strong> no cuentan como
+            contrato. Si el archivo es una foto o un escaneo, pedí el informe en planilla.
           </Aviso>
 
-          {/* El mes es OBLIGATORIO (24/11/2026): sin él no se puede subir. */}
+          {/* El día es OBLIGATORIO (24 y 26/11/2026): sin él no se puede subir. */}
           <div className="barra-lote">
             <label className="campo" htmlFor="periodo-9dj">
-              <span>1. Mes que cubre el informe</span>
+              <span>1. Desde qué día cuentan los contratos</span>
               <input
                 id="periodo-9dj"
-                type="month"
+                type="date"
                 value={periodo}
-                max={hoyISO().slice(0, 7)}
+                max={hoyISO()}
                 onChange={(e) => setPeriodo(e.target.value)}
                 required
               />
@@ -703,7 +720,7 @@ function Informe9DJ() {
             <label
               className="btn-primario"
               style={periodo ? { cursor: 'pointer' } : { cursor: 'not-allowed', opacity: 0.5 }}
-              title={periodo ? undefined : 'Primero elegí el mes que cubre el informe'}
+              title={periodo ? undefined : 'Primero elegí en el calendario desde qué día cuentan los contratos'}
             >
               {ocupado ? 'Leyendo…' : '2. Subir el informe'}
               <input
@@ -726,16 +743,23 @@ function Informe9DJ() {
         <>
           {carga.periodo && (
             <p className="texto-explicacion">
-              Informe de <strong>{textoPeriodo(carga.periodo)}</strong> · archivo {carga.nombreArchivo} · {filas.length} fila(s)
+              Informe <strong>{textoPeriodo(carga.periodo)}</strong> · archivo {carga.nombreArchivo} · {filas.length} fila(s)
               {filas[0]?.vencimiento && (
                 <>
                   {' '}
                   · al aplicarlo, sus contratos quedan vigentes hasta el <strong>{fmtFecha(filas[0].vencimiento)}</strong> (un mes
-                  desde la carga)
+                  desde el día elegido)
                 </>
               )}
               .
             </p>
+          )}
+
+          {filas.some((f) => f.situacion === 'SUSPENDIDO') && (
+            <Aviso tipo="info" titulo={`${filas.filter((f) => f.situacion === 'SUSPENDIDO').length} contrato(s) suspendido(s)`}>
+              El informe los marca como SUSPENDIDO: no cuentan como contrato, quedan rechazados y no se pueden confirmar. Si alguno
+              de esos locales tenía contrato de 9 de Julio, aparece abajo entre las bajas propuestas.
+            </Aviso>
           )}
 
           {carga.advertencia && (

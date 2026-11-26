@@ -1491,3 +1491,160 @@ tocaron.
 
 **Para publicarlo:** solo el front (`npm run build` y subir `dist/` completo). No
 hay que tocar el backend: la foto viaja igual que antes.
+
+## 33. Cédulas más legibles impresas "2 páginas por hoja" (26 de noviembre de 2026)
+
+> El mismo día se reemplazó por la sección 34: las cédulas salen de a dos por hoja,
+> ya armadas en el PDF. Lo de acá vale solo si se vuelve a una cédula por hoja
+> (`DOS_CEDULAS_POR_HOJA = false`).
+
+**El problema (lo marcó una usuaria):** las cédulas se imprimen 2 páginas por
+hoja, y así la impresora achica cada carta al 65 %. La letra de 10,5 pt quedaba
+impresa en 6,8 pt: muy chica.
+
+**Qué cambió en el PDF de las cédulas:**
+
+- **Márgenes más chicos y parejos:** 14 mm a cada lado. Antes eran 18 mm a la
+  izquierda y 24 a la derecha, porque el contenido no estaba centrado en la carta.
+- **El encabezado sube:** el título arranca a 12 mm del borde (antes 17).
+- **Letra más grande:** se prueba desde 13 pt y queda la más grande que deja
+  entrar firmas y observaciones en la misma hoja. Fecha, Sr./a, las firmas y
+  OBSERVACIONES crecen con el texto.
+- **Interlineado un poco más junto:** 1,17 en vez de 1,22.
+- **Abajo quedan siempre al menos 10 mm.** Antes el cálculo reservaba para las
+  firmas menos lugar del real; ahora usa lo que ocupan de verdad (38 mm en la
+  primera, 59 en la segunda).
+
+**Cómo queda** (un local con nombres largos):
+
+| | Letra en el PDF | Impresa 2 por hoja |
+|---|---|---|
+| Primera notificación | 10,5 → 12,5 pt | 6,8 → 8,1 pt |
+| Segunda notificación | 10,5 → 11,5 pt | 6,8 → 7,4 pt |
+
+La segunda crece menos porque tiene dos filas de firmas. Con nombres cortos
+llegan a 13 y 12 pt; con nombres muy largos la letra baja sola para que todo
+entre en una hoja. Sigue saliendo una hoja por copia (3 por cédula), con el
+mismo texto y el mismo QR.
+
+**Dónde está:** `src/components/pdfCedulas.js`, `AJUSTE_OFICIAL` (márgenes,
+letras posibles, interlineado y lo que ocupan las firmas) y
+`dibujarCedulaOficial`. "Ver cédula" en pantalla no cambia.
+
+**Para volver a como estaba:** `CEDULA_PARA_DOS_POR_HOJA = false` en ese
+archivo (verificado: sale idéntico a antes).
+
+**Para publicarlo:** solo el front (`npm run build` y subir `dist/` completo).
+
+## 34. Dos cédulas por hoja, ya armadas en el PDF (26 de noviembre de 2026)
+
+**El pedido:** la Dirección pasó su modelo: la hoja carta **apaisada** partida en
+dos mitades, con una cédula en cada una. Son de Ambiente: quieren usar menos
+papel. Hasta ahora el PDF salía con una cédula por hoja y en la oficina lo
+imprimían con "2 páginas por hoja", que achica la carta entera (márgenes
+incluidos) y deja sin usar arriba y abajo de cada mitad.
+
+**Qué cambió:** el PDF sale apaisado y cada cédula se dibuja para su mitad
+(139,7 x 210 mm). Logos, QR, espacios para firmar y rótulos van a escala (0,67).
+La letra del texto es la más grande que entra, probando de a 0,25 pt.
+
+**Cómo queda la letra en el papel** (impresa a tamaño real):
+
+| | Antes (2 por hoja de la impresora) | Ahora |
+|---|---|---|
+| Primera notificación | 6,8 pt | 8,75 a 9,75 pt (9,5 con nombres largos) |
+| Segunda notificación | 6,8 pt | 8,25 a 9,25 pt (8,5 con nombres largos) |
+
+La segunda queda más chica porque tiene dos filas de firmas.
+
+**Las hojas:** las 3 copias de cada cédula van seguidas, de a dos por hoja. Una
+cédula ocupa 2 hojas (la última mitad queda en blanco); dos cédulas, 3 hojas; en
+general, la mitad de las copias redondeada para arriba. Entre las dos mitades
+quedan 14 mm para cortar.
+
+**CÓMO SE IMPRIME (importante para la oficina):**
+
+- **Páginas por hoja: 1.** Si la impresora sigue en "2 páginas por hoja", salen
+  4 cédulas por hoja, chiquitas.
+- Papel **Carta**. La orientación ya viene horizontal en el PDF.
+- Escala: tamaño real (100 %) o "Ajustar al papel", las dos sirven.
+
+**El recuadro dice "CUATRO (4) DOCUMENTOS":** en el modelo que pasaron dice
+"CINCO (5)", pero los ítems son cuatro; se dejó como se decidió el 12/11
+(sección 25).
+
+**Verificado:** con nombres cortos, largos y muy largos, en las dos
+notificaciones y en un lote de dos cédulas. Firmas y observaciones siempre en su
+mitad, márgenes de 7 mm, abajo al menos 11 mm en carta, y el QR se lee en todas
+las mitades.
+
+**Dónde está:** `src/components/pdfCedulas.js`: `DOS_CEDULAS_POR_HOJA`,
+`CAJAS_MITAD`, `AJUSTE_MITAD`, `LETRAS_MITAD` y `dibujarCedulaOficial`, que
+ahora recibe la caja donde dibujar (la hoja entera o una mitad). "Ver cédula" en
+pantalla no cambia.
+
+**Para volver atrás:**
+
+- `DOS_CEDULAS_POR_HOJA = false`: una cédula por hoja, con la letra más grande
+  de la sección 33.
+- Además `CEDULA_PARA_DOS_POR_HOJA = false`: exactamente como antes del 26/11.
+
+Las dos cosas están verificadas: salen idénticas a las versiones anteriores.
+
+**Para publicarlo:** solo el front (`npm run build` y subir `dist/` completo).
+
+## 35. En el celular: botón "Ingresar" y la sesión que no se pierde (27 de noviembre de 2026)
+
+**El problema (lo marcó la oficina):** la app del celular "a veces se cierra" y no
+tiene cómo volver a entrar: había que ir al navegador, entrar a CiDiTuc y abrir el
+sistema desde ahí. Había tres causas:
+
+1. El token de CiDiTuc dura 24 horas. Al vencer, la app pasaba a público sin
+   avisar y no ofrecía ninguna forma de ingresar.
+2. Sin señal al abrir la app (en la calle), no podía confirmar quién era y la
+   dejaba como público hasta cerrarla y abrirla otra vez.
+3. Si el servidor respondía que no tenía CiDiTuc configurado (por ejemplo, después
+   de un reinicio sin el `.env` completo), la app borraba el token aunque fuera
+   válido.
+
+**Qué cambió:**
+
+| Situación | Antes | Ahora |
+|---|---|---|
+| Sin sesión | "Sin identificar" | botón **Ingresar** en la barra, que lleva a CiDiTuc |
+| El token venció | pasaba a público sin avisar | aviso "Tu sesión de CiDiTuc venció" con el botón **Ingresar con CiDiTuc** |
+| Abre sin señal | público hasta reabrir | sigue con la última persona confirmada y se vuelve a confirmar sola cuando vuelve la señal |
+| Servidor sin CiDiTuc | borraba el token | lo conserva |
+| Entró por el navegador | había que reabrir la app | la app lo ve al volver a primer plano y queda identificada |
+
+El botón lleva a `https://cidituc.smt.gob.ar/?destino=derivador#/home` (la
+dirección que pasó la Dirección). Desde ahí CiDiTuc vuelve a abrir el sistema con
+un token nuevo. Se puede cambiar sin tocar el código con `VITE_CIDITUC_INGRESO` en
+el `.env`.
+
+**Sin señal no se abre ninguna puerta:** la persona recordada solo decide qué se ve
+en pantalla. El backend sigue revisando el token en cada pedido, y lo que se carga
+sin señal se manda con ese token cuando vuelve la señal.
+
+Con la app abierta, se revisa al volver a ella, cuando vuelve la señal y cada
+minuto. Si el token venció, aparece el aviso.
+
+**En el iPhone** la app instalada no comparte lo guardado con Safari. Por eso, ahí
+hay que ingresar con el botón de la app, no desde Safari. En Android comparten, y
+cualquiera de los dos caminos sirve.
+
+**Verificado (22 pruebas):** sin sesión, token nuevo desde CiDiTuc, abrir sin señal,
+vuelve la señal, token vencido por su fecha, token rechazado, servidor sin CiDiTuc,
+token guardado desde otra pestaña, vencimiento con la app abierta (también con dos
+pestañas abiertas) y el botón que lleva a CiDiTuc.
+
+**Dónde está:** `src/auth/sesion.js` (`URL_INGRESO_CIDITUC`, `ingresarConCidituc`,
+`tokenVencido`, `recordarPersona`, `alCambiarToken`), `src/auth/RolProvider.jsx`
+(`arranque`, `preguntar`, `verificar`, `vencer` y la revisión cada minuto),
+`src/components/Navbar.jsx` (botón Ingresar) y `src/components/Layout.jsx` (aviso
+de sesión vencida). Estilos en `src/App.css`, sección 2 (`.navbar-ingresar`).
+
+**Para volver atrás el botón:** `BOTON_INGRESAR = false` en `Navbar.jsx` (vuelve
+"Sin identificar").
+
+**Para publicarlo:** solo el front (`npm run build` y subir `dist/` completo).

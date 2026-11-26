@@ -1457,3 +1457,37 @@ tarda un segundo por dirección) y el resto, "Ubicar en el mapa".
   propuestas. Necesita `backend/sql/19-situacion-informe-9dj.sql`.
 - Para volver a usar las fechas del archivo: `USAR_VENCIMIENTO_DEL_ARCHIVO`
   en `backend/rutas/informe-9dj.js`.
+
+## 32. La foto desde la cámara del teléfono: botones "Cámara" y "Galería" (25 de noviembre de 2026)
+
+**El problema:** en el teléfono, el campo de la foto del local abría solo la
+galería: no se podía sacar la foto en el momento. Los Android nuevos, con un
+solo campo de archivo para imágenes, abren directo el selector de fotos del
+sistema, que no ofrece la cámara.
+
+**Qué cambió:** en el teléfono (pantalla táctil) el campo de la foto tiene ahora
+dos botones:
+
+| Botón | Qué abre |
+|---|---|
+| Cámara | la cámara trasera, para sacar la foto en el momento |
+| Galería | las fotos guardadas, como antes |
+
+Las dos terminan igual: la foto se achica (unos 300 KB) y se guarda con el
+relevamiento, igual que una elegida de la galería. Abajo se ve la vista previa
+con "Quitar".
+
+- **En la PC** no cambia nada: queda el campo de archivo de siempre.
+- **La entrega de cédulas** sigue con la cámara obligatoria (`soloCamara`): ahí
+  no sale el botón de galería. Al corregir una entrega sí salen los dos.
+
+**Dónde está:** `src/components/ui/Campo.jsx` (`CampoFoto`), estilos en
+`src/App.css` (`.campo-foto-botones`, junto a `.campo-foto-previa`). Lo usan
+`src/pages/campo/Relevar.jsx` y `src/components/FormEntrega.jsx`, que no se
+tocaron.
+
+**Para volver al campo único:** `FOTO_DOS_BOTONES = false` en
+`src/components/ui/Campo.jsx`.
+
+**Para publicarlo:** solo el front (`npm run build` y subir `dist/` completo). No
+hay que tocar el backend: la foto viaja igual que antes.

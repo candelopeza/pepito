@@ -1679,15 +1679,23 @@ de la sección 34, había tres diferencias:
   misma altura que en el modelo.
 - OBSERVACIONES lleva un solo renglón de puntos, como el modelo (antes dos).
 - "Ver cédula" dice "Se imprimen 2 copias iguales en una hoja oficio apaisada."
+- **Las dos notificaciones con el mismo formato** (pedido después, el mismo día):
+  la segunda se arma igual que la primera. Antes tenía los datos del local en
+  dos renglones, el plazo en minúsculas ("3 (tres)") y la firma del Director
+  arriba de las otras dos. Ahora: datos en un párrafo, "3 (TRES)" y las tres
+  firmas en una fila. Solo cambian el título, el plazo y que la segunda exige
+  todos los datos del local (sección 21). Vale para el PDF y para "Ver cédula".
 
 **Cómo queda la letra** (impresa a tamaño real):
 
 | | Modelo | Antes (carta) | Ahora (oficio) |
 |---|---|---|---|
 | Primera notificación | 11 pt | 9,5 pt | 10,5 pt (10 con nombres muy largos) |
-| Segunda notificación | – | 8,75 pt | 9,75 pt (9 con nombres muy largos) |
+| Segunda notificación | – | 8,75 pt | 10,75 pt (10 con nombres muy largos) |
 
-A 11 pt el texto corta los renglones igual que el modelo; no llega a 11 porque
+La segunda queda igual que la primera (con el mismo formato ya no lleva más
+firmas); un cuarto de punto más grande porque "3 (TRES)" es más corto que
+"5 (CINCO)". A 11 pt el texto corta los renglones igual que el modelo; no llega a 11 porque
 deja al menos 6 mm abajo (el modelo deja 4,6, donde muchas impresoras ya no
 imprimen) y el recuadro del QR es un poco más alto.
 
@@ -1709,7 +1717,9 @@ modelo.
 
 **Dónde está:** `src/components/pdfCedulas.js`: `PAPEL_CEDULAS` (el papel),
 `AJUSTE_MITAD` (`repartir`, `renglonesObservaciones`, `firmas`) y `LETRAS_MITAD`
-(ahora desde 12 pt); `src/dominio/cedulaOficial.js`: `COPIAS_OFICIALES`. La hoja
+(ahora desde 12 pt); `src/dominio/cedulaOficial.js`: `COPIAS_OFICIALES` y
+`SEGUNDA_COMO_PRIMERA` (el mismo formato; lo usan el PDF y "Ver cédula" con
+`firmasEnFila`). La hoja
 de ruta y los listados siguen en carta.
 
 **Para volver atrás:**
@@ -1718,5 +1728,65 @@ de ruta y los listados siguen en carta.
   queda en 9,75 y 9,25 pt).
 - `COPIAS_OFICIALES = 3`: vuelven las tres copias (y el texto de "Ver cédula"
   con el local, la Dirección y el expediente).
+- `SEGUNDA_COMO_PRIMERA = false`: la segunda vuelve a su formato del 26/10.
 
 **Para publicarlo:** solo el front (`npm run build` y subir `dist/` completo).
+
+## 37. Las cédulas con la letra en 11 pt, como el modelo (27 de noviembre de 2026)
+
+**El pedido:** la oficina dice que las cédulas "quedan muy pequeñas" al imprimirlas
+dos por hoja, y pide achicar el margen o agrandar la letra. El modelo de la
+Dirección (`PRIMERA NOTIFICACION - Modificada (1).pdf`, oficio apaisado) tiene el
+texto en **11 pt**; la cédula del sistema salía en 10,5 pt (10 con datos largos).
+
+**Qué cambió** (solo `src/components/pdfCedulas.js`; el texto y los datos no se
+tocaron):
+
+| Qué | Antes | Ahora |
+|---|---|---|
+| Margen izquierdo y derecho de cada mitad | 7 mm | 6,5 mm |
+| Fecha y Hora | debajo de los dos logos | al costado del logo del Municipio, debajo del de Ambiente (5 mm menos de encabezado) |
+| Lugar para firmar, arriba de los rótulos | 20 mm | 13 mm, y lo que sobra vuelve ahí (no baja de unos 17 mm contando el espacio que deja el recuadro; el modelo tiene 17) |
+| Interlineado | 1,17 | 1,15 (el del modelo) |
+
+El margen de arriba (9 mm) y el de abajo (6 mm) no se tocaron, y el de los
+costados casi no: muchas impresoras no imprimen en los primeros 5 o 6 mm, y no
+vale la pena arriesgar que se corte una letra. El grueso de la mejora sale de
+Fecha/Hora y del lugar para firmar.
+
+**Cómo queda la letra** (impresa a tamaño real, sobre papel oficio):
+
+| Datos del local | Antes | Ahora |
+|---|---|---|
+| Cortos o normales | 10,5 pt | **11 pt** |
+| Con rubro largo ("SUPERMERCADOS Y AUTOSERVICIOS") | 10,25 pt | **11 pt** |
+| Razón social, comercio y domicilio muy largos | 10 pt | 10,75 pt |
+
+Los rótulos (Fecha, Sr./a, firmas, OBSERVACIONES) y el título crecen con la letra.
+No se movió el tamaño de los logos ni del QR (19 mm). Se midió generando el PDF
+con el mismo código y comparándolo con el modelo; se revisó a ojo en imagen.
+
+**Si sigue viéndose chica al imprimir, casi seguro no es el PDF sino la
+impresión** (ver sección 36):
+
+- Hoja **Oficio (Legal)** en el cuadro de impresión, **tamaño real / 100 %**, y
+  **1 página por hoja**. Con carta o "ajustar a la página", la impresora achica
+  el PDF al 79 % y 11 pt pasan a ser unos 8,7 pt.
+- **Si la impresora de la oficina no tiene bandeja de oficio:** poner
+  `PAPEL_CEDULAS = 'carta'` y compilar. Sale carta apaisada, dos cédulas por hoja,
+  con la letra en **10,25 pt** (10 con datos muy largos) a tamaño real: más
+  chica que en oficio, pero bastante más grande que achicar el oficio a carta
+  (8,7 pt). Para más que eso con carta, la única forma es una cédula por hoja
+  (`DOS_CEDULAS_POR_HOJA = false`), que gasta el doble de papel: decisión de la
+  Dirección.
+
+**Dónde está:** `AJUSTE_MITAD` (`margen`, `encabezado`, `espacioFirmas`, `firmas`)
+y `AJUSTE_OFICIAL.interlinea`; el comentario "MÁS LETRA EN LA MITAD" explica cada
+número. Los valores nuevos son parámetros: la hoja entera
+(`DOS_CEDULAS_POR_HOJA = false`) conserva los de antes.
+
+**Para volver atrás:** en `AJUSTE_MITAD`, `margen: 7`, `encabezado: 33`,
+`espacioFirmas: 20`, `firmas: [31, 52]`, y en `AJUSTE_OFICIAL`, `interlinea: 1.17`.
+
+**Para publicarlo:** solo el front (`npm run build` y subir `dist/` completo). El
+backend no cambia.

@@ -140,7 +140,7 @@ function CedulaOficial({ cedula, local }) {
           </a>
         </div>
       )}
-      {c.instancia === 1 ? (
+      {c.firmasEnFila ? (
         <div className="cedula-oficial-firmas tres">
           <strong>Firma Recepción</strong>
           <strong>Firma Notificador</strong>
@@ -249,7 +249,9 @@ function VistaCedula({ abierto, cedula, local, onCerrar, soloLectura = false }) 
       )}
       {FORMATO_OFICIAL && IMPRESION_EN_PDF && (
         <p className="texto-chico">
-          Se imprimen {COPIAS_OFICIALES} copias iguales: para el local, para la Dirección de Ambiente y para el expediente.
+          {COPIAS_OFICIALES === 2
+            ? 'Se imprimen 2 copias iguales en una hoja oficio apaisada.'
+            : `Se imprimen ${COPIAS_OFICIALES} copias iguales: para el local, para la Dirección de Ambiente y para el expediente.`}
         </p>
       )}
 

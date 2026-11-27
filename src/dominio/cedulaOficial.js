@@ -35,6 +35,15 @@ export const TEXTO_NOVIEMBRE = true;
    párrafo y las firmas, en las dos notificaciones. En false sale sin él. */
 export const RECUADRO_DOCUMENTACION = true;
 
+/* Las dos notificaciones con el MISMO FORMATO (26/11/2026, lo pidió la
+   Dirección): la segunda se arma igual que la primera, con los datos del local
+   en un párrafo, el plazo con la letra en mayúsculas ("3 (TRES)") y las tres
+   firmas en una fila. Solo cambian el título, el plazo y que la segunda exige
+   todos los datos del local (dominio/reglas.js). En false vuelve la segunda del
+   modelo del 26/10: datos en dos renglones, "3 (tres)" y la firma del Director
+   arriba de las de recepción y notificador. */
+export const SEGUNDA_COMO_PRIMERA = true;
+
 /* Adónde lleva el QR: la página de la Dirección con las plantillas para
    descargar (DDJJ de Generadores Menores, Formulario de presentación de
    Contrato y DDJJ de separación de residuos secos y limpios). Es la misma
@@ -174,8 +183,10 @@ export function contenidoCedulaOficial(cedula, local) {
   const instancia = cedula?.instancia === 2 ? 2 : 1;
   const dias = Number(cedula?.plazoDias) || (instancia === 1 ? 5 : 3);
   const letras = EN_LETRAS[dias] ?? String(dias);
+  // Formato de la primera: con SEGUNDA_COMO_PRIMERA, también en la segunda.
+  const comoPrimera = instancia === 1 || SEGUNDA_COMO_PRIMERA;
   // El modelo escribe "5 (CINCO)" en la primera y "3 (tres)" en la segunda.
-  const plazo = `${dias} (${instancia === 1 ? letras.toUpperCase() : letras})`;
+  const plazo = `${dias} (${comoPrimera ? letras.toUpperCase() : letras})`;
 
   const dato = (etiqueta, valor) => ({ etiqueta, valor: String(valor ?? '').trim() || PARA_COMPLETAR });
   const razonSocial = dato('Razón Social', local?.razonSocial);
@@ -188,8 +199,11 @@ export function contenidoCedulaOficial(cedula, local) {
     instancia,
     titulo: instancia === 1 ? 'PRIMERA NOTIFICACION' : 'SEGUNDA NOTIFICACION',
     numero: numeroOficial(cedula?.numeroCedula),
-    // La primera lleva los datos en un párrafo; la segunda, en dos renglones.
-    datos: instancia === 1 ? [[razonSocial, comercio, cuit, domicilio, rubro]] : [[razonSocial, comercio, cuit], [domicilio, rubro]],
+    // La primera lleva los datos en un párrafo; la segunda del 26/10, en dos renglones.
+    datos: comoPrimera ? [[razonSocial, comercio, cuit, domicilio, rubro]] : [[razonSocial, comercio, cuit], [domicilio, rubro]],
+    // Las tres firmas en una fila (primera); si no, la del Director arriba de
+    // las de recepción y notificador (segunda del 26/10).
+    firmasEnFila: comoPrimera,
     // Las ordenanzas con viñeta (modelo del 12/11) o con casillero (26/10).
     vinetas: TEXTO_NOVIEMBRE,
     // El recuadro con la documentación y el QR; null si está apagado.

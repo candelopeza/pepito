@@ -249,6 +249,8 @@ function dibujarConstancia(doc, y0, notificador) {
    ordenanzas (los casilleros van vacíos: se tildan a mano según el rubro), las
    firmas y las observaciones. La primera lleva las tres firmas en una fila; la
    segunda, la del Director arriba y las de recepción y notificador abajo.
+   Desde el 26/11/2026 las dos tienen el mismo formato, el de la primera
+   (SEGUNDA_COMO_PRIMERA en dominio/cedulaOficial.js).
 
    COPIAS IGUALES de cada cédula (COPIAS_OFICIALES): eran tres, una por hoja;
    desde el 26/11/2026 son dos, las dos en una hoja oficio apaisada
@@ -294,7 +296,7 @@ function dibujarConstancia(doc, y0, notificador) {
    siempre al menos `abajo` mm. */
 const CEDULA_PARA_DOS_POR_HOJA = true;
 const AJUSTE_OFICIAL = CEDULA_PARA_DOS_POR_HOJA
-  ? { margen: 11, titulo: 12, abajo: 10, interlinea: 1.17, firmas: [38, 59], letras: [13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5, 9, 8.5] }
+  ? { margen: 11, titulo: 12, abajo: 10, interlinea: 1.15, firmas: [38, 59], letras: [13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5, 9, 8.5] }
   : { margen: 18, titulo: 17, abajo: 16, interlinea: 1.22, firmas: [34, 52], letras: [10.5, 10, 9.5, 9, 8.5] };
 // Centra la zona imprimible en la carta (antes quedaba recostada a la izquierda).
 const CORRIMIENTO_X = CEDULA_PARA_DOS_POR_HOJA ? (HOJA.ancho - ZONA.ancho) / 2 : 0;
@@ -347,13 +349,33 @@ const LETRAS_MITAD = Array.from({ length: 23 }, (_, i) => 12 - i * 0.25);
    esto, al no entrar la letra siguiente (un cuarto de punto más corre varios
    renglones) quedaban hasta 2 cm vacíos abajo de todo. */
 /* `renglonesObservaciones`: 1, como en el modelo (la hoja entera lleva 2). Por
-   eso `firmas` es 7 mm menos que en la hoja entera: 20+11 y 16+6+14+5+11. Ese
-   renglón de menos deja subir la letra de 10,25 a 10,5 pt en la primera. */
+   eso `firmas` es menos que en la hoja entera: 13+11 y 16+6+14+5+11. Ese
+   renglón de menos deja subir la letra de 10,25 a 10,5 pt en la primera.
+
+   >>> MÁS LETRA EN LA MITAD (27/11/2026) <<<
+   La Dirección pasó el modelo en oficio apaisado, con el texto en 11 pt, y la
+   cédula salía en 10 a 10,5 pt (con datos largos, 10): chica al imprimirla.
+   Para llegar a 11 pt sin tocar el texto se sacó lugar de los costados y de
+   arriba abajo, en este orden de importancia:
+     - `encabezado` 28 (era 33): Fecha y Hora suben al costado del logo del
+       Municipio, a la derecha y debajo del de Ambiente, y no debajo de los dos
+       (5 mm más para el texto);
+     - `espacioFirmas` 13 (era 20): el lugar para firmar arriba de los
+       rótulos. Con "repartir" lo que sobra vuelve a ese lugar, así que sale
+       de 17 mm para arriba; el modelo tiene unos 17;
+     - `margen` 6,5 (era 7): a los costados no se baja más, porque muchas
+       impresoras no imprimen en los primeros 6 mm. `titulo` y `abajo` quedan
+       como estaban (9 y 6 mm) por lo mismo;
+     - el interlineado de 1,17 a 1,15 (AJUSTE_OFICIAL), el del modelo.
+   Con datos de local normales sale a 11 pt; con razón social, domicilio y
+   rubro muy largos, a 10,75. */
 const AJUSTE_MITAD = {
-  margen: 7,
+  margen: 6.5,
   titulo: 9,
+  encabezado: 28,
   abajo: 6,
-  firmas: [31, 52],
+  espacioFirmas: 13,
+  firmas: [24, 52],
   renglonesObservaciones: 1,
   letras: LETRAS_MITAD,
   repartir: true,
@@ -584,18 +606,19 @@ function dibujarCedulaOficial(doc, { cedula, local }, { logos, generado, caja = 
   const fin = caja.x + caja.ancho - aj.margen;
   const ancho = fin - x;
   const contenido = contenidoCedulaOficial(cedula, local);
-  const { instancia } = contenido;
+  // Las tres firmas en una fila o en dos (dominio/cedulaOficial.js, SEGUNDA_COMO_PRIMERA).
+  const { firmasEnFila } = contenido;
   // El encabezado se mide desde el título. En la hoja entera con el ajuste
   // anterior: título a 17 mm, logos a 21 y 25,5, Fecha a 50, Sr./a a 59 y el
   // texto desde 66.
   const yTitulo = caja.y + aj.titulo;
-  const yFecha = yTitulo + 33 * e;
+  const yFecha = yTitulo + (aj.encabezado ?? 33) * e;
 
   // El cuerpo: se elige el tamaño de letra más grande que deja entrar las
   // firmas y las observaciones en la misma hoja. Se calcula antes de dibujar
   // porque Fecha, Sr./a y las firmas usan una letra que acompaña a esta.
   const inicioCuerpo = yFecha + 9 * e + 7 * e;
-  const firmasYObservaciones = aj.firmas[instancia === 1 ? 0 : 1] * e;
+  const firmasYObservaciones = aj.firmas[firmasEnFila ? 0 : 1] * e;
   const limite = caja.y + caja.alto - aj.abajo - firmasYObservaciones;
   const minima = aj.letras.at(-1);
   const medir = (t) => cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam: t, dibujar: false, escala: e });
@@ -638,12 +661,12 @@ function dibujarCedulaOficial(doc, { cedula, local }, { logos, generado, caja = 
 
   y = cuerpoOficial(doc, contenido, { x, y: inicioCuerpo, ancho, tam, dibujar: true, qr: logos.qr, escala: e });
 
-  // Firmas. Lo que sobra va al lugar para firmar: en la segunda, mitad para
-  // el Director y mitad para recepción y notificador.
+  // Firmas. Lo que sobra va al lugar para firmar: con las firmas en dos filas,
+  // mitad para el Director y mitad para recepción y notificador.
   doc.setFont('times', 'bold');
   doc.setFontSize(tamRotulos);
-  if (instancia === 1) {
-    y += 20 * e + sobra;
+  if (firmasEnFila) {
+    y += (aj.espacioFirmas ?? 20) * e + sobra;
     doc.text('Firma Recepción', x + ancho / 6, y, { align: 'center' });
     doc.text('Firma Notificador', x + ancho / 2, y, { align: 'center' });
     doc.text('Firma Director/ Sub director', x + (ancho * 5) / 6, y, { align: 'center' });

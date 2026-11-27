@@ -140,7 +140,7 @@ function CedulaOficial({ cedula, local }) {
           </a>
         </div>
       )}
-      {c.instancia === 1 ? (
+      {c.firmasEnFila ? (
         <div className="cedula-oficial-firmas tres">
           <strong>Firma Recepción</strong>
           <strong>Firma Notificador</strong>
